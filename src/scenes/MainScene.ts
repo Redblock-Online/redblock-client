@@ -7,19 +7,16 @@ import type { PlayerCore } from "../utils/ws/WSManager";
 import WSManager from "../utils/ws/WSManager";
 export default class MainScene extends THREE.Scene {
   public targets: Cube[] = [];
-  public neighbors: PlayerCore[] = [];
   public me: PlayerCore;
   public wsManager: WSManager;
   constructor(
     targets: Cube[],
-    neighbors: PlayerCore[],
     me: PlayerCore,
     wsManager: WSManager
   ) {
     super();
     const white = new THREE.Color(0xffffff);
     this.background = white;
-    this.neighbors = neighbors;
     this.targets = targets;
     this.me = me;
     this.wsManager = wsManager;
@@ -29,7 +26,7 @@ export default class MainScene extends THREE.Scene {
 
   public initPlayerRoom(playerCore: PlayerCore) {
     this.me = playerCore;
-    console.log(this.me, "me", this.neighbors, "neighbors");
+    console.log(this.me, "me", this.wsManager.getNeighbors(), "neighbors");
     this.generateRoom(playerCore.room_coord_x, playerCore.room_coord_z);
   }
   private generateRoom(x: number, z: number) {
@@ -55,9 +52,11 @@ export default class MainScene extends THREE.Scene {
     }
     this.generateCubes(3, this.me.room_coord_x, this.me.room_coord_z);
 
-    this.neighbors.forEach((neighbor) => {
-      this.generateRoom(neighbor.room_coord_x, neighbor.room_coord_z);
-    });
+    this.wsManager
+      .getNeighbors()
+      .forEach((neighbor) => {
+        this.generateRoom(neighbor.room_coord_x, neighbor.room_coord_z);
+      });
   }
 
   public generateCubes(amount: number, roomCoordX: number, roomCoordZ: number) {
@@ -82,8 +81,10 @@ export default class MainScene extends THREE.Scene {
   }
 
   public update() {
-    this.neighbors.forEach((neighbor) => {
-      this.generateRoom(neighbor.room_coord_x, neighbor.room_coord_z);
-    });
+    this.wsManager
+      .getNeighbors()
+      .forEach((neighbor) => {
+        this.generateRoom(neighbor.room_coord_x, neighbor.room_coord_z);
+      });
   }
 }

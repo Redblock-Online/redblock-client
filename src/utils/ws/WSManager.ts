@@ -13,13 +13,12 @@ export type PlayerCore = {
 export default class WSManager {
   private ws: WebSocket | null = null;
   private me: PlayerCore | null = null;
-  private neighbors: PlayerCore[] = [];
+  private neighbors = new Map<string, PlayerCore>();
 
   // Mapa para controlar último tiempo por player
   private lastMessageTimeById = new Map<string, number>();
   private meReadyCallbacks: ((me: PlayerCore) => void)[] = [];
-  constructor(neighbors: PlayerCore[]) {
-    this.neighbors = neighbors;
+  constructor() {
     this.init();
   }
 
@@ -44,20 +43,8 @@ export default class WSManager {
   }
 
   private updateNeighbor(data: PlayerCore) {
-    let neighborExists = false;
-    this.neighbors.forEach((neighbor) => {
-      if (neighbor.id == data.id) {
-        neighborExists = true;
-        neighbor.player_rotation_x = data.player_rotation_x;
-        neighbor.player_rotation_y = data.player_rotation_y;
-        neighbor.local_player_position_x = data.local_player_position_x;
-        neighbor.local_player_position_y = data.local_player_position_y;
-        neighbor.local_player_position_z = data.local_player_position_z;
-      }
-    });
-    if (!neighborExists) {
-      this.neighbors.push(data);
-    }
+    const existing = this.neighbors.get(data.id);
+    this.neighbors.set(data.id, { ...(existing || {}), ...data });
   }
 
   private handleMessage(data: string) {
@@ -82,9 +69,7 @@ export default class WSManager {
     }
     if (message.type === "playerLeft") {
       console.log("Player left ", message.id);
-      this.neighbors = this.neighbors.filter(
-        (neighbor) => neighbor.id !== message.id
-      );
+      this.neighbors.delete(message.id);
     }
     if (message.type === "error") {
       console.log("Error", message);
@@ -103,7 +88,7 @@ export default class WSManager {
     else this.meReadyCallbacks.push(cb);
   }
   public getNeighbors() {
-    return this.neighbors;
+    return Array.from(this.neighbors.values());
   }
 
   public sendPlayerUpdate(
