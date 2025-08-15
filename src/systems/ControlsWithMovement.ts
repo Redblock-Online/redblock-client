@@ -26,7 +26,18 @@ export default class Controls {
   private roomSize = 15; // default room size (width/depth)
 
   private changeCheckAccumulator = 0;
-  private changeCheckInterval = 1 / 24; // 24 veces por segundo (~0.04166s)
+  private changeCheckInterval = 1 / 24; // 24 times per second (~0.04166s)
+
+  private lastSentPos = new THREE.Vector3(Number.NaN, Number.NaN, Number.NaN);
+  private lastSentRotX = Number.NaN; // pitch
+  private lastSentRotY = Number.NaN; // yaw
+
+  private posThreshold = 0.05; // 5 cm
+  private rotThreshold = THREE.MathUtils.degToRad(0.9); // ~0.9°
+  private posQuant = 0.01; // 1 cm
+  private rotQuant = THREE.MathUtils.degToRad(0.1); // ~0.1°
+
+  private nextSendAt = 0; // ms timestamp
 
   constructor(
     camera: THREE.Camera,
@@ -59,26 +70,78 @@ export default class Controls {
   get object() {
     return this.yawObject;
   }
+  // Util: delta angular normalized [-PI, PI]
+  private angleDelta(a: number, b: number) {
+    const TWO_PI = Math.PI * 2;
+    let d = (a - b) % TWO_PI;
+    if (d > Math.PI) d -= TWO_PI;
+    if (d < -Math.PI) d += TWO_PI;
+    return d;
+  }
 
+  // Util: cuantizar
+  private quantize(n: number, step: number) {
+    return Math.round(n / step) * step;
+  }
+
+  // ====== checkChanges optimized ======
   private checkChanges() {
-    let moved = !this.lastYawPos.equals(this.yawObject.position);
-    let yawRotated = !this.lastYawRot.equals(this.yawObject.rotation);
-    let pitchRotated = !this.lastPitchRot.equals(this.pitchObject.rotation);
+    const now = performance.now();
+    if (now < this.nextSendAt) return; // 20 Hz cap
 
-    if (this.wsManager.getMe() && (moved || yawRotated || pitchRotated)) {
-      this.wsManager.sendPlayerUpdate({
-        id: this.wsManager.getMe()!.id,
-        player_rotation_x: this.yawObject.rotation.x,
-        player_rotation_y: this.yawObject.rotation.y,
-        local_player_position_x: this.yawObject.position.x,
-        local_player_position_y: this.yawObject.position.y,
-        local_player_position_z: this.yawObject.position.z,
-      });
+    const pos = this.yawObject.position;
+    const rotY = this.yawObject.rotation.y; // yaw
+    const rotX = this.pitchObject?.rotation.x ?? 0; // pitch (si tienes pitchObject)
 
-      this.lastYawPos.copy(this.yawObject.position);
-      this.lastYawRot.copy(this.yawObject.rotation);
-      this.lastPitchRot.copy(this.pitchObject.rotation);
-    }
+    // Calcular cambios significativos
+    const movedSq =
+      this.lastSentPos.x === this.lastSentPos.x // NaN check
+        ? pos.distanceToSquared(this.lastSentPos)
+        : Number.POSITIVE_INFINITY;
+
+    const moved = movedSq > this.posThreshold * this.posThreshold;
+
+    const rotYDelta =
+      this.lastSentRotY === this.lastSentRotY
+        ? Math.abs(this.angleDelta(rotY, this.lastSentRotY))
+        : Number.POSITIVE_INFINITY;
+
+    const rotXDelta =
+      this.lastSentRotX === this.lastSentRotX
+        ? Math.abs(this.angleDelta(rotX, this.lastSentRotX))
+        : Number.POSITIVE_INFINITY;
+
+    // Rotación "relevante" solo si supera el umbral
+    const rotatedRelevantly =
+      rotYDelta > this.rotThreshold || rotXDelta > this.rotThreshold;
+
+    // Si no hay movimiento ni rotación relevante, no enviamos
+    if (!moved && !rotatedRelevantly) return;
+
+    // Cuantizar para evitar ruido
+    const qx = this.quantize(pos.x, this.posQuant);
+    const qy = this.quantize(pos.y, this.posQuant);
+    const qz = this.quantize(pos.z, this.posQuant);
+    const qRotX = this.quantize(rotX, this.rotQuant);
+    const qRotY = this.quantize(rotY, this.rotQuant);
+
+    // Enviar update (ajusta al shape de tu red)
+    this.wsManager.sendPlayerUpdate({
+      id: this.wsManager.getMe()!.id,
+      local_player_position_x: qx,
+      local_player_position_y: qy,
+      local_player_position_z: qz,
+      player_rotation_x: qRotX,
+      player_rotation_y: qRotY,
+    });
+
+    // Update last sent states
+    this.lastSentPos.set(qx, qy, qz);
+    this.lastSentRotX = qRotX;
+    this.lastSentRotY = qRotY;
+
+    // Next send not before 1/20s
+    this.nextSendAt = now + 1000 / 20;
   }
   private initKeyboardListeners() {
     document.addEventListener("keydown", (e) => {
@@ -114,7 +177,7 @@ export default class Controls {
     this.roomCoordZ = z;
     this.roomSize = size;
   }
-  // Teletransporte seguro (mueve el padre, no la cámara)
+  // Safe teleport (moves the parent, not the camera)
   public teleportTo(x: number, y: number, z: number, yawRad: number = 0) {
     this.initPlayerRoom(x, z, this.roomSize);
     this.yawObject.position.set(x, y, z);
@@ -125,7 +188,6 @@ export default class Controls {
     this.lastYawRot.copy(this.yawObject.rotation);
     this.lastPitchRot.copy(this.pitchObject.rotation);
   }
-
   public update(deltaTime: number) {
     const targetDirection = new THREE.Vector3();
 
@@ -133,13 +195,13 @@ export default class Controls {
     if (this.keysPressed["d"]) targetDirection.z += 1;
     if (this.keysPressed["s"]) targetDirection.x -= 1;
     if (this.keysPressed["w"]) targetDirection.x += 1;
+
     const halfRoom = this.roomSize / 2;
     this.yawObject.position.x = THREE.MathUtils.clamp(
       this.yawObject.position.x,
       this.roomCoordX - halfRoom,
       this.roomCoordX + halfRoom
     );
-
     this.yawObject.position.z = THREE.MathUtils.clamp(
       this.yawObject.position.z,
       this.roomCoordZ - halfRoom,
@@ -149,18 +211,18 @@ export default class Controls {
     targetDirection.normalize();
     targetDirection.applyQuaternion(this.yawObject.quaternion);
     targetDirection.y = 0;
+
     this.velocity.lerp(
       targetDirection.multiplyScalar(this.moveSpeed),
       this.acceleration
     );
-
     this.velocity.multiplyScalar(Math.pow(this.damping, deltaTime));
-
     this.yawObject.position.addScaledVector(this.velocity, deltaTime);
 
+    // Periodic check (you already had it)
     this.changeCheckAccumulator += deltaTime;
     if (this.changeCheckAccumulator >= this.changeCheckInterval) {
-      this.checkChanges();
+      this.checkChanges(); // <- optimized below
       this.changeCheckAccumulator = 0;
     }
   }

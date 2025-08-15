@@ -13,12 +13,12 @@ export type PlayerCore = {
 export default class WSManager {
   private ws: WebSocket | null = null;
   private me: PlayerCore | null = null;
-  private neighbors = new Map<string, PlayerCore>();
 
   // Mapa para controlar último tiempo por player
   private lastMessageTimeById = new Map<string, number>();
   private messageQueue = new Map<string, PlayerCore>();
   private meReadyCallbacks: ((me: PlayerCore) => void)[] = [];
+  public neighbors = new Map<string, PlayerCore>();
   constructor() {
     this.init();
     setInterval(() => this.processQueue(), 50);
