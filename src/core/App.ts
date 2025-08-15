@@ -24,17 +24,15 @@ export default class App {
   timerInterval: number | null = null;
   level: number = 0;
   targets: Cube[] = [];
-  neighbors: PlayerCore[] = [];
   gameRunning: boolean = false;
   wsManager: WSManager;
   constructor() {
     this.timerElement = document.getElementById("timer")!;
     this.gameRunning = false;
     this.camera = new Camera();
-    this.wsManager = new WSManager(this.neighbors);
+    this.wsManager = new WSManager();
     this.scene = new MainScene(
       this.targets,
-      this.neighbors,
       this.wsManager.getMe()!,
       this.wsManager
     );
