@@ -17,6 +17,8 @@ export default class RandomCubeGenerator {
     this.scene = scene;
     this.randomColors = randomColors;
     this.wsManager = wsManager;
+    void this.scene;
+    void this.wsManager;
   }
 
   public generate(shootable: boolean = false) {
