@@ -15,8 +15,11 @@ export default class WSManager {
   private me: PlayerCore | null = null;
   private neighbors: PlayerCore[] = [];
 
+  // Mapa para controlar último tiempo por player
+  private lastMessageTimeById = new Map<string, number>();
   private meReadyCallbacks: ((me: PlayerCore) => void)[] = [];
-  constructor() {
+  constructor(neighbors: PlayerCore[]) {
+    this.neighbors = neighbors;
     this.init();
   }
 
@@ -41,8 +44,10 @@ export default class WSManager {
   }
 
   private updateNeighbor(data: PlayerCore) {
+    let neighborExists = false;
     this.neighbors.forEach((neighbor) => {
       if (neighbor.id == data.id) {
+        neighborExists = true;
         neighbor.player_rotation_x = data.player_rotation_x;
         neighbor.player_rotation_y = data.player_rotation_y;
         neighbor.local_player_position_x = data.local_player_position_x;
@@ -50,6 +55,9 @@ export default class WSManager {
         neighbor.local_player_position_z = data.local_player_position_z;
       }
     });
+    if (!neighborExists) {
+      this.neighbors.push(data);
+    }
   }
 
   private handleMessage(data: string) {
@@ -58,14 +66,24 @@ export default class WSManager {
       console.log("Assigned", message);
       this.setMe(message);
     }
+
     if (message.type === "playerUpdate") {
-      console.log("Player update ", message.data.id);
-      this.updateNeighbor(message.data);
+      const currentTime = Date.now();
+      const lastTime = this.lastMessageTimeById.get(message.id) || 0;
+      const delta = currentTime - lastTime;
+
+      if (delta < 1000 / 20) {
+        return; // Ignorar si es demasiado pronto para este player
+      }
+
+      this.lastMessageTimeById.set(message.id, currentTime);
+
+      this.updateNeighbor(message);
     }
     if (message.type === "playerLeft") {
-      console.log("Player left ", message.data.id);
+      console.log("Player left ", message.id);
       this.neighbors = this.neighbors.filter(
-        (neighbor) => neighbor.id !== message.data.id
+        (neighbor) => neighbor.id !== message.id
       );
     }
     if (message.type === "error") {

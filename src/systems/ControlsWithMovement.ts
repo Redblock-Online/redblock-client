@@ -20,6 +20,11 @@ export default class Controls {
   private lastYawRot = new THREE.Euler();
   private lastPitchRot = new THREE.Euler();
 
+  // Room tracking
+  private roomCoordX = 0;
+  private roomCoordZ = 0;
+  private roomSize = 15; // default room size (width/depth)
+
   private changeCheckAccumulator = 0;
   private changeCheckInterval = 1 / 24; // 24 veces por segundo (~0.04166s)
 
@@ -103,8 +108,15 @@ export default class Controls {
 
     document.addEventListener("mousemove", onMouseMove, false);
   }
+  // Update room information without moving the player
+  public initPlayerRoom(x: number, z: number, size: number = 15) {
+    this.roomCoordX = x;
+    this.roomCoordZ = z;
+    this.roomSize = size;
+  }
   // Teletransporte seguro (mueve el padre, no la cámara)
   public teleportTo(x: number, y: number, z: number, yawRad: number = 0) {
+    this.initPlayerRoom(x, z, this.roomSize);
     this.yawObject.position.set(x, y, z);
     this.yawObject.rotation.set(0, yawRad, 0);
     this.pitchObject.rotation.set(0, 0, 0); // resetea pitch
@@ -121,16 +133,17 @@ export default class Controls {
     if (this.keysPressed["d"]) targetDirection.z += 1;
     if (this.keysPressed["s"]) targetDirection.x -= 1;
     if (this.keysPressed["w"]) targetDirection.x += 1;
+    const halfRoom = this.roomSize / 2;
     this.yawObject.position.x = THREE.MathUtils.clamp(
       this.yawObject.position.x,
-      -6.2,
-      8.2
+      this.roomCoordX - halfRoom,
+      this.roomCoordX + halfRoom
     );
 
     this.yawObject.position.z = THREE.MathUtils.clamp(
       this.yawObject.position.z,
-      -7.3,
-      7.3
+      this.roomCoordZ - halfRoom,
+      this.roomCoordZ + halfRoom
     );
 
     targetDirection.normalize();

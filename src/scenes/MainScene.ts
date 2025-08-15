@@ -42,25 +42,25 @@ export default class MainScene extends THREE.Scene {
 
   public level(level: number) {
     if (level === 1) {
-      this.generateCubes(3);
+      this.generateCubes(3, this.me.room_coord_x, this.me.room_coord_z);
       return;
     }
     if (level === 2) {
-      this.generateCubes(8);
+      this.generateCubes(8, this.me.room_coord_x, this.me.room_coord_z);
       return;
     }
     if (level === 3) {
-      this.generateCubes(50);
+      this.generateCubes(50, this.me.room_coord_x, this.me.room_coord_z);
       return;
     }
-    this.generateCubes();
+    this.generateCubes(3, this.me.room_coord_x, this.me.room_coord_z);
 
     this.neighbors.forEach((neighbor) => {
       this.generateRoom(neighbor.room_coord_x, neighbor.room_coord_z);
     });
   }
 
-  public generateCubes(amount: number = 3) {
+  public generateCubes(amount: number, roomCoordX: number, roomCoordZ: number) {
     const rcg = new RandomCubeGenerator(
       this.targets,
       this,
@@ -71,5 +71,19 @@ export default class MainScene extends THREE.Scene {
     for (let i = 0; i < amount - 1; i++) {
       rcg.generate();
     }
+    this.targets.forEach((target) => {
+      target.position.set(
+        target.position.x + roomCoordX,
+        target.position.y,
+        target.position.z + roomCoordZ
+      );
+      this.add(target);
+    });
+  }
+
+  public update() {
+    this.neighbors.forEach((neighbor) => {
+      this.generateRoom(neighbor.room_coord_x, neighbor.room_coord_z);
+    });
   }
 }
