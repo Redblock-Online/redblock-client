@@ -6,7 +6,7 @@ import Cube from "../objects/Cube";
 import type { PlayerCore } from "../utils/ws/WSManager";
 import WSManager from "../utils/ws/WSManager";
 export default class MainScene extends THREE.Scene {
-  private generatedNeighbors: Set<string> = new Set();
+  private neighborRooms: Map<string, { x: number; z: number }> = new Map();
   public targets: Cube[] = [];
   public me: PlayerCore;
   public wsManager: WSManager;
@@ -51,6 +51,10 @@ export default class MainScene extends THREE.Scene {
 
     this.wsManager.getNeighbors().forEach((neighbor) => {
       this.generateRoom(neighbor.room_coord_x, neighbor.room_coord_z);
+      this.neighborRooms.set(neighbor.id, {
+        x: neighbor.room_coord_x,
+        z: neighbor.room_coord_z,
+      });
     });
   }
 
@@ -76,10 +80,28 @@ export default class MainScene extends THREE.Scene {
   }
 
   public update() {
-    this.wsManager.getNeighbors().forEach((neighbor) => {
-      if (!this.generatedNeighbors.has(neighbor.id)) {
+    const neighbors = this.wsManager.getNeighbors();
+    const currentIds = new Set<string>();
+
+    neighbors.forEach((neighbor) => {
+      currentIds.add(neighbor.id);
+      const stored = this.neighborRooms.get(neighbor.id);
+      if (
+        !stored ||
+        stored.x !== neighbor.room_coord_x ||
+        stored.z !== neighbor.room_coord_z
+      ) {
         this.generateRoom(neighbor.room_coord_x, neighbor.room_coord_z);
-        this.generatedNeighbors.add(neighbor.id);
+        this.neighborRooms.set(neighbor.id, {
+          x: neighbor.room_coord_x,
+          z: neighbor.room_coord_z,
+        });
+      }
+    });
+
+    Array.from(this.neighborRooms.keys()).forEach((id) => {
+      if (!currentIds.has(id)) {
+        this.neighborRooms.delete(id);
       }
     });
   }
