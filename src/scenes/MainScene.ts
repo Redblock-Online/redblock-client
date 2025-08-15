@@ -10,6 +10,28 @@ export default class MainScene extends THREE.Scene {
   public targets: Cube[] = [];
   public me: PlayerCore;
   public wsManager: WSManager;
+
+  // Shared geometry and materials for room meshes
+  private static roomGeometry = new THREE.BoxGeometry(1, 1, 1);
+  private static roomMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  private static roomEdgesGeometry = new THREE.EdgesGeometry(MainScene.roomGeometry);
+  private static roomEdgesMaterial = new THREE.LineBasicMaterial({
+    color: 0x000000,
+  });
+  private static roomPrototype = (() => {
+    const group = new THREE.Group();
+    const cubeMesh = new THREE.Mesh(
+      MainScene.roomGeometry,
+      MainScene.roomMaterial
+    );
+    const edgeLines = new THREE.LineSegments(
+      MainScene.roomEdgesGeometry,
+      MainScene.roomEdgesMaterial
+    );
+    group.add(cubeMesh);
+    group.add(edgeLines);
+    return group;
+  })();
   constructor(targets: Cube[], me: PlayerCore, wsManager: WSManager) {
     super();
     const white = new THREE.Color(0xffffff);
@@ -27,9 +49,8 @@ export default class MainScene extends THREE.Scene {
     this.generateRoom(playerCore.room_coord_x, playerCore.room_coord_z);
   }
   private generateRoom(x: number, z: number) {
-    const room = new Cube(false, false, false, true);
+    const room = MainScene.roomPrototype.clone();
     room.position.set(x, 0, z);
-
     room.scale.set(15, 7, 15);
     this.add(room);
   }
