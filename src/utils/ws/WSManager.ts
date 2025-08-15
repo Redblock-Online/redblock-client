@@ -17,10 +17,12 @@ export default class WSManager {
 
   // Mapa para controlar último tiempo por player
   private lastMessageTimeById = new Map<string, number>();
+  private messageQueue = new Map<string, PlayerCore>();
   private meReadyCallbacks: ((me: PlayerCore) => void)[] = [];
   constructor(neighbors: PlayerCore[]) {
     this.neighbors = neighbors;
     this.init();
+    setInterval(() => this.processQueue(), 50);
   }
 
   private init() {
@@ -35,7 +37,12 @@ export default class WSManager {
     };
 
     this.ws.onmessage = (event) => {
-      this.handleMessage(event.data);
+      const message = JSON.parse(event.data);
+      if (message.type === "playerUpdate") {
+        this.messageQueue.set(message.id, message);
+      } else {
+        this.handleMessage(message);
+      }
     };
 
     this.ws.onclose = () => {
@@ -60,25 +67,10 @@ export default class WSManager {
     }
   }
 
-  private handleMessage(data: string) {
-    const message = JSON.parse(data);
+  private handleMessage(message: any) {
     if (message.type === "assigned") {
       console.log("Assigned", message);
       this.setMe(message);
-    }
-
-    if (message.type === "playerUpdate") {
-      const currentTime = Date.now();
-      const lastTime = this.lastMessageTimeById.get(message.id) || 0;
-      const delta = currentTime - lastTime;
-
-      if (delta < 1000 / 20) {
-        return; // Ignorar si es demasiado pronto para este player
-      }
-
-      this.lastMessageTimeById.set(message.id, currentTime);
-
-      this.updateNeighbor(message);
     }
     if (message.type === "playerLeft") {
       console.log("Player left ", message.id);
@@ -88,6 +80,18 @@ export default class WSManager {
     }
     if (message.type === "error") {
       console.log("Error", message);
+    }
+  }
+
+  private processQueue() {
+    const currentTime = Date.now();
+    for (const [id, data] of this.messageQueue) {
+      const lastTime = this.lastMessageTimeById.get(id) || 0;
+      if (currentTime - lastTime >= 1000 / 20) {
+        this.lastMessageTimeById.set(id, currentTime);
+        this.updateNeighbor(data);
+        this.messageQueue.delete(id);
+      }
     }
   }
 
