@@ -38,6 +38,7 @@ export default class App {
       this.wsManager
     );
     this.wsManager.onMeReady((me: PlayerCore) => {
+      this.controls.initPlayerRoom(me.room_coord_x, me.room_coord_z);
       this.controls.teleportTo(
         me.room_coord_x,
         0,
