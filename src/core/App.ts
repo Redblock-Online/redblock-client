@@ -8,6 +8,7 @@ import Crosshair from "../objects/Crosshair";
 import { Mesh, Raycaster, Vector2 } from "three";
 import Pistol from "../objects/Pistol";
 import type Cube from "../objects/Cube";
+import WSManager, { type PlayerCore } from "../utils/ws/WSManager";
 
 const canvas = document.querySelector("canvas") as HTMLCanvasElement;
 
@@ -21,18 +22,37 @@ export default class App {
   timerElement: HTMLElement;
   startTime: number = 0;
   timerInterval: number | null = null;
-  level: number =0;
+  level: number = 0;
   targets: Cube[] = [];
   gameRunning: boolean = false;
+  wsManager: WSManager;
   constructor() {
     this.timerElement = document.getElementById("timer")!;
     this.gameRunning = false;
     this.camera = new Camera();
-    this.scene = new MainScene(this.targets);
-    this.renderer = new Renderer(this.scene , this.camera.instance ,canvas);
-    this.controls = new ControlsWithMovement(this.camera.instance, canvas);
+    this.wsManager = new WSManager();
+    this.scene = new MainScene(
+      this.targets,
+      this.wsManager.getNeighbors(),
+      this.wsManager.getMe()!,
+      this.wsManager
+    );
+    this.wsManager.onMeReady((me: PlayerCore) => {
+      this.controls.teleportTo(
+        me.room_coord_x,
+        0,
+        me.room_coord_z,
+        /* yawRad: */ me.player_rotation_y ?? 0
+      );
+      this.scene.initPlayerRoom(me);
+    });
+    this.renderer = new Renderer(this.scene, this.camera.instance, canvas);
+    this.controls = new ControlsWithMovement(
+      this.camera.instance,
+      canvas,
+      this.wsManager
+    );
     this.scene.add(this.controls.object);
-    this.camera.instance.position.set(0, 0, 0);
     this.camera.instance.rotation.set(0, (Math.PI / 2) * 3, 0);
     this.pistol = new Pistol(this.camera.instance, (loadedPistol) => {
       this.camera.instance.add(loadedPistol);
@@ -72,7 +92,7 @@ export default class App {
 
   stopTimer() {
     this.timerElement.innerHTML += "<br>Press Space to start again";
-    this.gameRunning = false
+    this.gameRunning = false;
     if (this.timerInterval) {
       clearInterval(this.timerInterval);
       this.timerInterval = null;
@@ -87,13 +107,13 @@ export default class App {
       this.controls.initPointerLock();
       const crosshair = new Crosshair();
       this.camera.instance.add(crosshair);
-      
+
       this.scene.level(level);
       this.level = level;
       document.addEventListener("mousedown", (e) => {
         if (!this.gameRunning) return;
 
-        if(e.button === 0){
+        if (e.button === 0) {
           this.pistol.shoot();
           this.checkCrosshairIntersections();
         }
@@ -110,7 +130,6 @@ export default class App {
   update(deltaTime: number) {
     if (!this.gameRunning) return;
     this.controls.update(deltaTime);
-    
   }
 
   private raycaster = new Raycaster();
@@ -150,7 +169,9 @@ export default class App {
       });
     }
 
-    const remaining = this.targets.some(t => t.visible && !t.animating && t.shootable);
+    const remaining = this.targets.some(
+      (t) => t.visible && !t.animating && t.shootable
+    );
     if (!remaining) {
       this.stopTimer();
     }

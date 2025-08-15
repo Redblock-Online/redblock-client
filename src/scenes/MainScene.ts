@@ -3,60 +3,73 @@ import * as THREE from "three";
 import RandomCubeGenerator from "../objects/RandomCubeGenerator";
 import Light from "../objects/Light";
 import Cube from "../objects/Cube";
+import type { PlayerCore } from "../utils/ws/WSManager";
+import WSManager from "../utils/ws/WSManager";
 export default class MainScene extends THREE.Scene {
   public targets: Cube[] = [];
-  constructor(targets:Cube[]) {
+  public neighbors: PlayerCore[] = [];
+  public me: PlayerCore;
+  public wsManager: WSManager;
+  constructor(
+    targets: Cube[],
+    neighbors: PlayerCore[],
+    me: PlayerCore,
+    wsManager: WSManager
+  ) {
     super();
+    const white = new THREE.Color(0xffffff);
+    this.background = white;
+    this.neighbors = neighbors;
     this.targets = targets;
+    this.me = me;
+    this.wsManager = wsManager;
+    const light = new Light();
+    this.add(light);
+  }
 
+  public initPlayerRoom(playerCore: PlayerCore) {
+    this.me = playerCore;
+    console.log(this.me, "me", this.neighbors, "neighbors");
+    this.generateRoom(playerCore.room_coord_x, playerCore.room_coord_z);
+  }
+  private generateRoom(x: number, z: number) {
     const room = new Cube(false, false, false, true);
-    room.position.set(1, 0, 0);
+    room.position.set(x, 0, z);
 
     room.scale.set(15, 7, 15);
     this.add(room);
-    const white = new THREE.Color(0xffffff);
-    this.background = white;
-
-    const light = new Light();
-    this.add(light);
-    
-    
   }
 
   public level(level: number) {
-    if(level === 1) {
-     this.level1();return;
+    if (level === 1) {
+      this.generateCubes(3);
+      return;
     }
-    if(level === 2) {
-     this.level2();return;
+    if (level === 2) {
+      this.generateCubes(8);
+      return;
     }
-    if(level === 3) {
-     this.level3();return;
+    if (level === 3) {
+      this.generateCubes(50);
+      return;
     }
-    this.level1();
+    this.generateCubes();
+
+    this.neighbors.forEach((neighbor) => {
+      this.generateRoom(neighbor.room_coord_x, neighbor.room_coord_z);
+    });
   }
 
-  public level1() {
-    
-    const rcg = new RandomCubeGenerator(this.targets, this,false);
+  public generateCubes(amount: number = 3) {
+    const rcg = new RandomCubeGenerator(
+      this.targets,
+      this,
+      false,
+      this.wsManager
+    );
     rcg.generate(true);
-    rcg.generate();
-    rcg.generate();
-  }
-
-  public level2() {
-    const rcg = new RandomCubeGenerator(this.targets, this,false);
-    rcg.generate(true);
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < amount - 1; i++) {
       rcg.generate();
     }
-  }
-  public level3() {
-    const rcg = new RandomCubeGenerator(this.targets, this,false);
-    rcg.generate(true);
-    for (let i = 0; i < 49; i++) {
-      rcg.generate();
-    }
-    
   }
 }
