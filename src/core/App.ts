@@ -24,16 +24,17 @@ export default class App {
   timerInterval: number | null = null;
   level: number = 0;
   targets: Cube[] = [];
+  neighbors: PlayerCore[] = [];
   gameRunning: boolean = false;
   wsManager: WSManager;
   constructor() {
     this.timerElement = document.getElementById("timer")!;
     this.gameRunning = false;
     this.camera = new Camera();
-    this.wsManager = new WSManager();
+    this.wsManager = new WSManager(this.neighbors);
     this.scene = new MainScene(
       this.targets,
-      this.wsManager.getNeighbors(),
+      this.neighbors,
       this.wsManager.getMe()!,
       this.wsManager
     );
@@ -43,8 +44,9 @@ export default class App {
         me.room_coord_x,
         0,
         me.room_coord_z,
-        /* yawRad: */ me.player_rotation_y ?? 0
+        me.player_rotation_y ?? 0
       );
+
       this.scene.initPlayerRoom(me);
     });
     this.renderer = new Renderer(this.scene, this.camera.instance, canvas);

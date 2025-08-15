@@ -28,16 +28,9 @@ export default class RandomCubeGenerator {
       cube = new Cube(this.randomColors, true, shootable);
       cube.scale.set(0.4, 0.4, 0.4);
 
-      const randomY =
-        Math.random() * 3 -
-        1.5 +
-        this.wsManager.getMe()!.local_player_position_y;
-      const randomZ =
-        Math.random() * 5.8 -
-        2.7 +
-        this.wsManager.getMe()!.local_player_position_z;
-      const randomX =
-        6 - Math.random() * 2 + this.wsManager.getMe()!.local_player_position_x;
+      const randomY = Math.random() * 3 - 1.5;
+      const randomZ = Math.random() * 5.8 - 2.7;
+      const randomX = 6 - Math.random() * 2;
       cube.position.set(randomX, randomY, randomZ);
 
       const newBox = new THREE.Box3().setFromObject(cube);
@@ -54,7 +47,6 @@ export default class RandomCubeGenerator {
     }
 
     if (cube) {
-      this.scene.add(cube);
       this.targets.push(cube);
     } else {
       console.warn(
