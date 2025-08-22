@@ -21,7 +21,7 @@ export default class App {
   timerElement: HTMLElement;
   startTime: number = 0;
   timerInterval: number | null = null;
-  level: number =0;
+  level: number = 0;
   targets: Cube[] = [];
   gameRunning: boolean = false;
   constructor() {
@@ -29,7 +29,7 @@ export default class App {
     this.gameRunning = false;
     this.camera = new Camera();
     this.scene = new MainScene(this.targets);
-    this.renderer = new Renderer(this.scene , this.camera.instance ,canvas);
+    this.renderer = new Renderer(this.scene, this.camera.instance, canvas);
     this.controls = new ControlsWithMovement(this.camera.instance, canvas);
     this.scene.add(this.controls.object);
     this.camera.instance.position.set(0, 0, 0);
@@ -72,7 +72,7 @@ export default class App {
 
   stopTimer() {
     this.timerElement.innerHTML += "<br>Press Space to start again";
-    this.gameRunning = false
+    this.gameRunning = false;
     if (this.timerInterval) {
       clearInterval(this.timerInterval);
       this.timerInterval = null;
@@ -87,13 +87,13 @@ export default class App {
       this.controls.initPointerLock();
       const crosshair = new Crosshair();
       this.camera.instance.add(crosshair);
-      
+
       this.scene.level(level);
       this.level = level;
       document.addEventListener("mousedown", (e) => {
         if (!this.gameRunning) return;
 
-        if(e.button === 0){
+        if (e.button === 0) {
           this.pistol.shoot();
           this.checkCrosshairIntersections();
         }
@@ -110,7 +110,6 @@ export default class App {
   update(deltaTime: number) {
     if (!this.gameRunning) return;
     this.controls.update(deltaTime);
-    
   }
 
   private raycaster = new Raycaster();
@@ -150,7 +149,9 @@ export default class App {
       });
     }
 
-    const remaining = this.targets.some(t => t.visible && !t.animating && t.shootable);
+    const remaining = this.targets.some(
+      (t) => t.visible && !t.animating && t.shootable
+    );
     if (!remaining) {
       this.stopTimer();
     }
