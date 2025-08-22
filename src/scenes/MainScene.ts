@@ -10,25 +10,29 @@ export default class MainScene extends THREE.Scene {
   public targets: Cube[] = [];
   public me: PlayerCore;
   public wsManager: WSManager;
+  public neighborMeshes: Map<string, THREE.Mesh> = new Map();
+  private clock = new THREE.Clock();
+  private neighborStates = new Map<
+    string,
+    { target: THREE.Vector3; lastPacketTs: number }
+  >();
 
   // Shared geometry and materials for room meshes
   private static roomGeometry = new THREE.BoxGeometry(1, 1, 1);
-  private static roomMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  private static roomEdgesGeometry = new THREE.EdgesGeometry(MainScene.roomGeometry);
+
+  private static roomEdgesGeometry = new THREE.EdgesGeometry(
+    MainScene.roomGeometry
+  );
   private static roomEdgesMaterial = new THREE.LineBasicMaterial({
     color: 0x000000,
   });
   private static roomPrototype = (() => {
     const group = new THREE.Group();
-    const cubeMesh = new THREE.Mesh(
-      MainScene.roomGeometry,
-      MainScene.roomMaterial
-    );
+
     const edgeLines = new THREE.LineSegments(
       MainScene.roomEdgesGeometry,
       MainScene.roomEdgesMaterial
     );
-    group.add(cubeMesh);
     group.add(edgeLines);
     return group;
   })();
@@ -48,7 +52,25 @@ export default class MainScene extends THREE.Scene {
     console.log(this.me, "me", this.wsManager.getNeighbors(), "neighbors");
     this.generateRoom(playerCore.room_coord_x, playerCore.room_coord_z);
   }
-  private generateRoom(x: number, z: number) {
+  private generateRoom(
+    x: number,
+    z: number,
+    isNeighbor: boolean = false,
+    neighborId?: string
+  ) {
+    const neighborGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const neighborMaterial = new THREE.LineBasicMaterial({
+      color: new THREE.Color(0xffffff),
+      opacity: 0,
+      transparent: true,
+    });
+    if (isNeighbor) {
+      const neighborMesh = new THREE.Mesh(neighborGeometry, neighborMaterial);
+      neighborMesh.position.set(x, 0, z);
+      this.neighborMeshes.set(neighborId!, neighborMesh);
+      this.add(neighborMesh);
+    }
+
     const room = MainScene.roomPrototype.clone();
     room.position.set(x, 0, z);
     room.scale.set(15, 7, 15);
@@ -69,14 +91,6 @@ export default class MainScene extends THREE.Scene {
       return;
     }
     this.generateCubes(3, this.me.room_coord_x, this.me.room_coord_z);
-
-    this.wsManager.getNeighbors().forEach((neighbor) => {
-      this.generateRoom(neighbor.room_coord_x, neighbor.room_coord_z);
-      this.neighborRooms.set(neighbor.id, {
-        x: neighbor.room_coord_x,
-        z: neighbor.room_coord_z,
-      });
-    });
   }
 
   public generateCubes(amount: number, roomCoordX: number, roomCoordZ: number) {
@@ -101,27 +115,71 @@ export default class MainScene extends THREE.Scene {
   }
 
   public update() {
+    const dt = this.clock.getDelta();
     const neighbors = this.wsManager.getNeighbors();
     const currentIds = new Set<string>();
 
-    neighbors.forEach((neighbor) => {
-      currentIds.add(neighbor.id);
-      const stored = this.neighborRooms.get(neighbor.id);
-      if (
-        !stored ||
-        stored.x !== neighbor.room_coord_x ||
-        stored.z !== neighbor.room_coord_z
-      ) {
-        this.generateRoom(neighbor.room_coord_x, neighbor.room_coord_z);
-        this.neighborRooms.set(neighbor.id, {
-          x: neighbor.room_coord_x,
-          z: neighbor.room_coord_z,
-        });
+    neighbors.forEach((n) => {
+      currentIds.add(n.id);
+
+      // 1) Rooms: crear/actualizar si cambió la room
+      const stored = this.neighborRooms.get(n.id);
+      const roomChanged =
+        !stored || stored.x !== n.room_coord_x || stored.z !== n.room_coord_z;
+
+      if (roomChanged) {
+        // solo la habitación (outlined), sin crear mesh del vecino aquí
+        this.generateRoom(n.room_coord_x, n.room_coord_z, false);
+        this.neighborRooms.set(n.id, { x: n.room_coord_x, z: n.room_coord_z });
+      }
+
+      // 2) Asegurar el mesh del vecino (peón) si no existe
+      let mesh = this.neighborMeshes.get(n.id);
+      if (!mesh) {
+        const geom = new THREE.BoxGeometry(1, 1, 1);
+        const mat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+        mesh = new THREE.Mesh(geom, mat);
+        this.neighborMeshes.set(n.id, mesh);
+        this.add(mesh);
+      }
+
+      // 3) Target global = room_coord + local_player_position
+      const target = new THREE.Vector3(
+        n.local_player_position_x,
+        0,
+        n.local_player_position_z
+      );
+
+      // 4) Guardar estado y hacer snap si cambió la room
+      let st = this.neighborStates.get(n.id);
+      if (!st) {
+        st = { target: new THREE.Vector3(), lastPacketTs: performance.now() };
+        this.neighborStates.set(n.id, st);
+      }
+      st.target.copy(target);
+
+      if (roomChanged) {
+        // evitar que “cruce todo el mapa” cuando cambia de habitación
+        mesh.position.copy(target);
       }
     });
 
-    Array.from(this.neighborRooms.keys()).forEach((id) => {
+    // 5) Suavizado exponencial hacia el target
+    const responsiveness = 12; // 6–20
+    const alpha = 1 - Math.exp(-responsiveness * dt);
+    this.neighborMeshes.forEach((mesh, id) => {
+      const st = this.neighborStates.get(id);
+      if (!st) return;
+      mesh.position.lerp(st.target, alpha);
+    });
+
+    // 6) Limpieza de vecinos que ya no están
+    Array.from(this.neighborMeshes.keys()).forEach((id) => {
       if (!currentIds.has(id)) {
+        const m = this.neighborMeshes.get(id)!;
+        this.remove(m);
+        this.neighborMeshes.delete(id);
+        this.neighborStates.delete(id);
         this.neighborRooms.delete(id);
       }
     });
