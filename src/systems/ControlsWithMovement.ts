@@ -23,7 +23,7 @@ export default class Controls {
   // Room tracking
   private roomCoordX = 0;
   private roomCoordZ = 0;
-  private roomSize = 15; // default room size (width/depth)
+  private roomSize = 20; // default room size (width/depth)
 
   private changeCheckAccumulator = 0;
   private changeCheckInterval = 1 / 24; // 24 times per second (~0.04166s)
@@ -90,8 +90,8 @@ export default class Controls {
     if (now < this.nextSendAt) return; // 20 Hz cap
 
     const pos = this.yawObject.position;
-    const rotY = this.yawObject.rotation.y; // yaw
-    const rotX = this.pitchObject?.rotation.x ?? 0; // pitch (si tienes pitchObject)
+    const rotX = this.yawObject.rotation.y; // yaw
+    const rotY = this.pitchObject?.rotation.z ?? 0; // pitch (si tienes pitchObject)
 
     // Calcular cambios significativos
     const movedSq =
@@ -172,7 +172,7 @@ export default class Controls {
     document.addEventListener("mousemove", onMouseMove, false);
   }
   // Update room information without moving the player
-  public initPlayerRoom(x: number, z: number, size: number = 15) {
+  public initPlayerRoom(x: number, z: number, size: number = 20) {
     this.roomCoordX = x;
     this.roomCoordZ = z;
     this.roomSize = size;
