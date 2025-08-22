@@ -344,9 +344,6 @@
       <div class="cube"></div>
       <div class="cube"></div>
 
-      <!-- Crosshair central -->
-      <div class="crosshair"></div>
-
       <!-- Contenedor principal del menú -->
       <div class="menu-container">
         <img src="logo.png" alt="Logo" class="logo" />
@@ -512,18 +509,18 @@
       function isTouchDevice() {
         return "ontouchstart" in window || navigator.maxTouchPoints > 0;
       }
+
+      const startScreen = document.querySelector(".startScreen");
       if (isTouchDevice()) {
-        document.body.innerHTML = `
+        startScreen.innerHTML = `
           <div style="
             display:flex;
             flex-direction:column;
-            align-items:center;
-            justify-content:center;
-            height:100vh;
-            text-align:center;
-            font-family:sans-serif;
+
             padding:20px;
           ">
+      <div class="background"></div>
+
             <h1>This game is designed for PC</h1>
             <p>Please switch to a desktop or laptop for the best experience.</p>
           </div>
