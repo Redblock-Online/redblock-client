@@ -3,11 +3,61 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Three.js Shooter</title>
+    <title>Redblock Online</title>
+    <link rel="icon" type="image/png" href="logo.png" />
+
+    <!-- Basic SEO -->
+    <meta
+      name="description"
+      content="Redblock Online is the ultimate free aim trainer. Improve your accuracy and reflexes with 3, 8, and 50 target modes. No signup, just play!"
+    />
+    <meta
+      name="keywords"
+      content="aim trainer, redblock online, aim practice, shooter training, free aim trainer, fps aim trainer"
+    />
+    <meta name="author" content="Redblock Team" />
+    <meta name="robots" content="index, follow" />
+    <meta name="language" content="en" />
+    <meta name="theme-color" content="#ff0000" />
+
+    <!-- Open Graph (Facebook, LinkedIn) -->
+    <meta property="og:title" content="Redblock Online - Free Aim Trainer" />
+    <meta
+      property="og:description"
+      content="THE Online Aim Trainer. Boost your aim in FPS games with Redblock Online. Try it with your friends!"
+    />
+    <meta property="og:image" content="https://redblock.online/slogo.png" />
+    <meta property="og:url" content="https://redblock.online" />
+    <meta property="og:type" content="website" />
+
+    <!-- Twitter Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Redblock Online - Free Aim Trainer" />
+    <meta
+      name="twitter:description"
+      content="THE Online Aim Trainer. Level up your aim with Redblock Online. Free and efficient! Try it with your friends!"
+    />
+    <meta name="twitter:image" content="https://redblock.online/slogo.png" />
+    <meta name="twitter:url" content="https://redblock.online" />
+
+    <!-- Extra: Mobile & PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="mobile-web-app-capable" content="yes" />
+
     <style>
       body {
         margin: 0;
         overflow: hidden;
+        font-family: "Courier New", monospace;
+        background: #f8f8f8;
+        color: #000;
+        overflow: hidden;
+        height: 100vh;
+        position: relative;
       }
       /* styles.css (or inside a <style> block) */
       .startScreen {
@@ -24,83 +74,316 @@
         z-index: 10; /* sit above the canvas */
       }
 
-      .startButton {
-        font-size: 1.25rem;
-        padding: 0.75rem 2.5rem;
-        border: 2px solid #000;
-        background: transparent;
-        color: inherit;
-        cursor: pointer;
-        transition: background 0.2s;
+      /* Buttons menu */
+      .menu-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        align-items: center;
       }
 
-      .startButton:hover,
-      .startButton:focus {
-        background: #ffffff20;
+      .menu-button {
+        background: transparent;
+        border: 3px solid #000;
+        padding: 1rem 3rem;
+        font-family: "Courier New", monospace;
+        font-size: 1.2rem;
+        font-weight: bold;
+        letter-spacing: 0.1em;
+        cursor: pointer;
+        position: relative;
+        transition: all 0.2s ease;
+        text-transform: uppercase;
+        min-width: 250px;
+        text-align: center;
+      }
+
+      .menu-button:hover {
+        background: #000;
+        color: #fff;
+        transform: translate(-3px, -3px);
+        box-shadow: 3px 3px 0px #ff0000;
+      }
+
+      .menu-button.primary {
+        background: #ff0000;
+        color: #fff;
+        border-color: #000;
+      }
+
+      .menu-button.primary:hover {
+        background: #000;
+        box-shadow: 3px 3px 0px #ff0000;
       }
 
       .hint {
         font-size: 0.875rem;
         opacity: 0.65;
       }
-      .sensitivityControl {
+
+      /* Perspective background */
+      .background {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+            90deg,
+            transparent 49%,
+            #000 49%,
+            #000 51%,
+            transparent 51%
+          ),
+          linear-gradient(
+            0deg,
+            transparent 49%,
+            #000 49%,
+            #000 51%,
+            transparent 51%
+          );
+        background-size: 80px 80px;
+        opacity: 0.1;
+        z-index: 1;
+      }
+
+      /* Decorative geometric elements */
+      .cube {
+        position: absolute;
+        width: 40px;
+        height: 40px;
+        border: 2px solid #000;
+        background: transparent;
+        z-index: 2;
+      }
+
+      .cube.red {
+        background: #ff0000;
+      }
+
+      .cube:nth-child(2) {
+        top: 10%;
+        left: 15%;
+        transform: rotate(15deg);
+      }
+      .cube:nth-child(3) {
+        top: 20%;
+        right: 20%;
+        transform: rotate(-10deg);
+      }
+      .cube:nth-child(4) {
+        bottom: 30%;
+        left: 10%;
+        transform: rotate(25deg);
+      }
+      .cube:nth-child(5) {
+        bottom: 15%;
+        right: 15%;
+        transform: rotate(-20deg);
+      }
+      .cube:nth-child(6) {
+        top: 60%;
+        left: 5%;
+        transform: rotate(45deg);
+      }
+
+      /* Principal container */
+      .menu-container {
+        position: relative;
+        z-index: 10;
         display: flex;
         flex-direction: column;
         align-items: center;
-        font-size: 0.9rem;
-        gap: 0.5rem;
+        justify-content: center;
+        height: 100vh;
+        padding: 2rem;
       }
 
-      .sensitivityControl input[type="range"] {
-        width: 200px;
-        appearance: none;
-        height: 6px;
-        border-radius: 3px;
-        background: #00000040;
+      /* Title of the game */
+      @font-face {
+        font-family: EricaOne-Regular;
+        src: url("fonts/EricaOne-Regular.ttf");
+      }
+      .game-title {
+        height: 80px;
+        margin-top: 40px;
+        margin-bottom: 40px;
+      }
+
+      /* Added sensitivity slider styles */
+      .sensitivity-container {
+        margin-top: 0.7rem;
+        margin: 0 0;
+        padding: 1.5rem;
+        border: 3px solid #000;
+        background: rgba(255, 255, 255, 0.9);
+        min-width: 250px;
+      }
+
+      .sensitivity-label {
+        font-family: "Courier New", monospace;
+        font-size: 1rem;
+        font-weight: bold;
+        margin-bottom: 1rem;
+        text-align: center;
+        letter-spacing: 0.05em;
+      }
+
+      .slider-container {
+        position: relative;
+        width: 100%;
+        height: 20px;
+        margin: 1rem 0;
+      }
+
+      .sensitivity-slider {
+        -webkit-appearance: none;
+        width: 100%;
+        height: 4px;
+        background: #ddd;
+        border: 1px solid #000;
         outline: none;
-        transition: background 0.3s;
+        cursor: pointer;
       }
 
-      .sensitivityControl input[type="range"]::-webkit-slider-thumb {
+      .sensitivity-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
         appearance: none;
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
+        width: 20px;
+        height: 20px;
         background: #000;
+        border: 2px solid #000;
         cursor: pointer;
-        transition: background 0.3s;
+        transition: all 0.2s ease;
       }
 
-      .sensitivityControl input[type="range"]::-moz-range-thumb {
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
+      .sensitivity-slider::-webkit-slider-thumb:hover {
+        background: #ff0000;
+        transform: scale(1.1);
+      }
+
+      .sensitivity-slider::-moz-range-thumb {
+        width: 20px;
+        height: 20px;
         background: #000;
+        border: 2px solid #000;
         cursor: pointer;
+        border-radius: 0;
+        transition: all 0.2s ease;
+      }
+
+      .sensitivity-slider::-moz-range-thumb:hover {
+        background: #ff0000;
+        transform: scale(1.1);
+      }
+
+      .sensitivity-value {
+        text-align: center;
+        font-family: "Courier New", monospace;
+        font-weight: bold;
+        margin-top: 0.5rem;
+        font-size: 0.9rem;
+      }
+      .logo {
+        height: 200px;
+        margin: 0 auto;
+        transform: translateX(20px);
+      }
+      /* Animations  */
+      @keyframes float {
+        0%,
+        100% {
+          transform: translateY(0px) rotate(0deg);
+        }
+        50% {
+          transform: translateY(-10px) rotate(5deg);
+        }
+      }
+      .cube {
+        animation: float 4s ease-in-out infinite;
+      }
+
+      .cube:nth-child(odd) {
+        animation-delay: -2s;
+      }
+
+      /* Responsive */
+      @media (max-width: 768px) {
+        .game-title {
+          font-size: 2.5rem;
+          margin-bottom: 2rem;
+        }
+
+        .menu-button {
+          min-width: 200px;
+          padding: 0.8rem 2rem;
+          font-size: 1rem;
+        }
+
+        .game-info {
+          font-size: 1rem;
+        }
       }
     </style>
   </head>
   <body>
     <canvas id="canvas"></canvas>
     <div class="startScreen">
-      <h1>Quick Aim Trainer</h1>
-      <div class="sensitivityControl">
-        <label for="sensitivityRange"
-          >Mouse Sensitivity: <span id="sensitivityValue">1.0</span></label
-        >
-        <input
-          type="range"
-          id="sensitivityRange"
-          min="0.1"
-          max="3"
-          step="0.1"
-          value="1"
+      <div class="background"></div>
+
+      <!-- Elementos decorativos -->
+      <div class="cube"></div>
+      <div class="cube red"></div>
+      <div class="cube"></div>
+      <div class="cube"></div>
+      <div class="cube"></div>
+
+      <!-- Crosshair central -->
+      <div class="crosshair"></div>
+
+      <!-- Contenedor principal del menú -->
+      <div class="menu-container">
+        <img src="logo.png" alt="Logo" class="logo" />
+        <img
+          src="redblock-online.png"
+          class="game-title"
+          alt="Redblock Online"
         />
+        <div class="menu-buttons">
+          <button class="startButton menu-button primary" id="startButton1">
+            PLAY 3 TARGETS
+          </button>
+          <button class="startButton menu-button" id="startButton2">
+            PLAY 8 TARGETS
+          </button>
+          <button class="startButton menu-button" id="startButton3">
+            PLAY 50 TARGETS
+          </button>
+
+          <!-- Added sensitivity slider section -->
+          <div class="sensitivity-container">
+            <div class="sensitivity-label">MOUSE SENSITIVITY</div>
+            <div class="slider-container">
+              <input
+                type="range"
+                min="0.01"
+                max="2.0"
+                step="0.01"
+                value="0.7"
+                class="sensitivity-slider"
+                id="sensitivityRange"
+              />
+            </div>
+            <div class="sensitivity-value" id="sensitivityValue">0.70</div>
+          </div>
+
+          <button class="menu-button" onclick="exitGame()">EXIT</button>
+          <p class="hint">Click or press Space to choose randomly</p>
+        </div>
       </div>
-      <button class="startButton" id="startButton1">3 Targets</button>
-      <button class="startButton" id="startButton2">8 Targets</button>
-      <button class="startButton" id="startButton3">50 Targets</button>
-      <p class="hint">Click or press Space to choose randomly</p>
+
+      <!-- Versión -->
+      <div class="version">v0.2.0 alpha</div>
     </div>
     <!-- En tu index.html -->
     <div
@@ -120,7 +403,6 @@
       0.00s
     </div>
 
-
     <img
       src="controls.png"
       style="
@@ -132,8 +414,25 @@
         user-select: none;
       "
     />
-    
+
+    <script type="module" src="/src/main.ts"></script>
     <script>
+      const sensitivitySlider = document.getElementById("sensitivityRange");
+      const sensitivityValue = document.getElementById("sensitivityValue");
+
+      const savedSensitivity = localStorage.getItem("mouseSensitivity");
+      if (savedSensitivity !== null) {
+        sensitivitySlider.value = savedSensitivity;
+        sensitivityValue.textContent = parseFloat(savedSensitivity).toFixed(2);
+      }
+      let mouseSensitivity = parseFloat(sensitivitySlider.value);
+
+      sensitivitySlider.addEventListener("input", () => {
+        mouseSensitivity = parseFloat(sensitivitySlider.value);
+        sensitivityValue.textContent = mouseSensitivity.toFixed(2);
+        localStorage.setItem("mouseSensitivity", mouseSensitivity);
+      });
+
       function isTouchDevice() {
         return "ontouchstart" in window || navigator.maxTouchPoints > 0;
       }
@@ -154,25 +453,12 @@
           </div>
         `;
       }
-    </script>
-    <script type="module" src="/src/main.ts"></script>
-    <script>
-      const sensitivitySlider = document.getElementById("sensitivityRange");
-      const sensitivityValue = document.getElementById("sensitivityValue");
-    
-      const savedSensitivity = localStorage.getItem("mouseSensitivity");
-      if (savedSensitivity !== null) {
-        sensitivitySlider.value = savedSensitivity;
-        sensitivityValue.textContent = parseFloat(savedSensitivity).toFixed(1);
+
+      function exitGame() {
+        if (confirm("Are you sure you want to exit?")) {
+          window.close();
+        }
       }
-      let mouseSensitivity = parseFloat(sensitivitySlider.value);
-    
-      sensitivitySlider.addEventListener("input", () => {
-        mouseSensitivity = parseFloat(sensitivitySlider.value);
-        sensitivityValue.textContent = mouseSensitivity.toFixed(1);
-        localStorage.setItem("mouseSensitivity", mouseSensitivity);
-      });
     </script>
-    
   </body>
 </html>
