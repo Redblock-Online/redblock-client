@@ -14,6 +14,27 @@ export default class Controls {
   private velocity = new THREE.Vector3();
   private acceleration = 0.07;
   private damping = 0.9;
+  private isCrouching = false;
+  private standHeight = 0;
+  private crouchHeight = -0.4;
+  private heightLerp = 10;
+  private crouchSpeedFactor = 0.6;
+
+  private velocityY = 0;
+  private groundY = 0;
+  private maxY = 2.2;
+  private gravity = -24;
+  private jumpStrength = 8;
+  private terminalVelocity = -50;
+  private airControlFactor = 1;
+  private onGround = true;
+  private lastGroundedTime = -Infinity;
+  private lastJumpPressedTime = -Infinity;
+  private jumpBuffer = 0.12;
+  private coyoteTime = 0.1;
+  private lastJumpTime = -Infinity;
+  private jumpCooldown = 0.15;
+
   private keysPressed: Record<string, boolean> = {};
   private wsManager: WSManager;
   private lastYawPos = new THREE.Vector3();
@@ -146,10 +167,22 @@ export default class Controls {
   private initKeyboardListeners() {
     document.addEventListener("keydown", (e) => {
       this.keysPressed[e.key.toLowerCase()] = true;
+
+      if (e.key.toLowerCase() === "c") {
+        this.isCrouching = true;
+      }
+
+      if (e.code === "Space") {
+        this.lastJumpPressedTime = performance.now() / 1000;
+      }
     });
 
     document.addEventListener("keyup", (e) => {
       this.keysPressed[e.key.toLowerCase()] = false;
+
+      if (e.key.toLowerCase() === "c") {
+        this.isCrouching = false;
+      }
     });
   }
 
@@ -207,17 +240,64 @@ export default class Controls {
       this.roomCoordZ - halfRoom,
       this.roomCoordZ + halfRoom
     );
+    const effectiveSpeed =
+      this.moveSpeed *
+      (this.isCrouching ? this.crouchSpeedFactor : 1) *
+      (this.onGround ? 1 : this.airControlFactor);
 
     targetDirection.normalize();
     targetDirection.applyQuaternion(this.yawObject.quaternion);
     targetDirection.y = 0;
 
     this.velocity.lerp(
-      targetDirection.multiplyScalar(this.moveSpeed),
+      targetDirection.multiplyScalar(effectiveSpeed),
       this.acceleration
     );
     this.velocity.multiplyScalar(Math.pow(this.damping, deltaTime));
     this.yawObject.position.addScaledVector(this.velocity, deltaTime);
+
+    const now = performance.now() / 1000;
+    const canUseBufferedJump =
+      now - this.lastJumpPressedTime <= this.jumpBuffer;
+    const isWithinCoyote =
+      this.onGround || now - this.lastGroundedTime <= this.coyoteTime;
+    const cooldownReady = now - this.lastJumpTime >= this.jumpCooldown;
+
+    if (canUseBufferedJump && isWithinCoyote && cooldownReady) {
+      this.velocityY = this.jumpStrength;
+      this.lastJumpTime = now;
+      this.onGround = false;
+      this.isCrouching = false;
+
+      this.lastJumpPressedTime = -Infinity;
+    }
+
+    this.velocityY += this.gravity * deltaTime;
+    if (this.velocityY < this.terminalVelocity)
+      this.velocityY = this.terminalVelocity;
+    this.yawObject.position.y += this.velocityY * deltaTime;
+
+    if (this.yawObject.position.y <= this.groundY) {
+      this.yawObject.position.y = this.groundY;
+      if (!this.onGround) {
+        this.onGround = true;
+        this.lastGroundedTime = now;
+      } else {
+        this.lastGroundedTime = now;
+      }
+      this.velocityY = 0;
+    } else {
+      this.onGround = false;
+    }
+
+    if (this.yawObject.position.y > this.maxY) {
+      this.yawObject.position.y = this.maxY;
+      if (this.velocityY > 0) this.velocityY = 0;
+    }
+
+    const targetY = this.isCrouching ? this.crouchHeight : this.standHeight;
+    this.pitchObject.position.y +=
+      (targetY - this.pitchObject.position.y) * this.heightLerp * deltaTime;
 
     // Periodic check (you already had it)
     this.changeCheckAccumulator += deltaTime;

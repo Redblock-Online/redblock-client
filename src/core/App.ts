@@ -74,8 +74,8 @@ export default class App {
       this.renderer.instance.setSize(window.innerWidth, window.innerHeight);
     });
 
-    document.addEventListener("keydown", (e) => {
-      if (e.code === "Space" && !this.gameRunning && this.level > 0) {
+    document.addEventListener("mousedown", () => {
+      if (!this.gameRunning && this.level > 0) {
         this.startTimer();
         this.scene.level(this.level);
         this.timerElement.innerHTML = "0.00s";
@@ -92,7 +92,7 @@ export default class App {
   }
 
   stopTimer() {
-    this.timerElement.innerHTML += "<br>Press Space to start again";
+    this.timerElement.innerHTML += "<br>Press Click to start again";
     this.gameRunning = false;
     if (this.timerInterval) {
       clearInterval(this.timerInterval);
