@@ -32,7 +32,14 @@ export default class WSManager {
   }
 
   private connect() {
-    this.ws = new WebSocket("ws://localhost:8080");
+    const wsServer = import.meta.env.VITE_WS_SERVER;
+    if (!wsServer) {
+      console.error("WS_SERVER is not defined");
+      /* Use production by default */
+      this.ws = new WebSocket("ws://redblock.online/ws");
+    } else {
+      this.ws = new WebSocket(wsServer);
+    }
 
     this.ws.onopen = () => {
       console.log("Connected to WebSocket server");
