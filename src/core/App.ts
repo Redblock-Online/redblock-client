@@ -78,7 +78,7 @@ export default class App {
       this.renderer.instance.setSize(window.innerWidth, window.innerHeight);
     });
 
-    document.addEventListener("mousedown", (e) => {
+    document.addEventListener("mousedown", () => {
       if (!this.gameRunning && this.level > 0) {
         this.startTimer();
         this.scene.level(this.level);
