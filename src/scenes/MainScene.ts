@@ -5,7 +5,13 @@ import Light from "../objects/Light";
 import Cube from "../objects/Cube";
 import type { PlayerCore } from "../utils/ws/WSManager";
 import WSManager from "../utils/ws/WSManager";
-
+export type TargetInfo = {
+  x: number;
+  y: number;
+  z: number;
+  shootable: boolean;
+  disabled: boolean;
+};
 // Helpers fuera de la clase
 function quatFromPitchYaw(pitchRad: number, yawRad: number): THREE.Quaternion {
   // YXZ: primero yaw (Y), después pitch (X)
@@ -28,12 +34,38 @@ function getTargetQuatFromNet(n: any): THREE.Quaternion {
   return quatFromPitchYaw(pitchClamped, yaw);
 }
 
+/**
+ * Compares two arrays of TargetInfo to check if there are any changes.
+ * Returns true if changed, false otherwise.
+ */
+function targetsInfoChanged(prev: TargetInfo[], next: TargetInfo[]): boolean {
+  if (prev.length !== next.length) return true;
+
+  for (let i = 0; i < prev.length; i++) {
+    const a = prev[i];
+    const b = next[i];
+    if (
+      a.x !== b.x ||
+      a.y !== b.y ||
+      a.z !== b.z ||
+      a.shootable !== b.shootable ||
+      a.disabled !== b.disabled
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export default class MainScene extends THREE.Scene {
   private neighborRooms: Map<string, { x: number; z: number }> = new Map();
   public targets: Cube[] = [];
   public me: PlayerCore;
   public wsManager: WSManager;
   public neighborMeshes: Map<string, THREE.Mesh> = new Map();
+  public neighborTargetInfos: Map<string, TargetInfo[]> = new Map();
+  public neighborTargetsRendered: Map<string, THREE.Mesh[]> = new Map();
   private clock = new THREE.Clock();
   private neighborStates = new Map<
     string,
@@ -72,7 +104,6 @@ export default class MainScene extends THREE.Scene {
 
   public initPlayerRoom(playerCore: PlayerCore) {
     this.me = playerCore;
-    console.log(this.me, "me", this.wsManager.getNeighbors(), "neighbors");
     this.generateRoom(playerCore.room_coord_x, playerCore.room_coord_z);
   }
 
@@ -126,6 +157,32 @@ export default class MainScene extends THREE.Scene {
     const currentIds = new Set<string>();
 
     neighbors.forEach((n) => {
+      /* Render  targets */
+
+      const targetInfoChanged = targetsInfoChanged(
+        this.neighborTargetInfos.get(n.id) ?? [],
+        n.targetsInfo
+      );
+      if (targetInfoChanged) {
+        this.neighborTargetInfos.set(n.id, n.targetsInfo);
+        this.neighborTargetsRendered.get(n.id)?.forEach((cube) => {
+          this.remove(cube);
+        });
+        this.neighborTargetsRendered.set(n.id, []);
+        n.targetsInfo.forEach((targetInfo) => {
+          if (targetInfo.disabled) return;
+          const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+          const cubeMaterial = new THREE.MeshBasicMaterial({
+            color: targetInfo.shootable ? 0xff0000 : 0xffffff,
+          });
+          const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+          cube.position.set(targetInfo.x, targetInfo.y, targetInfo.z);
+
+          this.neighborTargetsRendered.get(n.id)?.push(cube);
+          this.add(cube);
+        });
+      }
+
       currentIds.add(n.id);
 
       const stored = this.neighborRooms.get(n.id);

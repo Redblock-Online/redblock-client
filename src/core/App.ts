@@ -26,6 +26,8 @@ export default class App {
   targets: Cube[] = [];
   gameRunning: boolean = false;
   wsManager: WSManager;
+  ammountOfTargetsSelected: number = 3;
+
   constructor() {
     this.timerElement = document.getElementById("timer")!;
     this.gameRunning = false;
@@ -49,9 +51,11 @@ export default class App {
     });
     this.renderer = new Renderer(this.scene, this.camera.instance, canvas);
     this.controls = new ControlsWithMovement(
+      this.targets,
       this.camera.instance,
       canvas,
-      this.wsManager
+      this.wsManager,
+      () => this.getAmmountOfTargetsSelected
     );
     this.scene.add(this.controls.object);
     this.camera.instance.rotation.set(0, (Math.PI / 2) * 3, 0);
@@ -74,7 +78,7 @@ export default class App {
       this.renderer.instance.setSize(window.innerWidth, window.innerHeight);
     });
 
-    document.addEventListener("mousedown", () => {
+    document.addEventListener("mousedown", (e) => {
       if (!this.gameRunning && this.level > 0) {
         this.startTimer();
         this.scene.level(this.level);
@@ -101,7 +105,11 @@ export default class App {
   }
 
   start() {
-    new StartScreen(canvas, (level) => {
+    new StartScreen(canvas, (level: number) => {
+      if (level == 1) this.ammountOfTargetsSelected = 3;
+      if (level == 2) this.ammountOfTargetsSelected = 8;
+      if (level == 3) this.ammountOfTargetsSelected = 50;
+
       this.gameRunning = true;
       this.loop.start();
       this.startTimer();
@@ -176,5 +184,9 @@ export default class App {
     if (!remaining) {
       this.stopTimer();
     }
+  }
+
+  get getAmmountOfTargetsSelected() {
+    return this.ammountOfTargetsSelected;
   }
 }

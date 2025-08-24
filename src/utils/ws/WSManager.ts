@@ -1,3 +1,5 @@
+import type { TargetInfo } from "../../scenes/MainScene";
+
 export type PlayerCore = {
   id: string;
   chunk_number: number;
@@ -7,6 +9,7 @@ export type PlayerCore = {
   player_rotation_y: number;
   local_player_position_x: number;
   local_player_position_y: number;
+  targetsInfo: TargetInfo[];
   local_player_position_z: number;
 };
 

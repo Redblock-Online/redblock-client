@@ -1,13 +1,14 @@
 // src/systems/Controls.ts
 import * as THREE from "three";
 import type WSManager from "../utils/ws/WSManager";
-
+import type Cube from "../objects/Cube";
+import { buildTargetsInfo } from "../utils/targetsInfo";
 export default class Controls {
   private camera: THREE.Camera;
   private domElement: HTMLCanvasElement;
   private pitchObject = new THREE.Object3D();
   private yawObject = new THREE.Object3D();
-
+  private targets: Cube[] = [];
   private sensitivity = 0.0002;
   private PI_2 = Math.PI / 2;
   private moveSpeed = 8;
@@ -37,6 +38,7 @@ export default class Controls {
 
   private keysPressed: Record<string, boolean> = {};
   private wsManager: WSManager;
+  private getAmmountOfTargetsSelected: () => number;
   private lastYawPos = new THREE.Vector3();
   private lastYawRot = new THREE.Euler();
   private lastPitchRot = new THREE.Euler();
@@ -61,13 +63,17 @@ export default class Controls {
   private nextSendAt = 0; // ms timestamp
 
   constructor(
+    targets: Cube[],
     camera: THREE.Camera,
     domElement: HTMLCanvasElement,
-    wsManager: WSManager
+    wsManager: WSManager,
+    getAmmountOfTargetsSelected: () => number
   ) {
+    this.targets = targets;
     this.camera = camera;
     this.domElement = domElement;
     this.wsManager = wsManager;
+    this.getAmmountOfTargetsSelected = getAmmountOfTargetsSelected;
     const sensitivitySlider = document.getElementById(
       "sensitivityRange"
     ) as HTMLInputElement;
@@ -146,7 +152,6 @@ export default class Controls {
     const qRotX = this.quantize(rotX, this.rotQuant);
     const qRotY = this.quantize(rotY, this.rotQuant);
 
-    // Enviar update (ajusta al shape de tu red)
     this.wsManager.sendPlayerUpdate({
       id: this.wsManager.getMe()!.id,
       local_player_position_x: qx,
@@ -154,6 +159,10 @@ export default class Controls {
       local_player_position_z: qz,
       player_rotation_x: qRotX,
       player_rotation_y: qRotY,
+      targetsInfo: buildTargetsInfo(
+        this.targets,
+        this.getAmmountOfTargetsSelected()
+      ),
     });
 
     // Update last sent states
