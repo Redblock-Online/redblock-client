@@ -1,11 +1,4 @@
-import {
-  Group,
-  Mesh,
-  MeshBasicMaterial,
-  Camera,
-  Euler,
-  Vector3,
-} from "three";
+import { Group, Mesh, MeshBasicMaterial, Camera, Euler, Vector3 } from "three";
 import GLTFLoader from "../loaders/GLTFLoader";
 import gsap from "gsap";
 
@@ -16,8 +9,8 @@ export default class Pistol extends Group {
   // recoil config
   private baseRot = new Euler(0, Math.PI / 2, 0);
   private basePos = new Vector3(0.4, -0.3, -0.9);
-  private firing: boolean = false;  // cooldown flag
-  private fireRate = 8;             // shots per second
+  private firing: boolean = false; // cooldown flag
+  private fireRate = 8; // shots per second
   private tl?: gsap.core.Timeline;
 
   constructor(camera: Camera, callback?: (pistol: Pistol) => void) {
@@ -54,7 +47,6 @@ export default class Pistol extends Group {
     this.firing = true;
     const cooldown = 1 / this.fireRate;
 
-    console.log("shoot");
     this.tl?.kill();
 
     const kickZ = -0.07;
@@ -63,13 +55,39 @@ export default class Pistol extends Group {
 
     this.position.copy(this.basePos);
     this.rotation.copy(this.baseRot);
-    this.tl = gsap.timeline({ defaults: { ease: "power2.out" } })
-      .to(this.position, { z: this.basePos.z + kickZ, duration: 0.06, ease: "power3.in" }, 0)
-      .to(this.rotation, { x: this.baseRot.x + tiltX, z: this.baseRot.z + twistZ, duration: 0.06, ease: "power3.in" }, 0)
+    this.tl = gsap
+      .timeline({ defaults: { ease: "power2.out" } })
+      .to(
+        this.position,
+        { z: this.basePos.z + kickZ, duration: 0.06, ease: "power3.in" },
+        0
+      )
+      .to(
+        this.rotation,
+        {
+          x: this.baseRot.x + tiltX,
+          z: this.baseRot.z + twistZ,
+          duration: 0.06,
+          ease: "power3.in",
+        },
+        0
+      )
       .to(this.position, { z: this.basePos.z + kickZ * 0.25, duration: 0.05 })
-      .to(this.rotation, { x: this.baseRot.x + tiltX * 0.35, z: this.baseRot.z + twistZ * 0.35, duration: 0.05 }, "<")
+      .to(
+        this.rotation,
+        {
+          x: this.baseRot.x + tiltX * 0.35,
+          z: this.baseRot.z + twistZ * 0.35,
+          duration: 0.05,
+        },
+        "<"
+      )
       .to(this.position, { z: this.basePos.z, duration: 0.08 })
-      .to(this.rotation, { x: this.baseRot.x, z: this.baseRot.z, duration: 0.08 }, "<");
+      .to(
+        this.rotation,
+        { x: this.baseRot.x, z: this.baseRot.z, duration: 0.08 },
+        "<"
+      );
 
     gsap.delayedCall(cooldown, () => (this.firing = false));
   }

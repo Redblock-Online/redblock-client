@@ -42,7 +42,7 @@ export default class WSManager {
     }
 
     this.ws.onopen = () => {
-      console.log("Connected to WebSocket server");
+      console.log("Connected to the server");
     };
 
     this.ws.onmessage = (event) => {
@@ -55,7 +55,7 @@ export default class WSManager {
     };
 
     this.ws.onclose = () => {
-      console.log("Disconnected from WebSocket server");
+      console.log("Disconnected from the server");
     };
   }
 
@@ -66,11 +66,10 @@ export default class WSManager {
 
   private handleMessage(message: any) {
     if (message.type === "assigned") {
-      console.log("Assigned", message);
+      console.log("Assigned");
       this.setMe(message);
     }
     if (message.type === "playerLeft") {
-      console.log("Player left ", message.id);
       this.neighbors.delete(message.id);
     }
     if (message.type === "error") {
