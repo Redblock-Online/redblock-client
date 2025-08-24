@@ -8,6 +8,7 @@ import Crosshair from "../objects/Crosshair";
 import { Mesh, Raycaster, Vector2 } from "three";
 import Pistol from "../objects/Pistol";
 import type Cube from "../objects/Cube";
+import WSManager, { type PlayerCore } from "../utils/ws/WSManager";
 
 const canvas = document.querySelector("canvas") as HTMLCanvasElement;
 
@@ -24,15 +25,39 @@ export default class App {
   level: number = 0;
   targets: Cube[] = [];
   gameRunning: boolean = false;
+  wsManager: WSManager;
+  ammountOfTargetsSelected: number = 3;
+
   constructor() {
     this.timerElement = document.getElementById("timer")!;
     this.gameRunning = false;
     this.camera = new Camera();
-    this.scene = new MainScene(this.targets);
+    this.wsManager = new WSManager();
+    this.scene = new MainScene(
+      this.targets,
+      this.wsManager.getMe()!,
+      this.wsManager
+    );
+    this.wsManager.onMeReady((me: PlayerCore) => {
+      this.controls.initPlayerRoom(me.room_coord_x, me.room_coord_z);
+      this.controls.teleportTo(
+        me.room_coord_x,
+        0,
+        me.room_coord_z,
+        me.player_rotation_y ?? 0
+      );
+
+      this.scene.initPlayerRoom(me);
+    });
     this.renderer = new Renderer(this.scene, this.camera.instance, canvas);
-    this.controls = new ControlsWithMovement(this.camera.instance, canvas);
+    this.controls = new ControlsWithMovement(
+      this.targets,
+      this.camera.instance,
+      canvas,
+      this.wsManager,
+      () => this.getAmmountOfTargetsSelected
+    );
     this.scene.add(this.controls.object);
-    this.camera.instance.position.set(0, 0, 0);
     this.camera.instance.rotation.set(0, (Math.PI / 2) * 3, 0);
     this.pistol = new Pistol(this.camera.instance, (loadedPistol) => {
       this.camera.instance.add(loadedPistol);
@@ -53,8 +78,8 @@ export default class App {
       this.renderer.instance.setSize(window.innerWidth, window.innerHeight);
     });
 
-    document.addEventListener("keydown", (e) => {
-      if (e.code === "Space" && !this.gameRunning && this.level > 0) {
+    document.addEventListener("mousedown", (e) => {
+      if (!this.gameRunning && this.level > 0) {
         this.startTimer();
         this.scene.level(this.level);
         this.timerElement.innerHTML = "0.00s";
@@ -71,7 +96,7 @@ export default class App {
   }
 
   stopTimer() {
-    this.timerElement.innerHTML += "<br>Press Space to start again";
+    this.timerElement.innerHTML += "<br>Press Click to start again";
     this.gameRunning = false;
     if (this.timerInterval) {
       clearInterval(this.timerInterval);
@@ -80,7 +105,11 @@ export default class App {
   }
 
   start() {
-    new StartScreen(canvas, (level) => {
+    new StartScreen(canvas, (level: number) => {
+      if (level == 1) this.ammountOfTargetsSelected = 3;
+      if (level == 2) this.ammountOfTargetsSelected = 8;
+      if (level == 3) this.ammountOfTargetsSelected = 50;
+
       this.gameRunning = true;
       this.loop.start();
       this.startTimer();
@@ -155,5 +184,9 @@ export default class App {
     if (!remaining) {
       this.stopTimer();
     }
+  }
+
+  get getAmmountOfTargetsSelected() {
+    return this.ammountOfTargetsSelected;
   }
 }
