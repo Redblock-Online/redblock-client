@@ -1,5 +1,5 @@
-import type Cube from "../objects/Cube";
-import type { TargetInfo } from "../scenes/MainScene";
+import type Cube from "@/objects/Cube";
+import type { TargetInfo } from "@/scenes/MainScene";
 
 export function buildTargetsInfo(
   targets: Cube[],

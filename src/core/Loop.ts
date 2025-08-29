@@ -1,9 +1,9 @@
 // Animation/render loop
 import * as THREE from "three";
-import ControlsWithMovement from "../systems/ControlsWithMovement";
-import Pistol from "../objects/Pistol";
+import ControlsWithMovement from "@/systems/ControlsWithMovement";
+import Pistol from "@/objects/Pistol";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import MainScene from "../scenes/MainScene";
+import MainScene from "@/scenes/MainScene";
 export default class Loop {
   renderer: EffectComposer;
   scene: MainScene;
