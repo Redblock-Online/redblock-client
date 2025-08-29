@@ -1,8 +1,8 @@
 // src/systems/Controls.ts
 import * as THREE from "three";
-import type WSManager from "../utils/ws/WSManager";
-import type Cube from "../objects/Cube";
-import { buildTargetsInfo } from "../utils/targetsInfo";
+import type WSManager from "@/utils/ws/WSManager";
+import type Cube from "@/objects/Cube";
+import { buildTargetsInfo } from "@/utils/targetsInfo";
 export default class Controls {
   private camera: THREE.Camera;
   private domElement: HTMLCanvasElement;

@@ -1,4 +1,4 @@
-import CubeTextureLoader from "../../loaders/CubeTextureLoader";
+import CubeTextureLoader from "@/loaders/CubeTextureLoader";
 
 const environmentMap = new CubeTextureLoader().load([
   "textures/CubeTextureNature/posx.jpg",

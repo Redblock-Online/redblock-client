@@ -1,14 +1,14 @@
 import Renderer from "./Renderer";
 import Camera from "./Camera";
-import MainScene from "../scenes/MainScene";
+import MainScene from "@/scenes/MainScene";
 import Loop from "./Loop";
-import ControlsWithMovement from "../systems/ControlsWithMovement";
-import StartScreen from "../ui/StartScreen";
-import Crosshair from "../objects/Crosshair";
+import ControlsWithMovement from "@/systems/ControlsWithMovement";
+import StartScreen from "@/ui/StartScreen";
+import Crosshair from "@/objects/Crosshair";
 import { Mesh, Raycaster, Vector2 } from "three";
-import Pistol from "../objects/Pistol";
-import type Cube from "../objects/Cube";
-import WSManager, { type PlayerCore } from "../utils/ws/WSManager";
+import Pistol from "@/objects/Pistol";
+import type Cube from "@/objects/Cube";
+import WSManager, { type PlayerCore } from "@/utils/ws/WSManager";
 
 const canvas = document.querySelector("canvas") as HTMLCanvasElement;
 

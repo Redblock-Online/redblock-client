@@ -1,4 +1,4 @@
-import type { TargetInfo } from "../../scenes/MainScene";
+import type { TargetInfo } from "@/scenes/MainScene";
 
 export type PlayerCore = {
   id: string;

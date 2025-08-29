@@ -1,10 +1,10 @@
 // Main scene setup
 import * as THREE from "three";
-import RandomCubeGenerator from "../objects/RandomCubeGenerator";
-import Light from "../objects/Light";
-import Cube from "../objects/Cube";
-import type { PlayerCore } from "../utils/ws/WSManager";
-import WSManager from "../utils/ws/WSManager";
+import RandomCubeGenerator from "@/objects/RandomCubeGenerator";
+import Light from "@/objects/Light";
+import Cube from "@/objects/Cube";
+import type { PlayerCore } from "@/utils/ws/WSManager";
+import WSManager from "@/utils/ws/WSManager";
 export type TargetInfo = {
   x: number;
   y: number;

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import Cube from "./Cube";
-import WSManager from "../utils/ws/WSManager";
+import WSManager from "@/utils/ws/WSManager";
 
 export default class RandomCubeGenerator {
   private scene: THREE.Scene;
