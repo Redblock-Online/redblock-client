@@ -19,6 +19,31 @@ export default function StartScreen({ onStart }: Props) {
     // ControlsWithMovement listens to #sensitivityRange input event
   };
 
+  const requestPointerLockOnCanvas = () => {
+    const canvas = document.getElementById("canvas") as HTMLCanvasElement | null;
+    try {
+      const anyCanvas: any = canvas as any;
+      const ret = anyCanvas?.requestPointerLock?.();
+      if (ret && typeof ret.catch === "function") {
+        ret.catch(() => {
+          /* swallow SecurityError; user can click canvas to retry */
+        });
+      }
+    } catch (_) {
+      /* swallow; user can click inside the canvas later */
+    }
+  };
+
+  const onStartClick = (level: number) => {
+    // Arranca juego primero (oculta overlay) y luego pide pointer lock
+    onStart(level);
+    try {
+      requestPointerLockOnCanvas();
+    } catch (_) {
+      /* noop */
+    }
+  };
+
   return (
     <div className="startScreen">
       <div className="background" />
@@ -35,13 +60,13 @@ export default function StartScreen({ onStart }: Props) {
         <img src="logo.png" alt="Logo" className="logo" />
         <img src="redblock-online.png" className="game-title" alt="Redblock Online" />
         <div className="menu-buttons">
-          <button className="startButton menu-button primary" id="startButton1" onClick={() => onStart(1)}>
+          <button className="startButton menu-button primary" id="startButton1" onClick={() => onStartClick(1)}>
             PLAY 3 TARGETS
           </button>
-          <button className="startButton menu-button" id="startButton2" onClick={() => onStart(2)}>
+          <button className="startButton menu-button" id="startButton2" onClick={() => onStartClick(2)}>
             PLAY 8 TARGETS
           </button>
-          <button className="startButton menu-button" id="startButton3" onClick={() => onStart(3)}>
+          <button className="startButton menu-button" id="startButton3" onClick={() => onStartClick(3)}>
             PLAY 50 TARGETS
           </button>
 
@@ -73,4 +98,3 @@ export default function StartScreen({ onStart }: Props) {
     </div>
   );
 }
-

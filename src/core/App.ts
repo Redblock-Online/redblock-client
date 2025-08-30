@@ -158,10 +158,29 @@ export default class App {
   };
 
   private onClickForPointerLock = (_e: MouseEvent) => {
-    if (document.pointerLockElement !== this.canvas) {
-      this.canvas.requestPointerLock();
-    }
+    this.requestPointerLockSafe();
   };
+
+  private requestPointerLockSafe() {
+    if (document.pointerLockElement === this.canvas) return;
+    
+    const attemptLock = () => {
+      try {
+        const promise = this.canvas.requestPointerLock();
+        if (promise && typeof promise.catch === 'function') {
+          promise.catch(() => {
+            // Silently retry on next frame
+            requestAnimationFrame(attemptLock);
+          });
+        }
+      } catch (e) {
+        // Silently retry on next frame
+        requestAnimationFrame(attemptLock);
+      }
+    };
+    
+    attemptLock();
+  }
 
   private applyLevelSelection(level: number) {
     if (level === 1) this.ammountOfTargetsSelected = 3;
