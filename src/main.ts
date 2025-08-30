@@ -1,9 +1,9 @@
 
 import App from "./core/App";
 import { mountUI, type UIController } from "@/ui/react/mountUI";
+import logCredits from "./credits";
 
-console.log("Hello there, i'm Freddy. I did this :)");
-console.log("My github: https://github.com/freddysae0");
+logCredits();
 
 const app = new App();
 const ui: UIController = mountUI({
