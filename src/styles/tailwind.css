@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Minimal custom styles for range slider to match original design */
+@layer components {
+  input[type="range"].sensitivity-slider {
+    @apply w-full h-1 bg-gray-300 border border-black cursor-pointer appearance-none;
+  }
+  input[type="range"].sensitivity-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    background: #000;
+    border: 2px solid #000;
+    transition: all 0.2s ease;
+  }
+  input[type="range"].sensitivity-slider::-webkit-slider-thumb:hover {
+    background: #ff0000;
+    transform: scale(1.1);
+  }
+  input[type="range"].sensitivity-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: #000;
+    border: 2px solid #000;
+    border-radius: 0;
+    transition: all 0.2s ease;
+  }
+  input[type="range"].sensitivity-slider::-moz-range-thumb:hover {
+    background: #ff0000;
+    transform: scale(1.1);
+  }
+}
+

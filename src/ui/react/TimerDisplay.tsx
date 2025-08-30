@@ -60,7 +60,7 @@ export default function TimerDisplay({
   }, [running, interval]);
 
   return (
-    <div id="timer">
+    <div id="timer" className="absolute top-5 left-5 text-[32px]  pointer-events-none z-10 select-none">
       {text}
       {hint ? <><br />{hint}</> : null}
     </div>
