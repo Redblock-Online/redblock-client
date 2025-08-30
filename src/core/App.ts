@@ -3,13 +3,12 @@ import Camera from "./Camera";
 import MainScene from "@/scenes/MainScene";
 import Loop from "./Loop";
 import ControlsWithMovement from "@/systems/ControlsWithMovement";
-import StartScreen from "@/ui/StartScreen";
 import Crosshair from "@/objects/Crosshair";
 import { Raycaster, Vector2 } from "three";
 import Pistol from "@/objects/Pistol";
 import Cube from "@/objects/Cube";
 import WSManager, { type PlayerCore } from "@/utils/ws/WSManager";
-import Timer from "@/ui/Timer";
+import type { UIController } from "@/ui/react/mountUI";
 
 export default class App {
   private canvas: HTMLCanvasElement;
@@ -19,7 +18,7 @@ export default class App {
   loop: Loop;
   controls: ControlsWithMovement;
   pistol: Pistol;
-  timer: Timer;
+  private ui?: UIController;
   level: number = 0;
   targets: Cube[] = [];
   gameRunning: boolean = false;
@@ -27,10 +26,9 @@ export default class App {
   ammountOfTargetsSelected: number = 3;
   private crosshair?: Crosshair;
 
-  constructor() { 
+  constructor(ui?: UIController) {
+    this.ui = ui;
     this.canvas = document.querySelector("canvas") as HTMLCanvasElement;
-    const timerEl = document.getElementById("timer")!;
-    this.timer = new Timer(timerEl, { updateInterval: 100 });
     this.gameRunning = false;
 
     // Core systems
@@ -41,18 +39,6 @@ export default class App {
       this.wsManager.getMe()!,
       this.wsManager
     );
-
-    // Networking: position/room once server assigns me
-    this.wsManager.onMeReady((me: PlayerCore) => {
-      this.controls.initPlayerRoom(me.room_coord_x, me.room_coord_z);
-      this.controls.teleportTo(
-        me.room_coord_x,
-        0,
-        me.room_coord_z,
-        me.player_rotation_y ?? 0
-      );
-      this.scene.initPlayerRoom(me);
-    });
 
     this.renderer = new Renderer(this.scene, this.camera.instance, this.canvas);
     this.controls = new ControlsWithMovement(
@@ -70,36 +56,33 @@ export default class App {
       this.pistol = loadedPistol;});
     this.loop = new Loop(this.renderer.instance,this.scene,this.camera.instance,this.controls,this.pistol);
     // Bind events
-    document.addEventListener("mousedown", this.onMouseDown);
+    this.canvas.addEventListener("mousedown", this.onMouseDown);
     this.canvas.addEventListener("click", this.onClickForPointerLock);
+
+    // Networking: position/room once server assigns me (controls ready now)
+    this.wsManager.onMeReady((me: PlayerCore) => {
+      this.controls.initPlayerRoom(me.room_coord_x, me.room_coord_z);
+      this.controls.teleportTo(
+        me.room_coord_x,
+        0,
+        me.room_coord_z,
+        me.player_rotation_y ?? 0
+      );
+      this.scene.initPlayerRoom(me);
+    });
   }
   startTimer() {
-    this.timer.reset();
-    this.timer.start();
+    this.ui?.timer.reset();
+    this.ui?.timer.start();
   }
 
   stopTimer() {
-    this.timer.stop();
-    this.timer.appendHint("Press Click to start again");
+    this.ui?.timer.stop("Press Click to start again");
     this.gameRunning = false;
   }
 
   start() {
-    new StartScreen(this.canvas, (level: number) => {
-      this.applyLevelSelection(level);
-      this.gameRunning = true;
-      this.loop.start();
-      this.startTimer();
-
-      if (!this.crosshair) {
-        this.crosshair = new Crosshair();
-        this.camera.instance.add(this.crosshair);
-      }
-
-      this.resetTargets();
-      this.scene.level(level);
-      this.level = level;
-    });
+    // React UI triggers start via startGame()
   }
 
   update(deltaTime: number) {
@@ -159,7 +142,7 @@ export default class App {
   private onMouseDown = (e: MouseEvent) => {
     if (!this.gameRunning) {
       if (this.level > 0) {
-        this.timer.reset();
+        this.ui?.timer.reset();
         this.resetTargets();
         this.scene.level(this.level);
         this.startTimer();
@@ -190,5 +173,31 @@ export default class App {
     // Remove previous targets from scene and clear the list
     this.targets.forEach((t) => this.scene.remove(t));
     this.targets.length = 0;
+  }
+
+  // Called by React UI when selecting a level
+  public startGame(level: number) {
+    // If server hasn't assigned me yet, defer starting once
+    if (!this.wsManager.getMe()) {
+      this.wsManager.onMeReady(() => this.startGame(level));
+      return;
+    }
+    this.applyLevelSelection(level);
+    this.gameRunning = true;
+    this.loop.start();
+    this.startTimer();
+
+    if (!this.crosshair) {
+      this.crosshair = new Crosshair();
+      this.camera.instance.add(this.crosshair);
+    }
+
+    this.resetTargets();
+    this.scene.level(level);
+    this.level = level;
+  }
+
+  public attachUI(ui: UIController) {
+    this.ui = ui;
   }
 }
