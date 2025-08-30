@@ -74,7 +74,7 @@ This document helps contributors and AI agents work effectively in this repo. It
 - **Assets:** place in `public/` and reference by relative URL.
 
 **Troubleshooting**
-- Pointer lock grabs outside canvas: ensure listeners are bound to `canvas` only (see `App` constructor).
+- Pointer lock grabs outside canvas: ensure listeners are bound to `canvas` only or some buttons in the ui (see `App` constructor).
 - Sensitivity not applying: confirm `localStorage.mouseSensitivity` and `input` event reaches document.
 - Neighbors stutter: check WS rate/throttling and interpolation in `MainScene.update()`.
 
