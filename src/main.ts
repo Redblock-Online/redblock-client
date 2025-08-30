@@ -1,4 +1,4 @@
-import "./styles/main.css";
+
 import { initUI } from "./ui/setup";
 import App from "./core/App";
 

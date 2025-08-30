@@ -138,6 +138,9 @@ canvas {
 }
 
 .menu-container {
+  opacity: 0;
+  transition: opacity 0.1s ease-in-out;
+  will-change: opacity;
   position: relative;
   z-index: 10;
   display: flex;

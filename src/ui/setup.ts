@@ -1,6 +1,11 @@
 export function initUI() {
+  const menuContainer = document.querySelector(".menu-container") as HTMLElement | null;
   const sensitivitySlider = document.getElementById("sensitivityRange") as HTMLInputElement | null;
   const sensitivityValue = document.getElementById("sensitivityValue");
+
+  if (menuContainer) {
+    menuContainer.style.opacity = "1";
+  }
 
   if (sensitivitySlider && sensitivityValue) {
     const savedSensitivity = localStorage.getItem("mouseSensitivity");
