@@ -1,9 +1,8 @@
-import React from "react";
 
 export default function IGBadge() {
   return (
     <div className="ig-badge">
-      <a href="https://instagram.com/redblock.online" target="_blank" rel="noopener">
+      <a href="https://instagram.com/redblock.online" target="_blank" rel="noopener noreferrer">
         <svg
           width="230"
           height="48"

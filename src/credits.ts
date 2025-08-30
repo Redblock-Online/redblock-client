@@ -70,6 +70,7 @@ const iAm = (name: string, role: Role, link: string) => {
   separator();
 };
 
+// @ts-ignore We will use this function later if the team grows
 const weAre = (names: string[], roles: Role[], links: string[]) => {
   // Basic validation to avoid mismatched arrays
   if (names.length !== roles.length || names.length !== links.length) {
