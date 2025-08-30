@@ -1,6 +1,3 @@
-#!/bin/sh
-. "$(dirname "$0")/_/husky.sh"
-
 echo "⏳ Running lint-staged..."
 npm run -s lint-staged || exit 1
 
@@ -8,4 +5,3 @@ echo "✅ Lint passed. Running typecheck..."
 npm run -s typecheck || exit 1
 
 echo "✅ Typecheck passed. Committing..."
-
