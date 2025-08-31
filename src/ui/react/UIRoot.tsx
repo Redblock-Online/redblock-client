@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import StartScreen from "./StartScreen";
 import TimerDisplay, { type TimerController } from "./TimerDisplay";
 import ControlsHint from "./controls/ControlsHint";
 import IGBadge from "./badges/IGBadge";
+import Navbar from "./navbar";
+import { fetchMe } from "./api/me";
+import { useMeStore } from "./state/me";
 
 type Props = {
   onStart: (level: number) => void;
@@ -15,12 +18,28 @@ function isTouchDevice() {
 
 export default function UIRoot({ onStart, bindTimerController }: Props) {
   const [started, setStarted] = useState(false);
+  const { setUser, setHydrated } = useMeStore();
   const touch = useMemo(() => isTouchDevice(), []);
 
-  const handleStart = (level: number) => {
+  const handleStart = useCallback((level: number) => {
     setStarted(true);
     onStart(level);
-  };
+  }, [onStart]);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchMe()
+      .then((me) => {
+        if (!mounted) return;
+        if (me) setUser(me);
+      })
+      .finally(() => {
+        if (mounted) setHydrated(true);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [setUser, setHydrated]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -50,7 +69,8 @@ export default function UIRoot({ onStart, bindTimerController }: Props) {
   return (
     <>
       {!started && <StartScreen onStart={handleStart} />}
-      <TimerDisplay bindController={bindTimerController} />
+      {started && <TimerDisplay bindController={bindTimerController} />}
+      {!started && <Navbar />}
       <ControlsHint />
       <IGBadge />
     </>
