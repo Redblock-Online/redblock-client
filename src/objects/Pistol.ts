@@ -1,5 +1,5 @@
 import { Group, Mesh, MeshBasicMaterial, Camera, Euler, Vector3 } from "three";
-import GLTFLoader from "../loaders/GLTFLoader";
+import GLTFLoader from "@/loaders/GLTFLoader";
 import gsap from "gsap";
 
 export default class Pistol extends Group {

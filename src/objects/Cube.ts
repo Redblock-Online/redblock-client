@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { gsap } from "gsap";
+import { createAbsorbShaderMaterial } from "@/shaders/ShaderMaterial";
+
 
 export default class Cube extends THREE.Group {
   public visible: boolean;
