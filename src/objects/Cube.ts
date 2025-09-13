@@ -2,11 +2,13 @@ import * as THREE from "three";
 import { gsap } from "gsap";
 import { createAbsorbShaderMaterial } from "@/shaders/ShaderMaterial";
 
+
 export default class Cube extends THREE.Group {
   public visible: boolean;
   public animating: boolean;
   public shootable: boolean;
-  public shaderMaterial: THREE.ShaderMaterial;
+  public cubeMesh: THREE.Mesh;
+  public outlineMesh: THREE.Mesh;
   constructor(
     randomColor: boolean = false,
     isTarget: boolean = false,
@@ -17,9 +19,19 @@ export default class Cube extends THREE.Group {
 
     const geometry = new THREE.BoxGeometry(1, 1, 1);
 
-    const material = createAbsorbShaderMaterial(randomColor ? Math.random() * 0xffffff : 0xffffff);
-    this.shaderMaterial = material;
-    const cubeMesh = new THREE.Mesh(geometry, material);
+    const material = new THREE.MeshToonMaterial({
+      color: randomColor ? Math.random() * 0xffffff : 0xffffff,
+    });
+    material.transparent = true;
+    this.cubeMesh = new THREE.Mesh(geometry, material);
+
+    const outlineMaterial = new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      side: THREE.BackSide,
+    });
+    outlineMaterial.transparent = true;
+    this.outlineMesh = new THREE.Mesh(geometry.clone(), outlineMaterial);
+    this.outlineMesh.scale.set(1.02, 1.02, 1.02);
 
     const edges = new THREE.EdgesGeometry(geometry);
     const lineMaterial = new THREE.LineBasicMaterial({ color: 0x000000 });
@@ -27,8 +39,9 @@ export default class Cube extends THREE.Group {
 
     this.position.set(6, 0, 0);
     this.scale.set(0.4, 0.4, 0.4);
-    cubeMesh.name = isTarget ? "Target" : "";
-    this.add(cubeMesh);
+    this.cubeMesh.name = isTarget ? "Target" : "";
+    this.add(this.cubeMesh);
+    this.add(this.outlineMesh);
     if (isRoom) this.add(edgeLines);
     this.visible = true;
     this.animating = false;
@@ -39,35 +52,31 @@ export default class Cube extends THREE.Group {
   public makeShootable(color: THREE.Color | number = 0xff0000) {
     this.shootable = true;
 
-    const cubeMesh = this.children.find(
-      (child) => child instanceof THREE.Mesh
-    ) as THREE.Mesh;
+    this.layers.enable(1);
 
-    this.layers.enable(1); 
-
-    if (cubeMesh && cubeMesh.material instanceof THREE.ShaderMaterial) {
-      cubeMesh.material.uniforms.uColor.value.set(color);
-    }
+    const cubeMaterial = this.cubeMesh
+      .material as THREE.MeshToonMaterial | THREE.MeshBasicMaterial;
+    cubeMaterial.color.set(color);
   }
 
   public absorbAndDisappear(callback?: () => void) {
     if (this.animating) return;
     const duration = 1;
     this.animating = true;
-    this.shaderMaterial.uniforms.uAbsorbing.value = 1;
-    gsap.to(this.shaderMaterial.uniforms.uTime, {
-      value: 1,
+
+    const cubeMaterial = this.cubeMesh.material as THREE.Material;
+    const outlineMaterial = this.outlineMesh.material as THREE.Material;
+    gsap.to(cubeMaterial, {
+      opacity: 0,
       duration,
       ease: "power3.in",
-      onComplete: () => {
-        this.shaderMaterial.uniforms.uAbsorbing.value = 0;
-        this.shaderMaterial.uniforms.uTime.value = 0;
-        this.visible = false;
-        this.animating = false;
-        if (callback) callback();
-      },
     });
-    
+    gsap.to(outlineMaterial, {
+      opacity: 0,
+      duration,
+      ease: "power3.in",
+    });
+
     gsap.to(this.rotation, {
       x: Math.PI * 4,
       y: Math.PI * 8,
@@ -95,20 +104,21 @@ export default class Cube extends THREE.Group {
     this.visible = true;
     this.scale.set(0, 0, 0);
     this.rotation.set(Math.PI * 2, Math.PI * 4, 0);
-    this.visible = true;
-    this.shaderMaterial.uniforms.uAppearing.value = 1;
-    this.shaderMaterial.uniforms.uTime.value = 0;
 
-    gsap.to(this.shaderMaterial.uniforms.uTime, {
-      value: 1,
+    const cubeMaterial = this.cubeMesh.material as THREE.Material;
+    const outlineMaterial = this.outlineMesh.material as THREE.Material;
+    cubeMaterial.opacity = 0;
+    outlineMaterial.opacity = 0;
+
+    gsap.to(cubeMaterial, {
+      opacity: 1,
       duration,
       ease: "back.out(2)",
-      onComplete: () => {
-        this.shaderMaterial.uniforms.uAppearing.value = 0;
-        this.shaderMaterial.uniforms.uTime.value = 0;
-        this.animating = false;
-        if (callback) callback();
-      },
+    });
+    gsap.to(outlineMaterial, {
+      opacity: 1,
+      duration,
+      ease: "back.out(2)",
     });
 
     gsap.to(this.rotation, {
