@@ -24,13 +24,16 @@ export default function Button({
   leftIcon,
   rightIcon,
   type = "button",
+  disabled = false,
   ...rest
 }: Props) {
   const base = cn(
     "flex items-center justify-center font-mono font-bold tracking-wider border-[3px] border-black transition-all select-none",
     "uppercase text-center",
-    // shared hover effect
-    "hover:-translate-x-[3px] hover:-translate-y-[3px] hover:shadow-red-3",
+    // disable interactions appearance
+    "disabled:opacity-50 disabled:cursor-not-allowed",
+    // shared hover effect only when enabled
+    !disabled && "hover:-translate-x-[3px] hover:-translate-y-[3px] hover:shadow-red-3",
   );
 
   const byVariant: Record<Variant, string> = {
@@ -46,11 +49,15 @@ export default function Button({
   };
 
   return (
-    <button type={type} className={cn(base, byVariant[variant], bySize[size], className)} {...rest}>
+    <button
+      type={type}
+      disabled={disabled}
+      className={cn(base, byVariant[variant], bySize[size], className)}
+      {...rest}
+    >
       {leftIcon ? <span className="mr-3 inline-flex items-center ">{leftIcon}</span> : null}
       <p>{children}</p>
       {rightIcon ? <span className="ml-3 inline-flex items-center">{rightIcon}</span> : null}
     </button>
   );
 }
-

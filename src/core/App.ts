@@ -25,6 +25,7 @@ export default class App {
   wsManager: WSManager;
   ammountOfTargetsSelected: number = 3;
   private crosshair?: Crosshair;
+  private paused = false;
 
   constructor(ui?: UIController) {
     this.ui = ui;
@@ -86,7 +87,7 @@ export default class App {
   }
 
   update(deltaTime: number) {
-    if (!this.gameRunning) return;
+    if (!this.gameRunning || this.paused) return;
     this.controls.update(deltaTime);
   }
 
@@ -96,14 +97,14 @@ export default class App {
     this.raycaster.setFromCamera(this.mouse, this.camera.instance);
     // Intersect only the target groups (recursive)
     const intersects = this.raycaster.intersectObjects(
-      this.targets as unknown as any[],
+      this.targets as unknown as import("three").Object3D[],
       true
     );
 
     if (intersects.length > 0) {
-      const first = intersects[0].object as any;
+      const first = intersects[0].object;
       // Bubble up to the Cube group
-      let node: any = first;
+      let node: import("three").Object3D | null = first;
       while (node && !(node instanceof Cube)) node = node.parent;
       const hitTarget = node as Cube | undefined;
 
@@ -218,5 +219,10 @@ export default class App {
 
   public attachUI(ui: UIController) {
     this.ui = ui;
+  }
+
+  public setPaused(paused: boolean) {
+    this.paused = paused;
+    this.controls.setPaused(paused);
   }
 }
