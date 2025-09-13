@@ -11,6 +11,7 @@ const app = new App();
 ensureCsrfCookie().catch(() => {});
 const ui: UIController = mountUI({
   onStart: (level: number) => app.startGame(level),
+  onPauseChange: (paused: boolean) => app.setPaused(paused),
 });
 app.attachUI(ui);
 app.start();

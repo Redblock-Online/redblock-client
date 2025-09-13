@@ -4,6 +4,8 @@ export type TimerController = {
   start: () => void;
   stop: (hint?: string) => void;
   reset: () => void;
+  pause: () => void;
+  resume: () => void;
 };
 
 export default function TimerDisplay({
@@ -18,11 +20,18 @@ export default function TimerDisplay({
   const [hint, setHint] = useState<string | null>(null);
   const startRef = useRef(0);
   const timerId = useRef<number | null>(null);
+  const elapsedOffsetRef = useRef(0); // seconds accumulated before last start/resume
+  const runningRef = useRef(false);
+
+  useEffect(() => {
+    runningRef.current = running;
+  }, [running]);
 
   useEffect(() => {
     bindController({
       start: () => {
         setHint(null);
+        elapsedOffsetRef.current = 0;
         startRef.current = performance.now();
         setRunning(true);
         setText("0.00s");
@@ -35,6 +44,20 @@ export default function TimerDisplay({
         setRunning(false);
         setText("0.00s");
         setHint(null);
+        elapsedOffsetRef.current = 0;
+      },
+      pause: () => {
+        if (!runningRef.current) return;
+        const now = performance.now();
+        const accumulated = (now - startRef.current) / 1000;
+        elapsedOffsetRef.current += accumulated;
+        setRunning(false);
+      },
+      resume: () => {
+        if (runningRef.current) return;
+        setHint(null);
+        startRef.current = performance.now();
+        setRunning(true);
       },
     });
   }, [bindController]);
@@ -50,7 +73,7 @@ export default function TimerDisplay({
     // update immediately
     setText("0.00s");
     timerId.current = window.setInterval(() => {
-      const elapsed = (performance.now() - startRef.current) / 1000;
+      const elapsed = elapsedOffsetRef.current + (performance.now() - startRef.current) / 1000;
       setText(`${elapsed.toFixed(2)}s`);
     }, interval);
     return () => {
