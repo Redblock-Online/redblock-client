@@ -63,9 +63,9 @@ export default class MainScene extends THREE.Scene {
   public targets: Cube[] = [];
   public me: PlayerCore;
   public wsManager: WSManager;
-  public neighborMeshes: Map<string, THREE.Mesh> = new Map();
+  public neighborMeshes: Map<string, THREE.Group> = new Map();
   public neighborTargetInfos: Map<string, TargetInfo[]> = new Map();
-  public neighborTargetsRendered: Map<string, THREE.Mesh[]> = new Map();
+  public neighborTargetsRendered: Map<string, THREE.Group[]> = new Map();
   private clock = new THREE.Clock();
   private neighborStates = new Map<
     string,
@@ -172,10 +172,23 @@ export default class MainScene extends THREE.Scene {
         n.targetsInfo.forEach((targetInfo) => {
           if (targetInfo.disabled) return;
           const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
-          const cubeMaterial = new THREE.MeshBasicMaterial({
+          const cubeMaterial = new THREE.MeshToonMaterial({
             color: targetInfo.shootable ? 0xff0000 : 0xffffff,
           });
-          const cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+          cubeMaterial.transparent = true;
+          const cubeMesh = new THREE.Mesh(cubeGeometry, cubeMaterial);
+
+          const outlineMaterial = new THREE.MeshBasicMaterial({
+            color: 0x000000,
+            side: THREE.BackSide,
+          });
+          outlineMaterial.transparent = true;
+          const outlineMesh = new THREE.Mesh(cubeGeometry.clone(), outlineMaterial);
+          outlineMesh.scale.set(1.02, 1.02, 1.02);
+
+          const cube = new THREE.Group();
+          cube.add(cubeMesh);
+          cube.add(outlineMesh);
           cube.position.set(targetInfo.x, targetInfo.y, targetInfo.z);
 
           this.neighborTargetsRendered.get(n.id)?.push(cube);
@@ -197,8 +210,21 @@ export default class MainScene extends THREE.Scene {
       let mesh = this.neighborMeshes.get(n.id);
       if (!mesh) {
         const geom = new THREE.BoxGeometry(1, 1, 1);
-        const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-        mesh = new THREE.Mesh(geom, mat);
+        const mat = new THREE.MeshToonMaterial({ color: 0xffffff });
+        mat.transparent = true;
+        const cubeMesh = new THREE.Mesh(geom, mat);
+
+        const outlineMat = new THREE.MeshBasicMaterial({
+          color: 0x000000,
+          side: THREE.BackSide,
+        });
+        outlineMat.transparent = true;
+        const outlineMesh = new THREE.Mesh(geom.clone(), outlineMat);
+        outlineMesh.scale.set(1.02, 1.02, 1.02);
+
+        mesh = new THREE.Group();
+        mesh.add(cubeMesh);
+        mesh.add(outlineMesh);
         this.neighborMeshes.set(n.id, mesh);
         this.add(mesh);
       }

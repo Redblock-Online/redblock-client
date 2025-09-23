@@ -8,6 +8,7 @@ export default class Controls {
   private domElement: HTMLCanvasElement;
   private pitchObject = new THREE.Object3D();
   private yawObject = new THREE.Object3D();
+  private paused = false;
   private targets: Cube[] = [];
   private sensitivity = 0.0002;
   private PI_2 = Math.PI / 2;
@@ -182,6 +183,7 @@ export default class Controls {
   }
   private initKeyboardListeners() {
     document.addEventListener("keydown", (e) => {
+      if (this.paused) return;
       this.keysPressed[e.key.toLowerCase()] = true;
 
       if (e.key.toLowerCase() === "c") {
@@ -194,6 +196,7 @@ export default class Controls {
     });
 
     document.addEventListener("keyup", (e) => {
+      if (this.paused) return;
       this.keysPressed[e.key.toLowerCase()] = false;
 
       if (e.key.toLowerCase() === "c") {
@@ -204,6 +207,7 @@ export default class Controls {
 
   public initPointerLock() {
     const onMouseMove = (event: MouseEvent) => {
+      if (this.paused) return;
       if (document.pointerLockElement === this.domElement) {
         const movementX = event.movementX || 0;
         const movementY = event.movementY || 0;
@@ -238,6 +242,12 @@ export default class Controls {
     this.lastPitchRot.copy(this.pitchObject.rotation);
   }
   public update(deltaTime: number) {
+    if (this.paused) {
+      // Ensure no drift while paused
+      this.velocity.set(0, 0, 0);
+      this.velocityY = 0;
+      return;
+    }
     const targetDirection = new THREE.Vector3();
 
     if (this.keysPressed["a"]) targetDirection.z -= 1;
@@ -320,6 +330,18 @@ export default class Controls {
     if (this.changeCheckAccumulator >= this.changeCheckInterval) {
       this.checkChanges(); // <- optimized below
       this.changeCheckAccumulator = 0;
+    }
+  }
+
+  public setPaused(paused: boolean) {
+    this.paused = paused;
+    if (paused) {
+      // Clear active inputs and motion to avoid continued movement
+      this.keysPressed = {};
+      this.isCrouching = false;
+      this.velocity.set(0, 0, 0);
+      this.velocityY = 0;
+      this.lastJumpPressedTime = -Infinity;
     }
   }
 }

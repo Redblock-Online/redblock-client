@@ -1,4 +1,5 @@
 import  { useEffect, useState } from "react";
+import Button from "@/ui/react/components/Button";
 
 type Props = {
   onStart: (level: number) => void;
@@ -61,30 +62,16 @@ export default function StartScreen({ onStart }: Props) {
         <img src="redblock-online.png" className="h-20 mt-10 mb-10" alt="Redblock Online" />
         <div className="flex flex-col gap-4 items-center">
           <div className="flex flex-row gap-4 items-center">
-
-          <button
-            className="startButton uppercase min-w-[250px] text-center font-mono font-bold tracking-wider border-[3px] border-black px-12 py-4 transition-all bg-[#ff0000] text-white hover:bg-black hover:shadow-red-3 hover:-translate-x-[3px] hover:-translate-y-[3px]"
-            id="startButton1"
-            onClick={() => onStartClick(1)}
-            >
-            PLAY 3 TARGETS
-          </button>
-          <button
-            className="startButton uppercase min-w-[250px] text-center font-mono font-bold tracking-wider border-[3px] border-black px-12 py-4 transition-all hover:bg-black hover:text-white hover:shadow-red-3 hover:-translate-x-[3px] hover:-translate-y-[3px]"
-            id="startButton2"
-            onClick={() => onStartClick(2)}
-            >
-            PLAY 8 TARGETS
-          </button>
-          <button
-            className="startButton uppercase min-w-[250px] text-center font-mono font-bold tracking-wider border-[3px] border-black px-12 py-4 transition-all hover:bg-black hover:text-white hover:shadow-red-3 hover:-translate-x-[3px] hover:-translate-y-[3px]"
-            id="startButton3"
-            onClick={() => onStartClick(3)}
-            >
-            PLAY 50 TARGETS
-          </button>
-
-            </div>
+            <Button className="startButton" id="startButton1" size="lg" variant="primary" onClick={() => onStartClick(1)}>
+              PLAY 3 TARGETS
+            </Button>
+            <Button className="startButton" id="startButton2" size="lg" variant="outline" onClick={() => onStartClick(2)}>
+              PLAY 8 TARGETS
+            </Button>
+            <Button className="startButton" id="startButton3" size="lg" variant="outline" onClick={() => onStartClick(3)}>
+              PLAY 50 TARGETS
+            </Button>
+          </div>
           {/* Sensitivity slider */}
           <div className=" p-6 border-[3px] border-black bg-white/90 min-w-[250px]">
             <div className="font-mono text-base font-bold  text-center tracking-wider">MOUSE SENSITIVITY</div>
@@ -105,9 +92,9 @@ export default function StartScreen({ onStart }: Props) {
             </div>
           </div>
 
-          <button className="uppercase min-w-[250px] text-center font-mono font-bold tracking-wider border-[3px] border-black px-12 py-4 transition-all hover:bg-black hover:text-white hover:shadow-red-3 hover:-translate-x-[3px] hover:-translate-y-[3px]" onClick={() => window.close()}>
+          <Button size="lg" variant="outline" onClick={() => window.close()}>
             EXIT
-          </button>
+          </Button>
           <p className="text-sm opacity-65">Click or press Space to choose randomly</p>
         </div>
         <div className="absolute bottom-4  text-sm opacity-60">v0.2.0 alpha</div>
