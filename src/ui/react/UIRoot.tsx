@@ -124,35 +124,7 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
     };
   }, [started, onPauseChange]);
 
-  // Keyboard: start (Space) and toggle pause (P)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!started && e.code === "Space") {
-        // choose random level 1-3
-        const level = Math.floor(Math.random() * 3) + 1;
-        handleStart(level);
-        return;
-      }
-      if (started && e.code === "KeyP") {
-        const next = !pausedRef.current;
-        const ctrl = timerRef.current;
-        if (next) {
-          // entering pause: remember if timer was running
-          hadRunningBeforePauseRef.current = timerRunningRef.current;
-          if (timerRunningRef.current) ctrl?.pause();
-        } else {
-          // leaving pause: only resume if it was running before
-          if (hadRunningBeforePauseRef.current) ctrl?.resume();
-          requestPointerLockOnCanvas();
-        }
-        onPauseChange(next);
-        setPaused(next);
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [started, handleStart, requestPointerLockOnCanvas, onPauseChange]);
-
+  
   // Auto-pause when pointer lock is lost (e.g., user presses Esc)
   useEffect(() => {
     const onPointerLockChange = () => {
