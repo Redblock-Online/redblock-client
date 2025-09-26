@@ -1,4 +1,5 @@
-# Aim trainer for shooters, (in ThreeJS)
+# Redblock Online 
+## Aim trainer for shooters, (in ThreeJS)
 
 <h3 align="center">🎮 Game Preview</h3>
 
@@ -112,12 +113,3 @@ npm run build
 # copy dist/ to your preferred host
 ```
 
-## 👤 Author
-
-_Freddy Sae_
-
-Feel free to open issues or PRs!
-
-## 📝 License
-
-This project is released under the **MIT License** – see [`LICENSE`](LICENSE) for details.

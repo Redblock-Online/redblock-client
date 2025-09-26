@@ -8,7 +8,7 @@ type Props = {
 export default function StartScreen({ onStart }: Props) {
   const [sensitivity, setSensitivity] = useState<string>(() => {
     const saved = localStorage.getItem("mouseSensitivity");
-    return saved ?? "0";
+    return saved ?? "1";
   });
 
   useEffect(() => {
