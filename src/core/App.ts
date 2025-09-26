@@ -113,16 +113,24 @@ export default class App {
 
         // Filter valid candidates
         const candidates = this.targets.filter(
-          (t) => t.visible && !t.shootable && t !== hitTarget
+          (t) => t.visible && !t.shootable && !t.animating && t !== hitTarget
         );
 
-        // Choose one at random from the candidates
-        const randomTarget =
-          candidates[Math.floor(Math.random() * candidates.length)];
-
-        // Activate it if it exists
-        if (randomTarget) {
-          randomTarget.makeShootable();
+        //Algoritmo (Nearest Neighbor Search)
+        if (candidates.length > 0) {
+          let masCercano: Cube | null = null;
+          let bestDistCuadrada = Infinity;
+          const p = hitTarget.position;
+          for (const c of candidates) {
+            const d2 = c.position.distanceToSquared(p);
+            if (d2 < bestDistCuadrada) {
+              bestDistCuadrada = d2;
+              masCercano = c;
+            }
+          }
+          if (masCercano) {
+            masCercano.makeShootable();
+          }
         }
       }
     }
