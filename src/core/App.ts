@@ -4,7 +4,7 @@ import MainScene from "@/scenes/MainScene";
 import Loop from "./Loop";
 import ControlsWithMovement from "@/systems/ControlsWithMovement";
 import Crosshair from "@/objects/Crosshair";
-import { Raycaster, Vector2 } from "three";
+import { Raycaster, Vector2, Vector3 } from "three";
 import Pistol from "@/objects/Pistol";
 import Cube from "@/objects/Cube";
 import WSManager, { type PlayerCore } from "@/utils/ws/WSManager";
@@ -26,6 +26,10 @@ export default class App {
   ammountOfTargetsSelected: number = 3;
   private crosshair?: Crosshair;
   private paused = false;
+  private cameraWorldPos = new Vector3();
+  private cameraViewDir = new Vector3();
+  private candidateWorldPos = new Vector3();
+  private candidateVector = new Vector3();
 
   constructor(ui?: UIController) {
     this.ui = ui;
@@ -116,21 +120,52 @@ export default class App {
           (t) => t.visible && !t.shootable && !t.animating && t !== hitTarget
         );
 
-        //Algoritmo (Nearest Neighbor Search)
+        // Prefer the target that is most aligned with the player's current view.
         if (candidates.length > 0) {
-          let masCercano: Cube | null = null;
-          let bestDistCuadrada = Infinity;
-          const p = hitTarget.position;
-          for (const c of candidates) {
-            const d2 = c.position.distanceToSquared(p);
-            if (d2 < bestDistCuadrada) {
-              bestDistCuadrada = d2;
-              masCercano = c;
+          this.camera.instance.getWorldPosition(this.cameraWorldPos);
+          this.camera.instance.getWorldDirection(this.cameraViewDir);
+
+          let forwardBest: { cube: Cube; alignment: number; distanceSq: number } | null = null;
+          let nearestBest: { cube: Cube; distanceSq: number } | null = null;
+
+          const lastPosition = hitTarget.position;
+
+          for (const candidate of candidates) {
+            candidate.getWorldPosition(this.candidateWorldPos);
+
+            this.candidateVector.copy(this.candidateWorldPos).sub(this.cameraWorldPos);
+            const distanceSqFromCamera = this.candidateVector.lengthSq();
+
+            const alignment = distanceSqFromCamera === 0
+              ? 1
+              : this.candidateVector.normalize().dot(this.cameraViewDir);
+
+            if (alignment > 0) {
+              if (
+                !forwardBest ||
+                alignment > forwardBest.alignment + 1e-5 ||
+                (Math.abs(alignment - forwardBest.alignment) <= 1e-5 &&
+                  distanceSqFromCamera < forwardBest.distanceSq)
+              ) {
+                forwardBest = {
+                  cube: candidate,
+                  alignment,
+                  distanceSq: distanceSqFromCamera,
+                };
+              }
+            }
+
+            const distanceSqFromLast = candidate.position.distanceToSquared(lastPosition);
+            if (!nearestBest || distanceSqFromLast < nearestBest.distanceSq) {
+              nearestBest = {
+                cube: candidate,
+                distanceSq: distanceSqFromLast,
+              };
             }
           }
-          if (masCercano) {
-            masCercano.makeShootable();
-          }
+
+          const nextTarget = forwardBest?.cube ?? nearestBest?.cube ?? null;
+          nextTarget?.makeShootable();
         }
       }
     }
