@@ -6,6 +6,9 @@ export default class Cube extends THREE.Group {
   public visible: boolean;
   public animating: boolean;
   public shootable: boolean;
+  public shootableActivatedAt: number | null;
+  public baseScale: number;
+  public scenarioPortal: "next" | "prev" | null;
   public cubeMesh: THREE.Mesh;
   public outlineMesh: THREE.Mesh;
   constructor(
@@ -37,7 +40,8 @@ export default class Cube extends THREE.Group {
     const edgeLines = new THREE.LineSegments(edges, lineMaterial);
 
     this.position.set(6, 0, 0);
-    this.scale.set(0.4, 0.4, 0.4);
+    this.baseScale = 0.4;
+    this.scale.set(this.baseScale, this.baseScale, this.baseScale);
     this.cubeMesh.name = isTarget ? "Target" : "";
     this.add(this.cubeMesh);
     this.add(this.outlineMesh);
@@ -45,12 +49,15 @@ export default class Cube extends THREE.Group {
     this.visible = true;
     this.animating = false;
     this.shootable = false;
+    this.shootableActivatedAt = null;
+    this.scenarioPortal = null;
     if (shootable) this.makeShootable();
   }
 
   public makeShootable(color: THREE.Color | number = 0xff0000) {
     this.shootable = true;
-
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    this.shootableActivatedAt = now;
     this.layers.enable(1);
 
     const cubeMaterial = this.cubeMesh
@@ -62,6 +69,8 @@ export default class Cube extends THREE.Group {
     if (this.animating) return;
     const duration = 1;
     this.animating = true;
+    this.shootable = false;
+    this.shootableActivatedAt = null;
 
     const cubeMaterial = this.cubeMesh.material as THREE.Material;
     const outlineMaterial = this.outlineMesh.material as THREE.Material;
@@ -128,9 +137,9 @@ export default class Cube extends THREE.Group {
     });
 
     gsap.to(this.scale, {
-      x: 0.4,
-      y: 0.4,
-      z: 0.4,
+      x: this.baseScale,
+      y: this.baseScale,
+      z: this.baseScale,
       duration,
       ease: "back.out(2)",
       onComplete: () => {

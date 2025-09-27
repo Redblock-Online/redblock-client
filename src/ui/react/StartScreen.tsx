@@ -1,11 +1,13 @@
-import  { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Button from "@/ui/react/components/Button";
+import type { ScenarioConfig } from "@/config/scenarios";
 
 type Props = {
-  onStart: (level: number) => void;
+  scenarios: ScenarioConfig[];
+  onStart: (scenarioId: string) => void;
 };
 
-export default function StartScreen({ onStart }: Props) {
+export default function StartScreen({ scenarios, onStart }: Props) {
   const [sensitivity, setSensitivity] = useState<string>(() => {
     const saved = localStorage.getItem("mouseSensitivity");
     return saved ?? "1";
@@ -34,9 +36,9 @@ export default function StartScreen({ onStart }: Props) {
     }
   };
 
-  const onStartClick = (level: number) => {
+  const onStartClick = (scenarioId: string) => {
     // Arranca juego primero (oculta overlay) y luego pide pointer lock
-    onStart(level);
+    onStart(scenarioId);
     try {
       requestPointerLockOnCanvas();
     } catch (_) {
@@ -61,16 +63,19 @@ export default function StartScreen({ onStart }: Props) {
         <img src="logo.png" alt="Logo" className="h-[200px] mx-auto translate-x-[20px]" />
         <img src="redblock-online.png" className="h-20 mt-10 mb-10" alt="Redblock Online" />
         <div className="flex flex-col gap-4 items-center">
-          <div className="flex flex-row gap-4 items-center">
-            <Button className="startButton" id="startButton1" size="lg" variant="primary" onClick={() => onStartClick(1)}>
-              PLAY 3 TARGETS
-            </Button>
-            <Button className="startButton" id="startButton2" size="lg" variant="outline" onClick={() => onStartClick(2)}>
-              PLAY 8 TARGETS
-            </Button>
-            <Button className="startButton" id="startButton3" size="lg" variant="outline" onClick={() => onStartClick(3)}>
-              PLAY 50 TARGETS
-            </Button>
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-4">
+            {scenarios.map((scenario, idx) => (
+              <Button
+                key={scenario.id}
+                className="startButton"
+                id={`startButton-${scenario.id}`}
+                size="lg"
+                variant={idx === 0 ? "primary" : "outline"}
+                onClick={() => onStartClick(scenario.id)}
+              >
+                {scenario.label}
+              </Button>
+            ))}
           </div>
           {/* Sensitivity slider */}
           <div className=" p-6 border-[3px] border-black bg-white/90 min-w-[250px]">
