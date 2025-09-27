@@ -6,6 +6,7 @@ export default class Cube extends THREE.Group {
   public visible: boolean;
   public animating: boolean;
   public shootable: boolean;
+  public shootableActivatedAt: number | null;
   public cubeMesh: THREE.Mesh;
   public outlineMesh: THREE.Mesh;
   constructor(
@@ -45,12 +46,14 @@ export default class Cube extends THREE.Group {
     this.visible = true;
     this.animating = false;
     this.shootable = false;
+    this.shootableActivatedAt = null;
     if (shootable) this.makeShootable();
   }
 
   public makeShootable(color: THREE.Color | number = 0xff0000) {
     this.shootable = true;
-
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    this.shootableActivatedAt = now;
     this.layers.enable(1);
 
     const cubeMaterial = this.cubeMesh
@@ -62,6 +65,8 @@ export default class Cube extends THREE.Group {
     if (this.animating) return;
     const duration = 1;
     this.animating = true;
+    this.shootable = false;
+    this.shootableActivatedAt = null;
 
     const cubeMaterial = this.cubeMesh.material as THREE.Material;
     const outlineMaterial = this.outlineMesh.material as THREE.Material;

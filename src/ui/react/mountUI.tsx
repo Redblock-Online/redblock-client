@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client";
 import UIRoot from "./UIRoot";
-import type { TimerController } from "./TimerDisplay";
+import type { TimerController, TimerHint } from "./TimerDisplay";
 
 export type GameApi = {
   onStart: (level: number) => void;
@@ -12,7 +12,14 @@ export function mountUI(api: GameApi): UIController {
   const el = document.getElementById("ui-root");
   if (!el)
     return {
-      timer: { start() {}, stop() {}, reset() {}, pause() {}, resume() {} },
+      timer: {
+        start() {},
+        stop(_hint?: TimerHint) {},
+        reset() {},
+        pause() {},
+        resume() {},
+        getElapsedSeconds: () => 0,
+      },
     };
   let timerCtrl: TimerController | null = null;
   let pending: Array<() => void> = [];
@@ -35,7 +42,7 @@ export function mountUI(api: GameApi): UIController {
         if (timerCtrl) timerCtrl.start();
         else pending.push(() => timerCtrl && timerCtrl.start());
       },
-      stop: (hint?: string) => {
+      stop: (hint?: TimerHint) => {
         if (timerCtrl) timerCtrl.stop(hint);
         else pending.push(() => timerCtrl && timerCtrl.stop(hint));
       },
@@ -50,6 +57,10 @@ export function mountUI(api: GameApi): UIController {
       resume: () => {
         if (timerCtrl) timerCtrl.resume();
         else pending.push(() => timerCtrl && timerCtrl.resume());
+      },
+      getElapsedSeconds: () => {
+        if (timerCtrl) return timerCtrl.getElapsedSeconds();
+        return 0;
       },
     },
   };

@@ -9,6 +9,37 @@ import Pistol from "@/objects/Pistol";
 import Cube from "@/objects/Cube";
 import WSManager, { type PlayerCore } from "@/utils/ws/WSManager";
 import type { UIController } from "@/ui/react/mountUI";
+import type { TimerHint, TimerHintTableRow } from "@/ui/react/TimerDisplay";
+
+type StoredMetricSet = {
+  accuracy: number | null;
+  avgReaction: number | null;
+  efficiency: number | null;
+  time: number | null;
+};
+
+type StoredStats = {
+  last: StoredMetricSet;
+  best: StoredMetricSet;
+};
+
+const IMPROVEMENT_EPS = 1e-3;
+
+function createEmptyMetricSet(): StoredMetricSet {
+  return {
+    accuracy: null,
+    avgReaction: null,
+    efficiency: null,
+    time: null,
+  };
+}
+
+function createEmptyStats(): StoredStats {
+  return {
+    last: createEmptyMetricSet(),
+    best: createEmptyMetricSet(),
+  };
+}
 
 export default class App {
   private canvas: HTMLCanvasElement;
@@ -30,6 +61,10 @@ export default class App {
   private cameraViewDir = new Vector3();
   private candidateWorldPos = new Vector3();
   private candidateVector = new Vector3();
+  private shotsFired = 0;
+  private shotsHit = 0;
+  private reactionTimes: number[] = [];
+  private readonly statsStorageKey = "redblockStats";
 
   constructor(ui?: UIController) {
     this.ui = ui;
@@ -82,7 +117,9 @@ export default class App {
   }
 
   stopTimer() {
-    this.ui?.timer.stop("Press Click to start again");
+    const elapsedSeconds = this.ui ? this.ui.timer.getElapsedSeconds() : null;
+    const summary = this.buildRoundSummary(elapsedSeconds);
+    this.ui?.timer.stop(summary);
     this.gameRunning = false;
   }
 
@@ -113,6 +150,7 @@ export default class App {
       const hitTarget = node as Cube | undefined;
 
       if (hitTarget && hitTarget.shootable && !hitTarget.animating) {
+        this.recordHit(hitTarget);
         hitTarget.absorbAndDisappear();
 
         // Filter valid candidates
@@ -187,6 +225,7 @@ export default class App {
     if (!this.gameRunning) {
       if (this.level > 0) {
         this.ui?.timer.reset();
+        this.resetRoundStats();
         this.resetTargets();
         this.scene.level(this.level);
         this.startTimer();
@@ -196,6 +235,8 @@ export default class App {
     }
 
     if (e.button === 0) {
+      if (this.paused) return;
+      this.recordShotFired();
       this.pistol.shoot();
       this.checkCrosshairIntersections();
     }
@@ -226,6 +267,187 @@ export default class App {
     attemptLock();
   }
 
+  private resetRoundStats() {
+    this.shotsFired = 0;
+    this.shotsHit = 0;
+    this.reactionTimes = [];
+  }
+
+  private recordShotFired() {
+    this.shotsFired += 1;
+  }
+
+  private recordHit(target: Cube) {
+    this.shotsHit += 1;
+    const activatedAt = target.shootableActivatedAt;
+    if (typeof activatedAt === "number") {
+      const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+      const reactionSeconds = Math.max(0, (now - activatedAt) / 1000);
+      this.reactionTimes.push(reactionSeconds);
+    }
+  }
+
+  private buildRoundSummary(roundDurationSeconds: number | null): TimerHint {
+    const accuracyRatio = this.shotsFired > 0 ? this.shotsHit / this.shotsFired : 0;
+    const accuracyPct = accuracyRatio * 100;
+
+    let avgReaction: number | null = null;
+    if (this.reactionTimes.length > 0) {
+      const total = this.reactionTimes.reduce((acc, value) => acc + value, 0);
+      avgReaction = total / this.reactionTimes.length;
+    }
+
+    const efficiency = avgReaction !== null && avgReaction > 0
+      ? accuracyRatio * (1 / avgReaction) * 100
+      : null;
+
+    const stored = this.loadStoredStats();
+    const nextStored: StoredStats = {
+      last: { ...stored.last },
+      best: { ...stored.best },
+    };
+
+    const rows: TimerHintTableRow[] = [];
+
+    const metrics: Array<{
+      key: keyof StoredMetricSet;
+      label: string;
+      value: number | null;
+      betterIsLower: boolean;
+      formatter: (value: number) => string;
+      naLabel: string;
+      bestFallback: string;
+    }> = [
+      {
+        key: "accuracy",
+        label: "Accuracy",
+        value: this.shotsFired > 0 ? accuracyPct : null,
+        betterIsLower: false,
+        formatter: (value) => `${value.toFixed(1)}%`,
+        naLabel: "N/A",
+        bestFallback: "--",
+      },
+      {
+        key: "avgReaction",
+        label: "Avg Reaction",
+        value: avgReaction,
+        betterIsLower: true,
+        formatter: (value) => `${value.toFixed(2)}s`,
+        naLabel: "N/A",
+        bestFallback: "--",
+      },
+      {
+        key: "efficiency",
+        label: "Efficiency",
+        value: efficiency,
+        betterIsLower: false,
+        formatter: (value) => value.toFixed(1),
+        naLabel: "N/A",
+        bestFallback: "--",
+      },
+      {
+        key: "time",
+        label: "Time",
+        value: roundDurationSeconds,
+        betterIsLower: true,
+        formatter: (value) => `${value.toFixed(2)}s`,
+        naLabel: "N/A",
+        bestFallback: "--",
+      },
+    ];
+
+    for (const metric of metrics) {
+      const prevBest = stored.best[metric.key];
+      const currentValue = metric.value;
+
+      let isNewBest = false;
+
+      if (currentValue !== null) {
+        nextStored.last[metric.key] = currentValue;
+
+        const beatsBest =
+          prevBest === null ||
+          (metric.betterIsLower
+            ? currentValue < prevBest - IMPROVEMENT_EPS
+            : currentValue > prevBest + IMPROVEMENT_EPS);
+
+        if (beatsBest) {
+          nextStored.best[metric.key] = currentValue;
+          isNewBest = true;
+        }
+      } else {
+        nextStored.last[metric.key] = null;
+      }
+
+      const bestValue = nextStored.best[metric.key];
+      const baseCurrentText =
+        currentValue === null ? metric.naLabel : metric.formatter(currentValue);
+      const bestText =
+        bestValue === null ? metric.bestFallback : metric.formatter(bestValue);
+
+      const scoreText = (() => {
+        if (metric.key === "accuracy") {
+          if (this.shotsFired === 0) return metric.naLabel;
+          const ratioText = `${this.shotsHit}/${this.shotsFired}`;
+          return `${baseCurrentText} ${ratioText}`;
+        }
+        return baseCurrentText;
+      })();
+
+      rows.push({
+        label: metric.label,
+        score: scoreText,
+        best: bestText,
+        scoreTone: isNewBest ? "positive" : "neutral",
+        bestTone: isNewBest ? "positive" : "neutral",
+      });
+    }
+
+    this.saveStoredStats(nextStored);
+
+    return {
+      kind: "table",
+      rows,
+      note: "Press Click to start again",
+    };
+  }
+
+  private loadStoredStats(): StoredStats {
+    const defaults = createEmptyStats();
+    const storage = this.getStorage();
+    if (!storage) return defaults;
+    try {
+      const raw = storage.getItem(this.statsStorageKey);
+      if (!raw) return defaults;
+      const parsed = JSON.parse(raw) as Partial<StoredStats> | null;
+      return {
+        last: { ...defaults.last, ...(parsed?.last ?? {}) },
+        best: { ...defaults.best, ...(parsed?.best ?? {}) },
+      };
+    } catch {
+      return defaults;
+    }
+  }
+
+  private saveStoredStats(stats: StoredStats) {
+    const storage = this.getStorage();
+    if (!storage) return;
+    try {
+      storage.setItem(this.statsStorageKey, JSON.stringify(stats));
+    } catch {
+      /* swallow */
+    }
+  }
+
+  private getStorage(): Storage | null {
+    if (typeof window === "undefined") return null;
+    try {
+      return window.localStorage;
+    } catch {
+      return null;
+    }
+  }
+
   private applyLevelSelection(level: number) {
     if (level === 1) this.ammountOfTargetsSelected = 3;
     if (level === 2) this.ammountOfTargetsSelected = 8;
@@ -246,6 +468,7 @@ export default class App {
       return;
     }
     this.applyLevelSelection(level);
+    this.resetRoundStats();
     this.gameRunning = true;
     this.loop.start();
     this.startTimer();

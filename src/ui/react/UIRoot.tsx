@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import StartScreen from "./StartScreen";
-import TimerDisplay, { type TimerController } from "./TimerDisplay";
+import TimerDisplay, { type TimerController, type TimerHint } from "./TimerDisplay";
 import ControlsHint from "./controls/ControlsHint";
 import IGBadge from "./badges/IGBadge";
 import Navbar from "./navbar";
@@ -170,7 +170,7 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
                 timerRunningRef.current = true;
                 ctrl.start();
               },
-              stop: (hint?: string) => {
+              stop: (hint?: TimerHint) => {
                 timerRunningRef.current = false;
                 ctrl.stop(hint);
               },
@@ -188,6 +188,7 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
                 timerRunningRef.current = true;
                 ctrl.resume();
               },
+              getElapsedSeconds: () => ctrl.getElapsedSeconds(),
             };
             timerRef.current = wrapped;
             bindTimerController(wrapped);
