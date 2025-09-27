@@ -7,6 +7,8 @@ export default class Cube extends THREE.Group {
   public animating: boolean;
   public shootable: boolean;
   public shootableActivatedAt: number | null;
+  public baseScale: number;
+  public scenarioPortal: "next" | "prev" | null;
   public cubeMesh: THREE.Mesh;
   public outlineMesh: THREE.Mesh;
   constructor(
@@ -38,7 +40,8 @@ export default class Cube extends THREE.Group {
     const edgeLines = new THREE.LineSegments(edges, lineMaterial);
 
     this.position.set(6, 0, 0);
-    this.scale.set(0.4, 0.4, 0.4);
+    this.baseScale = 0.4;
+    this.scale.set(this.baseScale, this.baseScale, this.baseScale);
     this.cubeMesh.name = isTarget ? "Target" : "";
     this.add(this.cubeMesh);
     this.add(this.outlineMesh);
@@ -47,6 +50,7 @@ export default class Cube extends THREE.Group {
     this.animating = false;
     this.shootable = false;
     this.shootableActivatedAt = null;
+    this.scenarioPortal = null;
     if (shootable) this.makeShootable();
   }
 
@@ -133,9 +137,9 @@ export default class Cube extends THREE.Group {
     });
 
     gsap.to(this.scale, {
-      x: 0.4,
-      y: 0.4,
-      z: 0.4,
+      x: this.baseScale,
+      y: this.baseScale,
+      z: this.baseScale,
       duration,
       ease: "back.out(2)",
       onComplete: () => {

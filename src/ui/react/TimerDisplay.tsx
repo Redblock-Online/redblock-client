@@ -194,7 +194,7 @@ function normalizeHint(hint?: TimerHint): HintState {
 
   const lines: TimerHintLine[] = raw.map((item) => {
     if (typeof item === "string") {
-      return { text: item, tone: "neutral" } as TimerHintLine;
+      return { text: item, tone: "neutral" };
     }
     const tone: TimerHintLine["tone"] = item.tone ?? "neutral";
     return {
