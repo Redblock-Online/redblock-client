@@ -16,6 +16,7 @@ import {
   Vector2,
   Vector3,
   WebGLRenderer,
+  MOUSE,
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
@@ -25,6 +26,12 @@ export type EditorBlock = {
 };
 
 export type SelectionListener = (block: EditorBlock | null) => void;
+
+export type SelectionTransform = {
+  position: Vector3;
+  rotation: Euler;
+  scale: Vector3;
+};
 
 let blockId = 0;
 
@@ -45,6 +52,19 @@ export default class EditorApp {
   private selection: EditorBlock | null = null;
   private highlight?: BoxHelper;
   private animationFrame?: number;
+  private leftButtonActive = false;
+  private lastFrameTime = 0;
+  private readonly movementState = {
+    forward: false,
+    back: false,
+    left: false,
+    right: false,
+  };
+  private readonly movementForward = new Vector3();
+  private readonly movementRight = new Vector3();
+  private readonly movementOffset = new Vector3();
+  private readonly worldUp = new Vector3(0, 1, 0);
+  private readonly movementSpeed = 6;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -63,6 +83,19 @@ export default class EditorApp {
     this.controls.enableDamping = true;
     this.controls.maxPolarAngle = Math.PI - 0.1;
     this.controls.target.set(0, 0, 0);
+    this.controls.enableZoom = true;
+    this.controls.enablePan = true;
+    this.controls.enableRotate = true;
+    this.controls.mouseButtons.RIGHT = MOUSE.ROTATE;
+
+    canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+    canvas.addEventListener("pointerdown", this.handlePointerDownCapture, true);
+    canvas.addEventListener("pointerup", this.handlePointerUpCapture, true);
+    canvas.addEventListener("pointercancel", this.handleWindowPointerUpCapture, true);
+    window.addEventListener("pointerup", this.handleWindowPointerUpCapture, true);
+    window.addEventListener("pointercancel", this.handleWindowPointerUpCapture, true);
+    window.addEventListener("keydown", this.handleMovementKeyChange, true);
+    window.addEventListener("keyup", this.handleMovementKeyChange, true);
 
     this.setupScene();
     this.handleResize();
@@ -71,6 +104,10 @@ export default class EditorApp {
 
   public getCanvas(): HTMLCanvasElement {
     return this.canvas;
+  }
+
+  public getCamera(): PerspectiveCamera {
+    return this.camera;
   }
 
   private setupScene(): void {
@@ -97,12 +134,21 @@ export default class EditorApp {
   };
 
   public start(): void {
-    const renderLoop = () => {
+    const renderLoop = (time: number) => {
+      if (this.lastFrameTime === 0) {
+        this.lastFrameTime = time;
+      }
+
+      const deltaSeconds = (time - this.lastFrameTime) / 1000;
+      this.lastFrameTime = time;
+
+      this.updateCameraMovement(deltaSeconds);
       this.controls.update();
       this.renderer.render(this.scene, this.camera);
       this.animationFrame = requestAnimationFrame(renderLoop);
     };
-    renderLoop();
+
+    this.animationFrame = requestAnimationFrame(renderLoop);
   }
 
   public dispose(): void {
@@ -110,8 +156,110 @@ export default class EditorApp {
       cancelAnimationFrame(this.animationFrame);
     }
     window.removeEventListener("resize", this.handleResize);
+    this.canvas.removeEventListener("pointerdown", this.handlePointerDownCapture, true);
+    this.canvas.removeEventListener("pointerup", this.handlePointerUpCapture, true);
+    this.canvas.removeEventListener("pointercancel", this.handleWindowPointerUpCapture, true);
+    window.removeEventListener("pointerup", this.handleWindowPointerUpCapture, true);
+    window.removeEventListener("pointercancel", this.handleWindowPointerUpCapture, true);
+    window.removeEventListener("keydown", this.handleMovementKeyChange, true);
+    window.removeEventListener("keyup", this.handleMovementKeyChange, true);
     this.controls.dispose();
     this.renderer.dispose();
+  }
+
+  private handlePointerDownCapture = (event: PointerEvent): void => {
+    if (event.button === 0) {
+      this.leftButtonActive = true;
+      this.controls.enabled = false;
+      return;
+    }
+
+    if (event.button === 2) {
+      this.controls.enabled = true;
+    }
+  };
+
+  private handlePointerUpCapture = (event: PointerEvent): void => {
+    if (event.button === 0 && this.leftButtonActive) {
+      this.leftButtonActive = false;
+      this.controls.enabled = true;
+    }
+  };
+
+  private handleWindowPointerUpCapture = (event: PointerEvent): void => {
+    if (event.button === 0 && this.leftButtonActive) {
+      this.leftButtonActive = false;
+      this.controls.enabled = true;
+    }
+  };
+
+  private handleMovementKeyChange = (event: KeyboardEvent): void => {
+    if (event.repeat) {
+      return;
+    }
+
+    const isKeyDown = event.type === "keydown";
+    let handled = true;
+
+    switch (event.key.toLowerCase()) {
+      case "w":
+        this.movementState.forward = isKeyDown;
+        break;
+      case "s":
+        this.movementState.back = isKeyDown;
+        break;
+      case "a":
+        this.movementState.left = isKeyDown;
+        break;
+      case "d":
+        this.movementState.right = isKeyDown;
+        break;
+      default:
+        handled = false;
+        break;
+    }
+
+    if (handled) {
+      event.preventDefault();
+    }
+  };
+
+  private updateCameraMovement(deltaSeconds: number): void {
+    if (deltaSeconds <= 0) {
+      return;
+    }
+
+    const { forward, back, left, right } = this.movementState;
+    if (!forward && !back && !left && !right) {
+      return;
+    }
+
+    this.camera.getWorldDirection(this.movementForward);
+    this.movementForward.y = 0;
+    if (this.movementForward.lengthSq() === 0) {
+      return;
+    }
+    this.movementForward.normalize();
+
+    this.movementRight.crossVectors(this.movementForward, this.worldUp);
+    this.movementRight.y = 0;
+    if (this.movementRight.lengthSq() > 0) {
+      this.movementRight.normalize();
+    }
+
+    this.movementOffset.set(0, 0, 0);
+    if (forward) this.movementOffset.add(this.movementForward);
+    if (back) this.movementOffset.sub(this.movementForward);
+    if (right) this.movementOffset.add(this.movementRight);
+    if (left) this.movementOffset.sub(this.movementRight);
+
+    if (this.movementOffset.lengthSq() === 0) {
+      return;
+    }
+    this.movementOffset.normalize().multiplyScalar(this.movementSpeed * deltaSeconds);
+
+    this.camera.position.add(this.movementOffset);
+    this.controls.target.add(this.movementOffset);
   }
 
   public addSelectionListener(listener: SelectionListener): () => void {
@@ -134,6 +282,22 @@ export default class EditorApp {
       return null;
     }
 
+    const block = this.createBlock({ position: point.setY(0.5) });
+    this.setSelection(block);
+    return block;
+  }
+
+  public createBlock({
+    position,
+    rotation,
+    scale,
+    id,
+  }: {
+    position: Vector3;
+    rotation?: Euler;
+    scale?: Vector3;
+    id?: string;
+  }): EditorBlock {
     const material = new MeshStandardMaterial({
       color: new Color(0x5b8cff),
       roughness: 0.35,
@@ -141,14 +305,60 @@ export default class EditorApp {
     });
     const geometry = new BoxGeometry(1, 1, 1);
     const mesh = new Mesh(geometry, material);
-    mesh.position.copy(point).setY(0.5);
+    mesh.position.copy(position);
+    if (rotation) mesh.rotation.copy(rotation);
+    if (scale) mesh.scale.copy(scale);
 
-    const id = `block-${blockId += 1}`;
-    const block: EditorBlock = { id, mesh };
+    const newId = id ?? `block-${(blockId += 1)}`;
+    // Keep blockId monotonic if an explicit id is provided
+    if (id) {
+      const m = /^block-(\d+)$/.exec(id);
+      if (m) {
+        const n = Number(m[1]);
+        if (!Number.isNaN(n) && n > blockId) blockId = n;
+      }
+    }
+
+    const block: EditorBlock = { id: newId, mesh };
     this.scene.add(mesh);
-    this.blocks.set(id, block);
-    this.setSelection(block);
+    this.blocks.set(newId, block);
     return block;
+  }
+
+  public removeBlock(id: string): boolean {
+    const block = this.blocks.get(id);
+    if (!block) return false;
+    if (this.selection?.id === id) {
+      this.setSelection(null);
+    }
+    this.scene.remove(block.mesh);
+    // Dispose resources
+    if (block.mesh.geometry) block.mesh.geometry.dispose();
+    // Material may be an array; handle both
+    const mat: unknown = (block.mesh as Mesh).material;
+    if (Array.isArray(mat)) {
+      mat.forEach((m) => m.dispose?.());
+    } else {
+      (mat as MeshStandardMaterial)?.dispose?.();
+    }
+    this.blocks.delete(id);
+    return true;
+  }
+
+  public getBlock(id: string): EditorBlock | undefined {
+    return this.blocks.get(id);
+  }
+
+  public applyTransform(id: string, snap: SelectionTransform): boolean {
+    const block = this.blocks.get(id);
+    if (!block) return false;
+    block.mesh.position.copy(snap.position);
+    block.mesh.rotation.copy(snap.rotation);
+    block.mesh.scale.copy(snap.scale);
+    if (this.selection?.id === id && this.highlight) {
+      this.highlight.update();
+    }
+    return true;
   }
 
   private intersectGround(clientX: number, clientY: number): Vector3 | null {
@@ -224,6 +434,16 @@ export default class EditorApp {
     this.setSelection(null);
   }
 
+  public updateSelectedBlockPosition(position: Vector3): void {
+    if (!this.selection) {
+      return;
+    }
+    this.selection.mesh.position.copy(position);
+    if (this.highlight) {
+      this.highlight.update();
+    }
+  }
+
   public updateSelectedBlockScale(scale: Vector3): void {
     if (!this.selection) {
       return;
@@ -244,11 +464,12 @@ export default class EditorApp {
     }
   }
 
-  public getSelectionTransform(): { scale: Vector3; rotation: Euler } | null {
+  public getSelectionTransform(): SelectionTransform | null {
     if (!this.selection) {
       return null;
     }
     return {
+      position: this.selection.mesh.position.clone(),
       scale: this.selection.mesh.scale.clone(),
       rotation: this.selection.mesh.rotation.clone(),
     };

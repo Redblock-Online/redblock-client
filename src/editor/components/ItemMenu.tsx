@@ -23,7 +23,22 @@ export function ItemMenu({ items, activeItem, onItemSelect, onItemDragStart }: I
               if (event.dataTransfer) {
                 event.dataTransfer.effectAllowed = "copy";
               }
-              event.dataTransfer?.setDragImage(event.currentTarget, 60, 30);
+
+              const dragGhost = event.currentTarget.cloneNode(true) as HTMLElement;
+              dragGhost.style.position = "absolute";
+              dragGhost.style.top = "-9999px";
+              dragGhost.style.left = "-9999px";
+              dragGhost.style.pointerEvents = "none";
+              dragGhost.style.opacity = "0.9";
+              document.body.appendChild(dragGhost);
+
+              const { width, height } = dragGhost.getBoundingClientRect();
+              event.dataTransfer?.setDragImage(dragGhost, width / 2, height / 2);
+
+              requestAnimationFrame(() => {
+                document.body.removeChild(dragGhost);
+              });
+
               onItemDragStart(item.id);
             }}
             onClick={() => onItemSelect(isActive ? null : item)}
@@ -34,7 +49,7 @@ export function ItemMenu({ items, activeItem, onItemSelect, onItemDragStart }: I
             <BlockPreview />
             <span className="mt-3 text-xs uppercase tracking-wide">{item.label}</span>
             <span className="mt-1 text-[10px] uppercase text-white/40 group-hover:text-white/60">
-              Arrastra o haz clic
+              Drag to place
             </span>
           </button>
         );
