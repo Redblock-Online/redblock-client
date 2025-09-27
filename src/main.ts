@@ -1,34 +1,40 @@
+import type { UIController } from "@/ui/react/mountUI";
+import type AppClass from "./core/App";
 
-import App from "./core/App";
-import { mountUI, type UIController } from "@/ui/react/mountUI";
-import { ensureCsrfCookie } from "@/ui/react/api/http";
-import logCredits from "./credits";
+export let app: AppClass | undefined;
+export let ui: UIController | undefined;
 
-logCredits();
+const isEditorRoute =
+  typeof window !== "undefined" &&
+  (window.location.pathname === "/editor" ||
+    window.location.pathname.startsWith("/editor/"));
 
-/**
- * Central application controller instance managing game lifecycle and UI interaction.
- *
- * Defined as export const app = new App() in src/main.ts.
- * Ties UI via attachUI(ui) and lifecycle via start(); UI callbacks call app methods.
- * App class lives in src/core/App.ts; handles game state, rendering, and controls.
- */
+(async () => {
+  const { default: logCredits } = await import("./credits");
+  logCredits();
 
-export const app = new App();
+  if (isEditorRoute) {
+    const { initEditor } = await import("./editor/initEditor");
+    await initEditor();
+    return;
+  }
 
-/**
- * Central UI controller instance managing UI lifecycle and game interaction.
- *
- * Defined as export const ui: UIController = mountUI({ ... }) in src/main.ts.
- * Ties UI via attachUI(ui) and lifecycle via start(); UI callbacks call app methods.
- * UIController interface lives in src/ui/react/mountUI.ts; handles DOM mounting, events, and state.
- */
+  const [{ default: App }, { mountUI }, { ensureCsrfCookie }] = await Promise.all([
+    import("./core/App"),
+    import("@/ui/react/mountUI"),
+    import("@/ui/react/api/http"),
+  ]);
 
-// Initialize CSRF cookie once on app load for write requests
-ensureCsrfCookie().catch(() => {});
-export const ui: UIController = mountUI({
-  onStart: (scenarioId: string) => app.startGame(scenarioId),
-  onPauseChange: (paused: boolean) => app.setPaused(paused),
-});
-app.attachUI(ui);
-app.start();
+  try {
+    await ensureCsrfCookie();
+  } catch {}
+
+  app = new App();
+  ui = mountUI({
+    onStart: (scenarioId: string) => app!.startGame(scenarioId),
+    onPauseChange: (paused: boolean) => app!.setPaused(paused),
+  });
+
+  app.attachUI(ui);
+  app.start();
+})();
