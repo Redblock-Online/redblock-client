@@ -42,13 +42,13 @@ export function ItemMenu({ items, activeItem, onItemSelect, onItemDragStart }: I
               onItemDragStart(item.id);
             }}
             onClick={() => onItemSelect(isActive ? null : item)}
-            className={`group flex flex-col items-center rounded border border-white/10 bg-[#2a2a2a]/90 p-4 text-white/70 transition ${
-              isActive ? "border-[#5b8cff] bg-[#2f365f] text-white" : "hover:border-white/40 hover:text-white"
+            className={`group flex flex-col items-center rounded border border-rb-border bg-white p-4 text-rb-muted transition focus-visible:outline outline-3 outline-rb-red ${
+              isActive ? "border-rb-red bg-red-50 text-rb-text" : "hover:border-gray-400 hover:text-rb-text"
             }`}
           >
-            <BlockPreview />
+            <BlockPreview item={item} />
             <span className="mt-3 text-xs uppercase tracking-wide">{item.label}</span>
-            <span className="mt-1 text-[10px] uppercase text-white/40 group-hover:text-white/60">
+            <span className="mt-1 text-[10px] uppercase text-rb-muted group-hover:text-rb-text">
               Drag to place
             </span>
           </button>

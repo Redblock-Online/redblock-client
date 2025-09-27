@@ -5,8 +5,20 @@ export default {
     './index.html',
     './src/**/*.{ts,tsx,html}',
   ],
+  darkMode: 'class',
   theme: {
     extend: {
+      colors: {
+        rb: {
+          red: '#ff0000',
+          bg: '#ffffff',
+          surface: '#f8f8f8',
+          panel: '#f3f4f6',
+          border: '#e5e7eb',
+          text: '#111827',
+          muted: '#6b7280',
+        },
+      },
       keyframes: {
         float: {
           '0%, 100%': { transform: 'translateY(0px) rotate(0deg)' },
@@ -26,4 +38,3 @@ export default {
   },
   plugins: [],
 } satisfies Config
-

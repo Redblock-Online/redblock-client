@@ -3,17 +3,27 @@ import {
   AmbientLight,
   BoxGeometry,
   Color,
+  DoubleSide,
+  EdgesGeometry,
   DirectionalLight,
+  LineBasicMaterial,
+  LineSegments,
   Mesh,
   MeshStandardMaterial,
+  Group,
   PerspectiveCamera,
   Scene,
   SRGBColorSpace,
+  Box3,
   Vector3,
   WebGLRenderer,
 } from "three";
+import type { EditorItem } from "../types";
+import { getComponent } from "../componentsStore";
 
-export function BlockPreview(): JSX.Element {
+type BlockPreviewProps = { item: EditorItem };
+
+export function BlockPreview({ item }: BlockPreviewProps): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -22,28 +32,113 @@ export function BlockPreview(): JSX.Element {
       return;
     }
     const renderer = new WebGLRenderer({ canvas, alpha: true, antialias: true });
-    renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+    const width = canvas.clientWidth || 96;
+    const height = canvas.clientHeight || 96;
+    renderer.setSize(width, height, false);
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.outputColorSpace = SRGBColorSpace;
 
     const scene = new Scene();
-    const camera = new PerspectiveCamera(35, 1, 0.1, 100);
-    camera.position.set(2.6, 2.6, 2.6);
-    camera.lookAt(new Vector3(0, 0, 0));
+    const camera = new PerspectiveCamera(35, width / height, 0.01, 100);
 
-    const ambient = new AmbientLight(0xffffff, 0.8);
-    const light = new DirectionalLight(0xffffff, 0.9);
+    const ambient = new AmbientLight(0xffffff, 0.9);
+    const light = new DirectionalLight(0xffffff, 1.4);
     light.position.set(5, 6, 5);
 
-    const geometry = new BoxGeometry(1, 1, 1);
-    const material = new MeshStandardMaterial({ color: new Color(0x5b8cff) });
-    const cube = new Mesh(geometry, material);
-    scene.add(cube, ambient, light);
+    // Build preview object depending on item type
+    const group = new Group();
+    // We won't use group.geometry/material, it's just a container; but Mesh requires geometry/material.
+    // Create a helper to make a cube + outline
+    const createCube = () => {
+      const geometry = new BoxGeometry(1, 1, 1);
+      const material = new MeshStandardMaterial({
+        color: new Color(0xffffff),
+        metalness: 0,
+        roughness: 0.2,
+        transparent: false,
+        opacity: 1,
+        side: DoubleSide,
+      });
+      const mesh = new Mesh(geometry, material);
+      const edgesGeom = new EdgesGeometry(geometry);
+      const edgeMat = new LineBasicMaterial({ color: 0x000000 });
+      const outline = new LineSegments(edgesGeom, edgeMat);
+      outline.renderOrder = 1;
+      mesh.add(outline);
+      return { mesh, geometry, material, edgesGeom, edgeMat };
+    };
+
+    const disposables: Array<{ dispose: () => void }> = [];
+
+    const id = item.id;
+    if (id === "block") {
+      const { mesh, geometry, material, edgesGeom, edgeMat } = createCube();
+      group.add(mesh);
+      disposables.push(
+        { dispose: () => geometry.dispose() },
+        { dispose: () => material.dispose() },
+        { dispose: () => edgesGeom.dispose() },
+        { dispose: () => edgeMat.dispose() },
+      );
+    } else if (id.startsWith("component:")) {
+      const compId = id.slice("component:".length);
+      const comp = getComponent(compId);
+      if (comp && comp.members.length > 0) {
+        for (const m of comp.members) {
+          const { mesh, geometry, material, edgesGeom, edgeMat } = createCube();
+          mesh.position.set(m.position.x, m.position.y, m.position.z);
+          mesh.rotation.set(m.rotation.x, m.rotation.y, m.rotation.z);
+          mesh.scale.set(m.scale.x, m.scale.y, m.scale.z);
+          group.add(mesh);
+          disposables.push(
+            { dispose: () => geometry.dispose() },
+            { dispose: () => material.dispose() },
+            { dispose: () => edgesGeom.dispose() },
+            { dispose: () => edgeMat.dispose() },
+          );
+        }
+      } else {
+        // Fallback to a single cube if definition missing/empty
+        const { mesh, geometry, material, edgesGeom, edgeMat } = createCube();
+        group.add(mesh);
+        disposables.push(
+          { dispose: () => geometry.dispose() },
+          { dispose: () => material.dispose() },
+          { dispose: () => edgesGeom.dispose() },
+          { dispose: () => edgeMat.dispose() },
+        );
+      }
+    } else {
+      // Unknown item, show a cube as fallback
+      const { mesh, geometry, material, edgesGeom, edgeMat } = createCube();
+      group.add(mesh);
+      disposables.push(
+        { dispose: () => geometry.dispose() },
+        { dispose: () => material.dispose() },
+        { dispose: () => edgesGeom.dispose() },
+        { dispose: () => edgeMat.dispose() },
+      );
+    }
+
+    scene.add(group, ambient, light);
+
+    // Frame the object in view
+    const bbox = new Box3().setFromObject(group);
+    const size = bbox.getSize(new Vector3());
+    const center = bbox.getCenter(new Vector3());
+    const radius = Math.max(size.x, size.y, size.z) * 0.6 || 1;
+    const fov = (camera.fov * Math.PI) / 180;
+    const dist = radius / Math.sin(fov / 2) * 1.2;
+    camera.position.copy(center.clone().add(new Vector3(1, 1, 1).normalize().multiplyScalar(dist)));
+    camera.near = Math.max(0.01, dist / 100);
+    camera.far = dist * 10;
+    camera.lookAt(center);
+    camera.updateProjectionMatrix();
 
     let frame = 0;
     const animate = () => {
-      cube.rotation.y += 0.02;
-      cube.rotation.x = 0.6;
+      group.rotation.y += 0.02;
+      group.rotation.x = 0.6;
       renderer.render(scene, camera);
       frame = requestAnimationFrame(animate);
     };
@@ -51,11 +146,10 @@ export function BlockPreview(): JSX.Element {
 
     return () => {
       cancelAnimationFrame(frame);
-      geometry.dispose();
-      material.dispose();
+      for (const d of disposables) d.dispose();
       renderer.dispose();
     };
-  }, []);
+  }, [item]);
 
   return <canvas ref={canvasRef} className="h-24 w-24" />;
 }

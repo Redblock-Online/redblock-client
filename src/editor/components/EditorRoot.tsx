@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Euler, Quaternion, Vector3 } from "three";
-import EditorApp, { type EditorBlock, type SelectionTransform } from "../EditorApp";
+import { Euler, Group, Quaternion, Vector3 } from "three";
+import EditorApp, { type EditorBlock, type EditorSelection, type SelectionTransform } from "../EditorApp";
+import { Object3D, Quaternion as ThreeQuaternion } from "three";
 import type { EditorItem } from "../types";
+import { addComponent, getComponent, loadComponents, removeComponent } from "../componentsStore";
 import { ItemMenu } from "./ItemMenu";
 import { PropertiesPanel } from "./PropertiesPanel";
+import type { SavedComponent } from "../componentsStore";
 
-const items: EditorItem[] = [
+const builtinItems: EditorItem[] = [
   { id: "block", label: "Block" },
 ];
 
@@ -38,7 +41,8 @@ const cloneTransformSnapshot = (input: SelectionTransform): SelectionTransform =
 
 export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
   const [activeItem, setActiveItem] = useState<EditorItem | null>(null);
-  const [selection, setSelection] = useState<EditorBlock | null>(null);
+  const [components, setComponents] = useState<SavedComponent[]>([]);
+  const [selection, setSelection] = useState<EditorSelection>(null);
   const [positionState, setPositionState] = useState({ x: 0, y: 0, z: 0 });
   const [scaleState, setScaleState] = useState({ x: 1, y: 1, z: 1 });
   const [rotationState, setRotationState] = useState({ x: 0, y: 0, z: 0 });
@@ -49,9 +53,12 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
   const [transformMode, setTransformMode] = useState<TransformMode | null>(null);
   const [activeAxis, setActiveAxis] = useState<AxisConstraint>(null);
 
+  type GroupMember = { id: string; transform: SelectionTransform };
   type HistoryAction =
     | { type: "add"; id: string; transform: SelectionTransform }
-    | { type: "transform"; id: string; before: SelectionTransform; after: SelectionTransform };
+    | { type: "transform"; id: string; before: SelectionTransform; after: SelectionTransform }
+    | { type: "group"; groupId: string; members: GroupMember[] }
+    | { type: "ungroup"; groupId: string; members: GroupMember[] };
 
   const undoStack = useRef<HistoryAction[]>([]);
   const redoStack = useRef<HistoryAction[]>([]);
@@ -61,9 +68,39 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
     redoStack.current = [];
   }, []);
 
+  const snapshotFromBlock = (b: EditorBlock): SelectionTransform => ({
+    position: b.mesh.position.clone(),
+    rotation: b.mesh.rotation.clone(),
+    scale: b.mesh.scale.clone(),
+  });
+
+  const snapshotFromWorldObject = (obj: Object3D): SelectionTransform => {
+    const p = new Vector3();
+    const q = new ThreeQuaternion();
+    const s = new Vector3();
+    obj.updateWorldMatrix(true, false);
+    obj.matrixWorld.decompose(p, q, s);
+    const e = new Euler().setFromQuaternion(q);
+    return { position: p, rotation: e, scale: s };
+  };
+
+  useEffect(() => {
+    // load components from localStorage
+    setComponents(loadComponents());
+  }, []);
   useEffect(() => {
     selectedItemRef.current = activeItem;
   }, [activeItem]);
+
+  const items: EditorItem[] = useMemo(() => {
+    return [
+      ...builtinItems,
+      ...components.map((c) => ({ id: `component:${c.id}`, label: c.label })),
+    ];
+  }, [components]);
+
+  // Whether a component edit session is active. Must be declared before effects that depend on it.
+  const editingActive = !!editor.getEditingComponentId();
 
   const applyTransformToState = useCallback((transform: SelectionTransform | null) => {
     if (!transform) {
@@ -141,7 +178,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
       setActiveAxis(null);
       releasePointerLock();
     },
-    [editor, applyTransformToState, releasePointerLock],
+    [editor, applyTransformToState, releasePointerLock, pushHistory],
   );
 
   const startTransform = useCallback(
@@ -287,6 +324,17 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
       editor.removeBlock(action.id);
     } else if (action.type === "transform") {
       applyTransformSnapshot(action.id, action.before);
+    } else if (action.type === "group") {
+      // Undo grouping: remove group, restore members
+      editor.removeBlock(action.groupId);
+      for (const m of action.members) {
+        editor.createBlock({ id: m.id, position: m.transform.position, rotation: m.transform.rotation, scale: m.transform.scale });
+      }
+      // Reselect restored members for continuity
+      editor.setSelectionByIds(action.members.map((m) => m.id));
+    } else if (action.type === "ungroup") {
+      // Undo ungroup: recreate the group from members
+      editor.groupByIds(action.members.map((m) => m.id), action.groupId);
     }
     redoStack.current.push(action);
   }, [editor, applyTransformSnapshot]);
@@ -303,6 +351,13 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
       });
     } else if (action.type === "transform") {
       applyTransformSnapshot(action.id, action.after);
+    } else if (action.type === "group") {
+      // Redo grouping: group the members again with same groupId
+      editor.groupByIds(action.members.map((m) => m.id), action.groupId);
+    } else if (action.type === "ungroup") {
+      // Redo ungroup: select group and ungroup
+      editor.setSelectionByIds([action.groupId]);
+      editor.ungroupSelected();
     }
     undoStack.current.push(action);
   }, [editor, applyTransformSnapshot]);
@@ -313,6 +368,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
       setTransformMode(null);
       setActiveAxis(null);
       setSelection(block);
+      // Only sync state from single selection
       applyTransformToState(editor.getSelectionTransform());
     });
   }, [editor, applyTransformToState]);
@@ -321,6 +377,10 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
     const canvas = editor.getCanvas();
 
     const handlePointerDown = (event: PointerEvent) => {
+      // Only react to left-click for selection/placement
+      if (event.button !== 0) {
+        return;
+      }
       if (transformSessionRef.current) {
         if (event.button === 0) {
           event.preventDefault();
@@ -329,16 +389,19 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
         return;
       }
 
-      const picked = editor.pickBlock(event.clientX, event.clientY);
+      const additive = (event.ctrlKey ?? false) || (event.metaKey ?? false);
+      const picked = editor.pickBlock(event.clientX, event.clientY, additive);
       if (picked) {
         // If a palette item was selected, clear it when user picks a world block
         if (selectedItemRef.current) {
           setActiveItem(null);
         }
       }
+      editor.clearMovementState?.();
     };
 
     const handleDragOver = (event: DragEvent) => {
+      if (editingActive) return;
       if (!selectedItemRef.current) {
         const hasBlock = event.dataTransfer?.types.includes("text/plain");
         if (!hasBlock) {
@@ -350,19 +413,31 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
     };
 
     const handleDrop = (event: DragEvent) => {
-      const data = event.dataTransfer?.getData("text/plain");
-      if (data !== "block") {
+      if (editingActive) {
+        event.preventDefault();
         return;
       }
+      const data = event.dataTransfer?.getData("text/plain");
+      if (!data) return;
       event.preventDefault();
-      const placed = editor.placeBlockAt(event.clientX, event.clientY);
+      let placed: EditorBlock | null = null;
+      if (data === "block") {
+        placed = editor.placeBlockAt(event.clientX, event.clientY);
+      } else if (data.startsWith("component:")) {
+        const id = data.slice("component:".length);
+        const def = getComponent(id);
+        if (def) {
+          placed = editor.placeComponentAt(event.clientX, event.clientY, def);
+        }
+      }
       if (placed) {
         const t = editor.getSelectionTransform();
         if (t) {
           pushHistory({ type: "add", id: placed.id, transform: t });
         }
       }
-      setActiveItem(items[0]);
+      setActiveItem(builtinItems[0]);
+      editor.clearMovementState?.();
     };
 
     canvas.addEventListener("pointerdown", handlePointerDown);
@@ -373,7 +448,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
       canvas.removeEventListener("dragover", handleDragOver);
       canvas.removeEventListener("drop", handleDrop);
     };
-  }, [editor, finishTransform]);
+  }, [editor, finishTransform, editingActive, pushHistory]);
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -409,6 +484,16 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
       }
 
       const key = event.key.toLowerCase();
+
+      // Finish component editing with Enter
+      if (event.key === "Enter") {
+        const editingId = editor.getEditingComponentId();
+        if (editingId) {
+          event.preventDefault();
+          editor.finishEditingComponent(editingId);
+          return;
+        }
+      }
 
       // Undo/Redo (Win/Linux: Ctrl+Z / Ctrl+Y, macOS: Cmd+Z / Cmd+Shift+Z)
       const isMac = navigator.platform.toLowerCase().includes("mac");
@@ -457,10 +542,10 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [editor, finishTransform, startTransform, applyTransform]);
+  }, [editor, finishTransform, startTransform, applyTransform, undo, redo]);
 
   useEffect(() => {
-    if (!selection) {
+    if (!selection || Array.isArray(selection)) {
       return;
     }
     if (transformSessionRef.current) {
@@ -470,7 +555,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
   }, [editor, positionState, selection]);
 
   useEffect(() => {
-    if (!selection) {
+    if (!selection || Array.isArray(selection)) {
       return;
     }
     if (transformSessionRef.current) {
@@ -480,7 +565,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
   }, [editor, scaleState, selection]);
 
   useEffect(() => {
-    if (!selection) {
+    if (!selection || Array.isArray(selection)) {
       return;
     }
     if (transformSessionRef.current) {
@@ -499,6 +584,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
 
   const title = useMemo(() => {
     if (selection) {
+      if (Array.isArray(selection)) return "Multiple Objects";
       return selection.id;
     }
     if (activeItem) {
@@ -516,16 +602,30 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
     return `${base} (${axis})`;
   }, [transformMode, activeAxis]);
 
+  // moved above to avoid temporal dead zone in effects
+
+  const selectedComponentId = useMemo(() => {
+    if (selection && !Array.isArray(selection)) {
+      return editor.getComponentIdForSelectedGroup();
+    }
+    // If in edit mode, fall back to the active editing component id
+    return editor.getEditingComponentId();
+  }, [editor, selection]);
+
+  const isEditingComponent = useMemo(() => {
+    return selectedComponentId ? editor.isComponentEditing(selectedComponentId) : false;
+  }, [editor, selectedComponentId]);
+
   return (
-    <div className="pointer-events-none absolute inset-0 flex flex-col text-white">
-      <header className="pointer-events-auto flex h-14 items-center justify-between border-b border-white/10 bg-[#1e1e1e]/90 px-6">
-        <div className="text-xs uppercase tracking-widest text-white/70">World Builder</div>
-        <div className="text-sm font-semibold text-white">{title}</div>
-        <div className="text-xs text-white/50">Current route: /editor</div>
+    <div className={`absolute inset-0 z-50 flex flex-col text-rb-text`}>
+      <header className={`relative z-50 flex h-14 items-center justify-between border-b border-rb-border bg-white px-6 outline outline-3 outline-rb-border pointer-events-auto`}>
+        <div className="text-xs uppercase tracking-widest text-rb-muted">World Builder</div>
+        <div className="text-sm font-semibold">{title}</div>
+        <div className="text-xs text-rb-muted">Current route: /editor</div>
       </header>
-      <div className="flex flex-1 overflow-hidden">
-        <aside className="pointer-events-auto flex w-64 flex-col border-r border-white/10 bg-[#202020]/95 p-4">
-          <div className="mb-4 text-xs uppercase text-white/50">Library</div>
+      <div className="flex flex-1 overflow-hidden ">
+        <aside className={`relative z-50 flex w-64 flex-col border-r border-rb-border bg-rb-panel p-4 outline outline-3 outline-rb-border pointer-events-auto`}>
+          <div className="mb-4 text-xs uppercase text-rb-muted">Library</div>
           <ItemMenu
             items={items}
             activeItem={activeItem}
@@ -535,29 +635,49 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
               setActiveItem(item);
             }}
           />
+          {activeItem && activeItem.id.startsWith("component:") ? (
+            <div className="mt-4 flex flex-col gap-2">
+              <button
+                className="h-9 rounded border border-rb-border bg-white px-3 text-xs font-semibold uppercase tracking-widest text-rb-text hover:bg-black hover:text-white"
+                onClick={() => {
+                  const id = activeItem.id.slice("component:".length);
+                  removeComponent(id);
+                  setComponents(loadComponents());
+                  setActiveItem(null);
+                }}
+              >
+                Remove Component
+              </button>
+            </div>
+          ) : null}
         </aside>
         <main className="pointer-events-none relative flex-1">
           <div className="pointer-events-none absolute inset-0">
-            <div className="absolute left-6 top-6 flex flex-col gap-1 rounded bg-black/40 px-3 py-2 text-xs text-white/70">
+            <div className="absolute left-6 top-6 flex flex-col gap-1 rounded border border-rb-border bg-white/80 px-3 py-2 text-xs text-rb-muted shadow-sm outline outline-3 outline-rb-border">
               <span>Orbit with right click · Pan with Shift + right click · Zoom with scroll</span>
               <span>Select with left click · Move (G) · Rotate (R) · Scale (F) · constrain with X / Y / Z</span>
               <span>Move camera with WASD</span>
               {transformLabel ? (
-                <span className="mt-1 rounded border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-white/80">
+                <span className="mt-1 rounded border border-rb-border bg-rb-panel px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rb-muted outline outline-3 outline-rb-border">
                   {transformLabel}
                 </span>
               ) : null}
             </div>
             {activeItem ? (
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded bg-[#2b2b2b]/90 px-4 py-2 text-xs text-white/80">
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded border border-rb-border bg-white/90 px-4 py-2 text-xs text-rb-muted outline outline-3 outline-rb-border">
                 Drag the {activeItem.label.toLowerCase()} from the library onto the canvas to place it
+              </div>
+            ) : null}
+            {editingActive ? (
+              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded border border-rb-border bg-black/80 px-4 py-2 text-xs font-semibold text-white outline outline-3 outline-rb-border z-20">
+                Press Enter to finish editing the component
               </div>
             ) : null}
           </div>
         </main>
         <aside
-          className={`pointer-events-auto w-72 border-l border-white/10 bg-[#1c1c1c]/95 p-4 transition-opacity ${
-            inspectorVisible ? "opacity-100" : "pointer-events-none opacity-40"
+          className={`relative z-50 w-72 border-l border-rb-border bg-rb-panel p-4 transition-opacity outline outline-3 outline-rb-border ${
+            inspectorVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-40"
           }`}
         >
           <PropertiesPanel
@@ -568,6 +688,55 @@ export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
             onPositionChange={setPositionState}
             onScaleChange={setScaleState}
             onRotationChange={setRotationState}
+            onGroupSelection={() => {
+              // If editing a component, finish editing by regrouping into the original group id
+              const editingId = editor.getEditingComponentId();
+              if (editingId) {
+                editor.finishEditingComponent(editingId);
+                return;
+              }
+              if (!selection || !Array.isArray(selection)) return;
+              const members: GroupMember[] = selection.map((b) => ({ id: b.id, transform: snapshotFromBlock(b) }));
+              const res = editor.groupSelection();
+              if (res) {
+                pushHistory({ type: "group", groupId: res.id, members });
+              }
+            }}
+            onUngroupSelection={() => {
+              if (!selection || Array.isArray(selection)) return;
+              const groupId = selection.id;
+              const children = (selection.mesh as Group).children as Object3D[];
+              const members: GroupMember[] = children.map((child) => {
+                const id = (child as Object3D & { userData: { editorId?: string } }).userData?.editorId as string;
+                return { id, transform: snapshotFromWorldObject(child) };
+              });
+              const res = editor.ungroupSelected();
+              if (res && members.length > 0) {
+                pushHistory({ type: "ungroup", groupId, members });
+              }
+            }}
+            // Create a component using the currently selected group as the master
+            onCreateComponent={() => {
+              if (!selection || Array.isArray(selection)) return;
+              // Persist definition from current group children
+              const members = editor.getSelectedGroupMembersLocalTransforms();
+              if (!members) return;
+              const existing = loadComponents();
+              const nextIndex = existing.length + 1;
+              const nextId = `comp-${nextIndex}`;
+              const label = `Component ${nextIndex}`;
+              addComponent({ id: nextId, label, members });
+              editor.createComponentFromSelectedGroup(label, nextId);
+              setComponents(loadComponents());
+            }}
+            onModifyComponent={selectedComponentId ? () => {
+              if (editor.isComponentEditing(selectedComponentId)) {
+                editor.finishEditingComponent(selectedComponentId);
+              } else {
+                editor.startEditingComponent(selectedComponentId);
+              }
+            } : undefined}
+            componentEditing={isEditingComponent}
           />
         </aside>
       </div>
