@@ -297,15 +297,48 @@ export default class App {
       avgReaction = total / this.reactionTimes.length;
     }
 
-    const efficiency = avgReaction !== null && avgReaction > 0
-      ? accuracyRatio * (1 / avgReaction) * 100
-      : null;
-
     const stored = this.loadStoredStats();
     const nextStored: StoredStats = {
       last: { ...stored.last },
       best: { ...stored.best },
     };
+
+    const hits = this.shotsHit;
+    const roundTime = roundDurationSeconds !== null && roundDurationSeconds > 0 ? roundDurationSeconds : null;
+
+    const baselineReaction = stored.best.avgReaction ?? avgReaction ?? null;
+    const reactionNormalized =
+      avgReaction !== null
+        ? baselineReaction && baselineReaction > 0
+          ? Math.max(0, baselineReaction / avgReaction)
+          : 1
+        : null;
+
+    const speed = hits > 0 && roundTime ? hits / roundTime : null;
+    const baselineSpeed =
+      hits > 0
+        ? stored.best.time && stored.best.time > 0
+          ? hits / stored.best.time
+          : speed
+        : null;
+    const speedNormalized =
+      speed !== null
+        ? baselineSpeed && baselineSpeed > 0
+          ? Math.max(0, speed / baselineSpeed)
+          : 1
+        : null;
+
+    const missRatio = 1 - accuracyRatio;
+    const k = 2;
+    const wR = 0.5;
+    const wS = 0.5;
+
+    const penMiss = Math.exp(-k * missRatio);
+    const reactionComponent = reactionNormalized ?? 1;
+    const speedComponent = speedNormalized ?? 1;
+
+    const efficiencyRaw = penMiss * Math.pow(reactionComponent, wR) * Math.pow(speedComponent, wS);
+    const efficiency = Number.isFinite(efficiencyRaw) ? efficiencyRaw * 100 : null;
 
     const rows: TimerHintTableRow[] = [];
 
@@ -348,7 +381,7 @@ export default class App {
       {
         key: "time",
         label: "Time",
-        value: roundDurationSeconds,
+        value: roundTime,
         betterIsLower: true,
         formatter: (value) => `${value.toFixed(2)}s`,
         naLabel: "N/A",
