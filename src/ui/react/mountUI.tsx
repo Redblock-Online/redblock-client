@@ -3,7 +3,7 @@ import UIRoot from "./UIRoot";
 import type { TimerController, TimerHint } from "./TimerDisplay";
 
 export type GameApi = {
-  onStart: (level: number) => void;
+  onStart: (scenarioId: string) => void;
   onPauseChange: (paused: boolean) => void;
 };
 export type UIController = { timer: TimerController };

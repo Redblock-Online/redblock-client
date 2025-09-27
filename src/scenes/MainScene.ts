@@ -12,6 +12,12 @@ export type TargetInfo = {
   shootable: boolean;
   disabled: boolean;
 };
+
+type NeighborState = {
+  target: THREE.Vector3;
+  targetQuat: THREE.Quaternion;
+  lastPacketTs: number;
+};
 // Helpers fuera de la clase
 function quatFromPitchYaw(pitchRad: number, yawRad: number): THREE.Quaternion {
   // YXZ: primero yaw (Y), después pitch (X)
@@ -21,7 +27,9 @@ function quatFromPitchYaw(pitchRad: number, yawRad: number): THREE.Quaternion {
   return q.normalize();
 }
 
-function getTargetQuatFromNet(n: any): THREE.Quaternion {
+type NetRotationPayload = Pick<Partial<PlayerCore>, "player_rotation_x" | "player_rotation_y">;
+
+function getTargetQuatFromNet(n: NetRotationPayload): THREE.Quaternion {
   // Swap: usamos player_rotation_y como pitch y player_rotation_x como yaw
   const yaw = typeof n.player_rotation_x === "number" ? n.player_rotation_x : 0; // eje Y
   const pitch =
@@ -67,10 +75,7 @@ export default class MainScene extends THREE.Scene {
   public neighborTargetInfos: Map<string, TargetInfo[]> = new Map();
   public neighborTargetsRendered: Map<string, THREE.Group[]> = new Map();
   private clock = new THREE.Clock();
-  private neighborStates = new Map<
-    string,
-    { target: THREE.Vector3; lastPacketTs: number }
-  >();
+  private neighborStates = new Map<string, NeighborState>();
 
   private static floorGeom = new THREE.PlaneGeometry(1, 1);
   private static floorEdgesGeom = new THREE.EdgesGeometry(MainScene.floorGeom);
@@ -114,20 +119,9 @@ export default class MainScene extends THREE.Scene {
     this.add(room);
   }
 
-  public level(level: number) {
-    if (level === 1) {
-      this.generateCubes(3, this.me.room_coord_x, this.me.room_coord_z);
-      return;
-    }
-    if (level === 2) {
-      this.generateCubes(8, this.me.room_coord_x, this.me.room_coord_z);
-      return;
-    }
-    if (level === 3) {
-      this.generateCubes(50, this.me.room_coord_x, this.me.room_coord_z);
-      return;
-    }
-    this.generateCubes(3, this.me.room_coord_x, this.me.room_coord_z);
+  public loadScenario(targetCount: number) {
+    const amount = Math.max(1, Math.floor(targetCount));
+    this.generateCubes(amount, this.me.room_coord_x, this.me.room_coord_z);
   }
 
   public generateCubes(amount: number, roomCoordX: number, roomCoordZ: number) {
@@ -238,19 +232,19 @@ export default class MainScene extends THREE.Scene {
       const targetQuat = getTargetQuatFromNet(n);
 
       // Estado por vecino
-      let st = this.neighborStates.get(n.id) as any;
-      if (!st) {
-        st = {
+      let state = this.neighborStates.get(n.id);
+      if (!state) {
+        state = {
           target: new THREE.Vector3(),
           targetQuat: new THREE.Quaternion(),
           lastPacketTs: performance.now(),
         };
-        this.neighborStates.set(n.id, st);
+        this.neighborStates.set(n.id, state);
       }
 
-      st.target.copy(targetPos);
-      st.targetQuat.copy(targetQuat);
-      st.lastPacketTs = performance.now();
+      state.target.copy(targetPos);
+      state.targetQuat.copy(targetQuat);
+      state.lastPacketTs = performance.now();
 
       if (roomChanged) {
         // Si cambió de room, salta directo para evitar "desliz"
@@ -265,13 +259,11 @@ export default class MainScene extends THREE.Scene {
     const alphaRot = alpha; // puedes usar otro valor si quieres distinta suavidad
 
     this.neighborMeshes.forEach((mesh, id) => {
-      const st = this.neighborStates.get(id) as any;
-      if (!st) return;
+      const state = this.neighborStates.get(id);
+      if (!state) return;
 
-      // Posición
-      mesh.position.lerp(st.target, alpha);
-      // Rotación (quaternion)
-      mesh.quaternion.slerp(st.targetQuat, alphaRot);
+      mesh.position.lerp(state.target, alpha);
+      mesh.quaternion.slerp(state.targetQuat, alphaRot);
     });
 
     // Limpieza de desconectados

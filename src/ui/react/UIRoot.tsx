@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import StartScreen from "./StartScreen";
+import { SCENARIOS } from "@/config/scenarios";
 import TimerDisplay, { type TimerController, type TimerHint } from "./TimerDisplay";
 import ControlsHint from "./controls/ControlsHint";
 import IGBadge from "./badges/IGBadge";
@@ -9,7 +10,7 @@ import { useMeStore } from "./state/me";
 import PauseMenu from "./PauseMenu";
 
 type Props = {
-  onStart: (level: number) => void;
+  onStart: (scenarioId: string) => void;
   onPauseChange: (paused: boolean) => void;
   bindTimerController: (ctrl: TimerController) => void;
 };
@@ -47,10 +48,10 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
     }
   }, []);
 
-  const handleStart = useCallback((level: number) => {
+  const handleStart = useCallback((scenarioId: string) => {
     setStarted(true);
     setPaused(false);
-    onStart(level);
+    onStart(scenarioId);
   }, [onStart]);
 
   useEffect(() => {
@@ -143,7 +144,7 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
       document.removeEventListener("pointerlockchange", onPointerLockChange);
       document.removeEventListener("pointerlockerror", onPointerLockChange);
     };
-  }, [started]);
+  }, [started, onPauseChange]);
 
   if (touch) {
     return (
@@ -160,7 +161,7 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
 
   return (
     <>
-      {!started && <StartScreen onStart={handleStart} />}
+      {!started && <StartScreen scenarios={SCENARIOS} onStart={handleStart} />}
       {started && (
         <TimerDisplay
           bindController={(ctrl) => {

@@ -28,7 +28,6 @@ export default class RandomCubeGenerator {
 
     while (attempt < maxAttempts) {
       cube = new Cube(this.randomColors, true, shootable);
-      cube.scale.set(0.4, 0.4, 0.4);
 
       const randomY = Math.random() * 3 - 1.5;
       const randomZ = Math.random() * 5.8 - 2.7;
