@@ -144,21 +144,27 @@ export default function TimerDisplay({
             <div className="text-xs uppercase tracking-[0.25em] text-black/70">Statistic</div>
             <div className="text-right text-xs uppercase tracking-[0.25em] text-black/70">Score</div>
             <div className="text-right text-xs uppercase tracking-[0.25em] text-black/70">Best</div>
-            {hintState.table.rows.map((row, idx) => (
-              <Fragment key={`${row.label}-${idx}`}>
-                <div className="font-medium text-black">{row.label}</div>
-                <div
-                  className={`${row.scoreTone === "positive" ? "text-green-500" : "text-black"} text-right font-semibold`}
-                >
-                  {renderHintText(row.score)}
-                </div>
-                <div
-                  className={`${row.bestTone === "positive" ? "text-green-500" : "text-black"} text-right font-semibold`}
-                >
-                  {renderHintText(row.best)}
-                </div>
-              </Fragment>
-            ))}
+            {hintState.table.rows.map((row, idx) => {
+              const isLastRow = idx === hintState.table.rows.length - 1;
+              return (
+                <Fragment key={`${row.label}-${idx}`}>
+                  <div className="font-medium text-black">{row.label}</div>
+                  <div
+                    className={`${row.scoreTone === "positive" ? "text-green-500" : "text-black"} text-right font-semibold`}
+                  >
+                    {renderHintText(row.score)}
+                  </div>
+                  <div
+                    className={`${row.bestTone === "positive" ? "text-green-500" : "text-black"} text-right font-semibold`}
+                  >
+                    {renderHintText(row.best)}
+                  </div>
+                  {!isLastRow && idx === 2 ? (
+                    <div className="col-span-3 h-px bg-black/20" />
+                  ) : null}
+                </Fragment>
+              );
+            })}
           </div>
           {hintState.table.note ? (
             <div className="mt-4 text-center text-sm text-black/70">
@@ -194,7 +200,7 @@ function normalizeHint(hint?: TimerHint): HintState {
     return {
       text: item.text,
       tone,
-    } satisfies TimerHintLine;
+    };
   });
   return { kind: "lines", lines };
 }
