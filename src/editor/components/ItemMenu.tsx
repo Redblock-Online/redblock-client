@@ -8,7 +8,9 @@ type ItemMenuProps = {
   onItemDragStart: (itemId: string) => void;
 };
 
-export function ItemMenu({ items, activeItem, onItemSelect, onItemDragStart }: ItemMenuProps): JSX.Element {
+import type { ReactElement } from "react";
+
+export function ItemMenu({ items, activeItem, onItemSelect, onItemDragStart }: ItemMenuProps): ReactElement {
   return (
     <div className="flex flex-1 flex-col gap-3">
       {items.map((item) => {

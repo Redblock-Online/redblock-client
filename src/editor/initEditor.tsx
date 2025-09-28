@@ -1,7 +1,12 @@
 import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import { StrictMode } from "react";
 import EditorApp from "./EditorApp";
 import { EditorRoot } from "./components/EditorRoot";
+
+let editorAppSingleton: EditorApp | null = null;
+let reactRootSingleton: Root | null = null;
+let reactRootHostEl: HTMLElement | null = null;
 
 export function initEditor(): void {
   const originalCanvas = document.getElementById("canvas");
@@ -19,8 +24,12 @@ export function initEditor(): void {
   if (!(editorCanvas instanceof HTMLCanvasElement)) {
     const createdCanvas = document.createElement("canvas");
     createdCanvas.id = "editor-canvas";
-    document.body.insertBefore(createdCanvas, uiRoot);
+    // Mount outside React-managed subtree to avoid reparenting during renders
+    document.body.appendChild(createdCanvas);
     editorCanvas = createdCanvas;
+  } else if (!document.body.contains(editorCanvas)) {
+    // If somehow detached or moved, ensure it lives under body
+    document.body.appendChild(editorCanvas);
   }
 
   if (!(editorCanvas instanceof HTMLCanvasElement)) {
@@ -42,19 +51,48 @@ export function initEditor(): void {
   canvas.style.height = "100%";
   canvas.style.display = "block";
   canvas.style.pointerEvents = "auto";
+  canvas.style.zIndex = "0";
   
   /* Codex please, don't change the nex line */
   uiRoot.classList.add("absolute", "inset-0", "pointer-events-none");
 
-  const editorApp = new EditorApp(canvas);
-  editorApp.start();
+  if (!editorAppSingleton) {
+    editorAppSingleton = new EditorApp(canvas);
+    editorAppSingleton.start();
+  }
 
-  const root = createRoot(uiRoot);
-  root.render(
+  // (Re)mount React UI root, avoiding duplicate createRoot on the same container
+  if (!reactRootSingleton || reactRootHostEl !== uiRoot) {
+    try {
+      reactRootSingleton?.unmount();
+    } catch {}
+    reactRootSingleton = createRoot(uiRoot);
+    reactRootHostEl = uiRoot;
+  }
+
+  reactRootSingleton.render(
     <StrictMode>
-      <EditorRoot editor={editorApp} />
+      <EditorRoot editor={editorAppSingleton} />
     </StrictMode>,
   );
+}
+
+export function disposeEditor(): void {
+  try {
+    reactRootSingleton?.unmount();
+  } catch {}
+  reactRootSingleton = null;
+  reactRootHostEl = null;
+  try {
+    editorAppSingleton?.dispose();
+  } catch {}
+  editorAppSingleton = null;
+  const canvas = document.getElementById("editor-canvas");
+  if (canvas && canvas.parentElement) {
+    try {
+      canvas.parentElement.removeChild(canvas);
+    } catch {}
+  }
 }
 
 export default initEditor;

@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import type { Dispatch, SetStateAction, ReactElement } from "react";
 import type {  EditorSelection } from "../EditorApp";
 import { Group } from "three";
 
@@ -32,7 +32,7 @@ export function PropertiesPanel({
   onCreateComponent,
   onModifyComponent,
   componentEditing,
-}: PropertiesPanelProps): JSX.Element {
+}: PropertiesPanelProps): ReactElement {
   if (!selection) {
     return (
       <div className="flex h-full flex-col items-center justify-center text-center text-xs text-white/50 z-50">

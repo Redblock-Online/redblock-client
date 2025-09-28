@@ -1,6 +1,7 @@
 let csrfReady = false;
 
-const BASE = import.meta.env.VITE_BACKEND_URL?.replace(/\/$/, "") || "";
+const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, "");
+const BASE = backendBase || "";
 
 export function getCookie(name: string): string | null {
   const value = `; ${document.cookie}`;
