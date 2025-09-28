@@ -32,7 +32,7 @@ export default class WSManager {
   }
 
   private connect() {
-    const wsServer = import.meta.env.VITE_WS_SERVER;
+    const wsServer = process.env.NEXT_PUBLIC_WS_SERVER;
     if (!wsServer) {
       console.error("WS_SERVER is not defined");
       /* Use production by default */

@@ -1,5 +1,5 @@
 # Redblock Online 
-## Aim trainer for shooters, (in ThreeJS)
+## Aim trainer for shooters, (in ThreeJS + Next.js)
 
 <h3 align="center">🎮 Game Preview</h3>
 
@@ -23,12 +23,6 @@ npm run dev
 
 ```bash
 npm run build
-```
-
-## How to preview
-
-```bash
-npm run preview
 ```
 
 ---
@@ -56,21 +50,21 @@ Use the **sensitivity slider** in the start screen to fine-tune mouse sensitivit
 - FPS-style WASD movement with adjustable sensitivity and inertia.
 - Built-in timer that stops automatically when the last target disappears.
 - Post-processing pipeline (`EffectComposer`, FXAA pass) ready for expansion.
-- Fully written in **TypeScript** + **Three.js** and bundled with **Vite**.
+- Fully written in **TypeScript** + **Three.js** and powered by **Next.js**.
 
 ## 🗂️ Project Structure
 
 ```text
 three-shooter/
+├── app/                  # Next.js App Router routes (game & editor)
 ├── public/               # Static assets (models, textures, icons…)
 ├── src/
 │   ├── core/             # Engine wrappers (Camera, Renderer, Loop, App)
+│   ├── next/             # Client bootstrappers for Next.js routes
 │   ├── objects/          # 3D objects & generators (Cube, Pistol …)
 │   ├── scenes/           # Three.js scenes (MainScene)
 │   ├── systems/          # Behaviour modules (ControlsWithMovement)
-│   ├── ui/               # DOM-based UI overlays (StartScreen)
-│   └── main.ts           # Vite entry point
-├── index.html            # Game container & UI markup
+│   └── ui/               # DOM-based UI overlays (StartScreen)
 ├── package.json          # NPM scripts & deps
 └── tsconfig.json         # TypeScript configuration
 ```
@@ -79,7 +73,7 @@ three-shooter/
 
 - **Three.js** – WebGL abstraction layer for 3D rendering.
 - **TypeScript** – Static typing for safer code.
-- **Vite** – Lightning-fast dev server & bundler.
+- **Next.js** – Hybrid React framework for routing and bundling.
 - **Post-processing Addons** – `EffectComposer`, `RenderPass`, `FXAAShader`.
 
 ## 🔧 Configuration
@@ -94,9 +88,9 @@ three-shooter/
 
 | Script            | Purpose                               |
 | ----------------- | ------------------------------------- |
-| `npm run dev`     | Local dev server on `localhost:5173`. |
-| `npm run build`   | Production build to `dist/`.          |
-| `npm run preview` | Preview the production build locally. |
+| `npm run dev`     | Local dev server on `localhost:3000`. |
+| `npm run build`   | Create an optimized production build. |
+| `npm start`       | Run the production build locally.     |
 
 ## 📦 Assets
 
@@ -106,10 +100,5 @@ three-shooter/
 
 ## 🚀 Deployment
 
-The final build is static and can be deployed to any static host (Netlify, GitHub Pages, Vercel…).
-
-```bash
-npm run build
-# copy dist/ to your preferred host
-```
+The production build is a standard Next.js application and can be deployed to any platform that supports Node.js (Vercel, Netlify, Render, etc.). Use `npm run build` followed by `npm start` (or your platform's deployment command).
 

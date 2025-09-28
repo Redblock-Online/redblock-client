@@ -1,24 +1,24 @@
 **Redblock Client — Agents Guide**
 
-This document helps contributors and AI agents work effectively in this repo. It reflects current tooling and conventions used by the Three.js + Vite + React TypeScript client.
+This document helps contributors and AI agents work effectively in this repo. It reflects current tooling and conventions used by the Three.js + Next.js + React TypeScript client.
 
 **Project Overview**
-- **Stack:** Vite, TypeScript (strict), Three.js, React UI.
-- **Entrypoints:** `index.html`, `src/main.ts`.
+- **Stack:** Next.js (App Router), TypeScript (strict), Three.js, React UI.
+- **Entrypoints:** `app/page.tsx` (game), `app/editor/page.tsx` (editor), bootstrappers in `src/next/`.
 - **Aliases:** `@/*` → `src/*` (see `tsconfig.json:paths`).
-- **Scripts:** `npm run dev`, `npm run build`, `npm run preview` (see `package.json`).
+- **Scripts:** `npm run dev`, `npm run build`, `npm start` (see `package.json`).
 
 **Run Commands**
 - **Install:** `npm install`
-- **Dev server:** `npm run dev` (serves on `localhost:5173` by default)
-- **Build:** `npm run build` (outputs to `dist/`)
-- **Preview build:** `npm run preview`
+- **Dev server:** `npm run dev` (serves on `localhost:3000` by default)
+- **Build:** `npm run build` (Next.js production build)
+- **Preview build:** `npm start`
 
 **Dev Environment**
 - **Node:** Use a recent LTS (≥ 23). Prefer `nvm` to match local dev.
 - **Editor:** Enable TypeScript strict checks. Respect path alias `@/*`.
-- **Vite React plugin:** Already configured in `vite.config.ts`.
-- **Env vars:** `VITE_WS_SERVER` overrides the default WebSocket URL in `src/utils/ws/WSManager.ts`.
+- **Next.js:** App Router + React 19 client components. Use client-only modules for DOM APIs.
+- **Env vars:** `NEXT_PUBLIC_WS_SERVER` overrides the default WebSocket URL in `src/utils/ws/WSManager.ts`.
 
 **Codebase Map**
 - `src/core/` — engine wrappers (`Camera`, `Renderer`, `Loop`, `App`).
@@ -48,11 +48,11 @@ This document helps contributors and AI agents work effectively in this repo. It
 
 **Testing**
 - No test suite is configured yet. If you add tests, prefer Vitest.
-- Suggested setup: `npm i -D vitest @testing-library/react @testing-library/user-event jsdom` and wire `vite.config.ts` `test` block.
+- Suggested setup: `npm i -D vitest @testing-library/react @testing-library/user-event jsdom` and wire a custom Next-compatible `vitest.config.ts`.
 - Keep unit tests close to the code under `src/**/__tests__`.
 
 **Linting & Formatting**
-- ESLint/Prettier are not configured in this repo. If you introduce them, scope changes to config + minimal autofix; avoid large reformat-only PRs.
+- ESLint is configured via `next lint`. If you introduce Prettier, scope changes to config + minimal autofix; avoid large reformat-only PRs.
 
 **PR Guidelines**
 - **Title:** `[client] <short, imperative title>`
