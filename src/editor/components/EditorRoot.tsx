@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { Euler, Group, Quaternion, Vector3 } from "three";
 import EditorApp, { type EditorBlock, type EditorSelection, type SelectionTransform } from "../EditorApp";
 import { Object3D, Quaternion as ThreeQuaternion } from "three";
@@ -39,7 +39,7 @@ const cloneTransformSnapshot = (input: SelectionTransform): SelectionTransform =
   scale: input.scale.clone(),
 });
 
-export function EditorRoot({ editor }: { editor: EditorApp }): JSX.Element {
+export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const [activeItem, setActiveItem] = useState<EditorItem | null>(null);
   const [components, setComponents] = useState<SavedComponent[]>([]);
   const [selection, setSelection] = useState<EditorSelection>(null);

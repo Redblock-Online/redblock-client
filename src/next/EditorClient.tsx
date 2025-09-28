@@ -7,15 +7,22 @@ export default function EditorClient() {
     let disposed = false;
 
     const start = async () => {
-      const { initEditor } = await import("@/editor/initEditor");
+      const { initEditor, disposeEditor } = await import("@/editor/initEditor");
       if (disposed) return;
       initEditor();
+      return disposeEditor;
     };
 
-    void start();
+    let cleanup: (() => void) | undefined;
+    start().then((fn) => {
+      cleanup = fn;
+    });
 
     return () => {
       disposed = true;
+      try {
+        cleanup?.();
+      } catch {}
     };
   }, []);
 

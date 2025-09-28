@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactElement } from "react";
 import {
   AmbientLight,
   BoxGeometry,
@@ -23,7 +23,7 @@ import { getComponent } from "../componentsStore";
 
 type BlockPreviewProps = { item: EditorItem };
 
-export function BlockPreview({ item }: BlockPreviewProps): JSX.Element {
+export function BlockPreview({ item }: BlockPreviewProps): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {

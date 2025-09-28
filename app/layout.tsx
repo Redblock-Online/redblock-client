@@ -51,8 +51,11 @@ export default function RootLayout({
   children: ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="relative h-full overflow-hidden bg-[#f8f8f8] font-mono text-black">
+    <html lang="en" suppressHydrationWarning>
+      <body
+        suppressHydrationWarning
+        className="relative h-full overflow-hidden bg-[#f8f8f8] font-mono text-black"
+      >
         {children}
       </body>
     </html>

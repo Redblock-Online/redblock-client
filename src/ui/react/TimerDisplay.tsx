@@ -219,7 +219,7 @@ function renderHintText(text: string) {
   const parts = text.split(numberFragment);
   const matches = text.match(numberFragment) ?? [];
 
-  const nodes: Array<JSX.Element | string> = [];
+  const nodes: Array<ReactElement | string> = [];
   for (let i = 0; i < parts.length; i++) {
     if (parts[i]) nodes.push(parts[i]);
     if (i < matches.length) {
@@ -233,3 +233,4 @@ function renderHintText(text: string) {
 
   return nodes.length > 0 ? nodes : text;
 }
+import type { ReactElement } from "react";
