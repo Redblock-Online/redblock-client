@@ -3,6 +3,14 @@ import { Pass, FullScreenQuad } from "three/examples/jsm/postprocessing/Pass.js"
 
 type Uniforms = { [key: string]: THREE.IUniform };
 
+function getCameraNearFar(camera: THREE.Camera): { near: number; far: number } {
+  // Perspective & Orthographic cameras expose near/far
+  const asAny = camera as unknown as { near?: number; far?: number };
+  const near = typeof asAny.near === "number" ? asAny.near : 0.1;
+  const far = typeof asAny.far === "number" ? asAny.far : 1000;
+  return { near, far };
+}
+
 export default class CustomOutlinePass extends Pass {
   scene: THREE.Scene;
   camera: THREE.Camera;
@@ -57,12 +65,13 @@ export default class CustomOutlinePass extends Pass {
 
     const outlineColor = new THREE.Color(options?.outlineColor ?? 0x000000);
 
+    const { near: initNear, far: initFar } = getCameraNearFar(this.camera);
     this.uniforms = {
       tDiffuse:   { value: null },                              // scene color
       tDepth:     { value: this.depthTexture },                  // depth from rtNormalsDepth
       tNormal:    { value: this.rtNormalsDepth.texture },        // normals color
-      cameraNear: { value: (this.camera as any).near ?? 0.1 },
-      cameraFar:  { value: (this.camera as any).far ?? 1000 },
+      cameraNear: { value: initNear },
+      cameraFar:  { value: initFar },
       resolution: { value: new THREE.Vector2(width, height) },
 
       // Depth edges
@@ -196,8 +205,9 @@ export default class CustomOutlinePass extends Pass {
     this.uniforms.tDiffuse.value = readBuffer.texture;
     this.uniforms.tDepth.value   = this.depthTexture;
     this.uniforms.tNormal.value  = this.rtNormalsDepth.texture;
-    this.uniforms.cameraNear.value = (this.camera as any).near;
-    this.uniforms.cameraFar.value  = (this.camera as any).far;
+    const { near, far } = getCameraNearFar(this.camera);
+    this.uniforms.cameraNear.value = near;
+    this.uniforms.cameraFar.value  = far;
 
     if (this.renderToScreen) {
       renderer.setRenderTarget(null);
@@ -221,7 +231,7 @@ export default class CustomOutlinePass extends Pass {
     this.depthTexture = new THREE.DepthTexture(w, h);
     this.depthTexture.type = THREE.UnsignedShortType;
     this.depthTexture.format = THREE.DepthFormat;
-    (this.rtNormalsDepth as any).depthTexture = this.depthTexture;
+    this.rtNormalsDepth.depthTexture = this.depthTexture;
 
     this.uniforms.tDepth.value = this.depthTexture;
     (this.uniforms.resolution.value as THREE.Vector2).set(w, h);

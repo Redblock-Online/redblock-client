@@ -13,6 +13,12 @@ export type PlayerCore = {
   local_player_position_z: number;
 };
 
+type PlayerUpdateMessage = PlayerCore & { type: "playerUpdate" };
+type AssignedMessage = PlayerCore & { type: "assigned" };
+type PlayerLeftMessage = { type: "playerLeft"; id: string };
+type ErrorMessage = { type: "error"; message?: string; error?: unknown };
+type InboundMessage = AssignedMessage | PlayerLeftMessage | ErrorMessage | PlayerUpdateMessage;
+
 export default class WSManager {
   private ws: WebSocket | null = null;
   private me: PlayerCore | null = null;
@@ -32,7 +38,7 @@ export default class WSManager {
   }
 
   private connect() {
-    const wsServer = import.meta.env.VITE_WS_SERVER;
+    const wsServer = process.env.NEXT_PUBLIC_WS_SERVER;
     if (!wsServer) {
       console.error("WS_SERVER is not defined");
       /* Use production by default */
@@ -46,9 +52,11 @@ export default class WSManager {
     };
 
     this.ws.onmessage = (event) => {
-      const message = JSON.parse(event.data);
+      const raw = typeof event.data === "string" ? event.data : String(event.data);
+      const message = JSON.parse(raw) as InboundMessage;
       if (message.type === "playerUpdate") {
-        this.messageQueue.set(message.id, message);
+        const update = message as PlayerUpdateMessage;
+        this.messageQueue.set(update.id, update);
       } else {
         this.handleMessage(message);
       }
@@ -64,7 +72,7 @@ export default class WSManager {
     this.neighbors.set(data.id, { ...(existing || {}), ...data });
   }
 
-  private handleMessage(message: any) {
+  private handleMessage(message: InboundMessage) {
     if (message.type === "assigned") {
       console.log("Assigned");
       this.setMe(message);
