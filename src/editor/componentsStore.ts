@@ -6,7 +6,7 @@ export type ComponentMemberTransform = {
 
 export type SavedComponent = {
   id: string; // e.g., comp-1
-  label: string; // human label shown in library
+  label: string; // human label shown in the Components panel
   members: ComponentMemberTransform[]; // transforms are local to the component root
 };
 
@@ -58,4 +58,3 @@ function nextComponentId(list: SavedComponent[]): string {
   }
   return `comp-${max + 1}`;
 }
-

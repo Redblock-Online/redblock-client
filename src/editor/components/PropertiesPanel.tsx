@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction, ReactElement } from "react";
-import type {  EditorSelection } from "../EditorApp";
+import type { EditorSelection } from "../types";
 import { Group } from "three";
+import { AxisInput } from "./AxisInput";
 
 type VectorState = { x: number; y: number; z: number };
 
@@ -17,6 +18,7 @@ type PropertiesPanelProps = {
   onCreateComponent?: () => void;
   onModifyComponent?: () => void;
   componentEditing?: boolean;
+  onDeleteSelection?: () => void;
 };
 
 export function PropertiesPanel({
@@ -32,6 +34,7 @@ export function PropertiesPanel({
   onCreateComponent,
   onModifyComponent,
   componentEditing,
+  onDeleteSelection,
 }: PropertiesPanelProps): ReactElement {
   if (!selection) {
     return (
@@ -59,6 +62,14 @@ export function PropertiesPanel({
           >
             Group
           </button>
+          {onDeleteSelection ? (
+            <button
+              className="h-9 rounded border border-rb-border bg-white px-3 text-xs font-semibold uppercase tracking-widest text-rb-text hover:bg-black hover:text-white"
+              onClick={onDeleteSelection}
+            >
+              Delete
+            </button>
+          ) : null}
           {onModifyComponent && componentEditing ? (
             <button
               className="h-9 rounded border border-rb-border bg-white px-3 text-xs font-semibold uppercase tracking-widest text-rb-text hover:bg-black hover:text-white"
@@ -101,69 +112,73 @@ export function PropertiesPanel({
               {componentEditing ? "Finish Editing" : "Modify Component"}
             </button>
           ) : null}
+          {onDeleteSelection ? (
+            <button
+              className="h-9 rounded border border-rb-border bg-white px-3 text-xs font-semibold uppercase tracking-widest text-rb-text hover:bg-black hover:text-white"
+              onClick={onDeleteSelection}
+            >
+              Delete
+            </button>
+          ) : null}
         </div>
-      ) : null}
+      ) : (
+        <div className="flex flex-col gap-2">
+          {onDeleteSelection ? (
+            <button
+              className="h-9 rounded border border-rb-border bg-white px-3 text-xs font-semibold uppercase tracking-widest text-rb-text hover:bg-black hover:text-white"
+              onClick={onDeleteSelection}
+            >
+              Delete
+            </button>
+          ) : null}
+        </div>
+      )}
 
       <section>
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-rb-muted">Position</h3>
-        <div className="mt-3 flex flex-col gap-2">
+        <div className="mt-2 grid grid-cols-3 gap-2">
           {(["x", "y", "z"] as const).map((axis) => (
-            <label key={axis} className="flex items-center justify-between gap-3">
-              <span className="w-6 text-[11px] uppercase text-rb-muted">{axis}</span>
-              <input
-                type="number"
-                value={Number(positionState[axis].toFixed(2))}
-                step={0.1}
-                onChange={(event) => {
-                  const value = Number.parseFloat(event.target.value);
-                  onPositionChange((prev) => ({ ...prev, [axis]: Number.isNaN(value) ? prev[axis] : value }));
-                }}
-                className="h-8 w-24 rounded border border-rb-border bg-white px-2 text-right text-rb-text"
-              />
-            </label>
+            <AxisInput
+              key={axis}
+              label={axis}
+              value={positionState[axis]}
+              step={0.1}
+              precision={2}
+              onChange={(next) => onPositionChange((prev) => ({ ...prev, [axis]: next }))}
+            />
           ))}
         </div>
       </section>
 
       <section>
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-rb-muted">Scale</h3>
-        <div className="mt-3 flex flex-col gap-2">
+        <div className="mt-2 grid grid-cols-3 gap-2">
           {(["x", "y", "z"] as const).map((axis) => (
-            <label key={axis} className="flex items-center justify-between gap-3">
-              <span className="w-6 text-[11px] uppercase text-rb-muted">{axis}</span>
-              <input
-                type="number"
-                value={Number(scaleState[axis].toFixed(2))}
-                min={0.1}
-                step={0.1}
-                onChange={(event) => {
-                  const value = Number.parseFloat(event.target.value);
-                  onScaleChange((prev) => ({ ...prev, [axis]: Number.isNaN(value) ? prev[axis] : value }));
-                }}
-                className="h-8 w-24 rounded border border-rb-border bg-white px-2 text-right text-rb-text"
-              />
-            </label>
+            <AxisInput
+              key={axis}
+              label={axis}
+              value={scaleState[axis]}
+              step={0.1}
+              min={0.1}
+              precision={2}
+              onChange={(next) => onScaleChange((prev) => ({ ...prev, [axis]: next }))}
+            />
           ))}
         </div>
       </section>
 
       <section>
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-rb-muted">Rotation (°)</h3>
-        <div className="mt-3 flex flex-col gap-2">
+        <div className="mt-2 grid grid-cols-3 gap-2">
           {(["x", "y", "z"] as const).map((axis) => (
-            <label key={axis} className="flex items-center justify-between gap-3">
-              <span className="w-6 text-[11px] uppercase text-rb-muted">{axis}</span>
-              <input
-                type="number"
-                value={Number(rotationState[axis].toFixed(1))}
-                step={1}
-                onChange={(event) => {
-                  const value = Number.parseFloat(event.target.value);
-                  onRotationChange((prev) => ({ ...prev, [axis]: Number.isNaN(value) ? prev[axis] : value }));
-                }}
-                className="h-8 w-24 rounded border border-rb-border bg-white px-2 text-right text-rb-text"
-              />
-            </label>
+            <AxisInput
+              key={axis}
+              label={axis}
+              value={rotationState[axis]}
+              step={1}
+              precision={1}
+              onChange={(next) => onRotationChange((prev) => ({ ...prev, [axis]: next }))}
+            />
           ))}
         </div>
       </section>

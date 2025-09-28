@@ -3,6 +3,7 @@ import type { Root } from "react-dom/client";
 import { StrictMode } from "react";
 import EditorApp from "./EditorApp";
 import { EditorRoot } from "./components/EditorRoot";
+import { AUTO_SAVE_SCENARIO_NAME, findScenarioByName, saveScenario } from "./scenarioStore";
 
 let editorAppSingleton: EditorApp | null = null;
 let reactRootSingleton: Root | null = null;
@@ -59,6 +60,18 @@ export function initEditor(): void {
   if (!editorAppSingleton) {
     editorAppSingleton = new EditorApp(canvas);
     editorAppSingleton.start();
+
+    try {
+      const autosave = findScenarioByName(AUTO_SAVE_SCENARIO_NAME);
+      if (autosave) {
+        editorAppSingleton.importScenario(autosave.data);
+      } else {
+        const initial = editorAppSingleton.exportScenario(AUTO_SAVE_SCENARIO_NAME);
+        saveScenario(AUTO_SAVE_SCENARIO_NAME, initial);
+      }
+    } catch (error) {
+      console.error("Editor: failed to restore last saved scenario", error);
+    }
   }
 
   // (Re)mount React UI root, avoiding duplicate createRoot on the same container
