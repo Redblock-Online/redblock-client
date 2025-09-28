@@ -65,7 +65,6 @@ export function useTransformSession(
       return;
     }
 
-    const primary = session.targets[0];
     const updates: Array<{ id: string; transform: SelectionTransform }> = [];
 
     switch (session.mode) {
