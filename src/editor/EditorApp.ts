@@ -62,6 +62,9 @@ export default class EditorApp {
   private readonly components: ComponentManager;
 
   private leftButtonActive = false;
+  private isDragging = false;
+  private dragStartPoint: Vector3 | null = null;
+  private dragTargets: Array<{ id: string; origin: SelectionTransform }> = [];
   private animationFrame?: number;
   private lastFrameTime = 0;
 
@@ -100,6 +103,7 @@ export default class EditorApp {
 
     canvas.addEventListener("contextmenu", (event) => event.preventDefault());
     canvas.addEventListener("pointerdown", this.handlePointerDownCapture, true);
+    canvas.addEventListener("pointermove", this.handlePointerMoveCapture, true);
     canvas.addEventListener("pointerup", this.handlePointerUpCapture, true);
     canvas.addEventListener("pointercancel", this.handleWindowPointerUpCapture, true);
 
@@ -154,6 +158,7 @@ export default class EditorApp {
 
     window.removeEventListener("resize", this.handleResize);
     this.canvas.removeEventListener("pointerdown", this.handlePointerDownCapture, true);
+    this.canvas.removeEventListener("pointermove", this.handlePointerMoveCapture, true);
     this.canvas.removeEventListener("pointerup", this.handlePointerUpCapture, true);
     this.canvas.removeEventListener("pointercancel", this.handleWindowPointerUpCapture, true);
     window.removeEventListener("pointerup", this.handleWindowPointerUpCapture, true);
@@ -243,6 +248,11 @@ export default class EditorApp {
 
     let hit: EditorBlock | null = null;
     for (const result of intersects) {
+      // Ignore outline helpers and any line-only helpers
+      if (result.object instanceof LineSegments) {
+        continue;
+      }
+      // Only count actual Mesh or Group objects that belong to blocks
       const mesh = result.object as Object3D;
       const block = this.blocks.findBlockByMesh(mesh);
       if (!block) {
@@ -747,6 +757,26 @@ export default class EditorApp {
     if (event.button === 0) {
       this.leftButtonActive = true;
       this.controls.enabled = false;
+      // Prevent OrbitControls from attempting pointer capture
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      // Try to pick a block under the cursor; update selection accordingly
+      const additive = event.shiftKey || event.metaKey || event.ctrlKey;
+      const hit = this.pickBlock(event.clientX, event.clientY, additive);
+
+      // Start drag only if we hit something directly
+      const selection = this.getSelectionArray();
+      const shouldDrag = !!hit;
+      if (shouldDrag) {
+        const start = this.intersectGround(event.clientX, event.clientY);
+        if (start) {
+          this.isDragging = true;
+          this.dragStartPoint = start;
+          const ids = selection.map((b) => b.id);
+          this.dragTargets = this.getTransformsForIds(ids).map((entry) => ({ id: entry.id, origin: entry.transform }));
+        }
+      }
       return;
     }
 
@@ -755,10 +785,52 @@ export default class EditorApp {
     }
   };
 
+  private handlePointerMoveCapture = (event: PointerEvent): void => {
+    if (!this.isDragging || !this.leftButtonActive) {
+      return;
+    }
+    // Prevent OrbitControls gestures while dragging
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const current = this.intersectGround(event.clientX, event.clientY);
+    if (!current || !this.dragStartPoint || this.dragTargets.length === 0) {
+      return;
+    }
+
+    // Compute horizontal delta on XZ plane
+    const delta = new Vector3(
+      current.x - this.dragStartPoint.x,
+      0,
+      current.z - this.dragStartPoint.z,
+    );
+
+    const updates = this.dragTargets.map(({ id, origin }) => {
+      const newPos = origin.position.clone().add(delta);
+      // keep Y from origin to constrain movement to ground plane
+      newPos.y = origin.position.y;
+      return {
+        id,
+        transform: {
+          position: newPos,
+          rotation: origin.rotation.clone(),
+          scale: origin.scale.clone(),
+        },
+      };
+    });
+
+    this.applyTransformsForIds(updates);
+  };
+
   private handlePointerUpCapture = (event: PointerEvent): void => {
     if (event.button === 0 && this.leftButtonActive) {
       this.leftButtonActive = false;
       this.controls.enabled = true;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      // Finish any active drag
+      this.isDragging = false;
+      this.dragStartPoint = null;
+      this.dragTargets = [];
     }
   };
 
@@ -766,6 +838,10 @@ export default class EditorApp {
     if (event.button === 0 && this.leftButtonActive) {
       this.leftButtonActive = false;
       this.controls.enabled = true;
+      // Cancel drag if pointer released outside the canvas
+      this.isDragging = false;
+      this.dragStartPoint = null;
+      this.dragTargets = [];
     }
   };
 
