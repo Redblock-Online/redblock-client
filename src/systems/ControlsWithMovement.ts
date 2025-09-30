@@ -75,21 +75,31 @@ export default class Controls {
     this.domElement = domElement;
     this.wsManager = wsManager;
     this.getAmmountOfTargetsSelected = getAmmountOfTargetsSelected;
+
+    const VALORANT_M_YAW = 0.07; 
+    const DEG_TO_RAD = Math.PI / 180;
+    const valorantMultiplier = VALORANT_M_YAW * DEG_TO_RAD;
+
     // Initialize sensitivity from localStorage, fallback to default
     const saved = localStorage.getItem("mouseSensitivity");
     if (saved !== null) {
       const v = parseFloat(saved);
-      if (!Number.isNaN(v)) this.sensitivity = v * 0.0002;
+      if (!Number.isNaN(v)) {
+        this.sensitivity = v * valorantMultiplier;
+      }
     }
     // Bind input changes (works even if slider mounts later)
     const onSensitivityInput = (e: Event) => {
       const target = e.target as HTMLInputElement | null;
       if (target && target.id === "sensitivityRange") {
         const value = parseFloat(target.value);
-        if (!Number.isNaN(value)) this.sensitivity = value * 0.0002;
+        if (!Number.isNaN(value)) {
+          this.sensitivity = value * valorantMultiplier;
+        }
       }
     };
     document.addEventListener("input", onSensitivityInput, true);
+    
     this.camera.position.set(0, 0, 0);
     this.camera.rotation.set(0, 0, 0);
     this.pitchObject.add(this.camera);
