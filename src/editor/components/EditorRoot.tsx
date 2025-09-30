@@ -756,6 +756,14 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         }
       }
 
+      if (!transformMode && editor.isDraggingBlock()) {
+        if (key === "x" || key === "y" || key === "z") {
+          event.preventDefault();
+          editor.toggleDragAxis(key as "x" | "y" | "z");
+          return;
+        }
+      }
+
       if (key === "g" || key === "r" || key === "f") {
         const hasSelection = editor.getSelection() !== null || editor.getSelectionArray().length > 0;
         if (!hasSelection) {

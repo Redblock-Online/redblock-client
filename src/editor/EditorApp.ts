@@ -42,6 +42,16 @@ import type { SerializedScenario } from "./scenarioStore";
 const COMPONENT_MASTER_OUTLINE_COLOR = 0x9b5cff;
 const COMPONENT_INSTANCE_OUTLINE_COLOR = 0xff4dff;
 
+type DragAxisConstraint = "x" | "y" | "z" | null;
+
+const DRAG_AXIS_VECTORS = {
+  x: new Vector3(1, 0, 0),
+  y: new Vector3(0, 1, 0),
+  z: new Vector3(0, 0, 1),
+} as const;
+
+const DRAG_VERTICAL_SENSITIVITY = 0.02;
+
 export default class EditorApp {
   private readonly canvas: HTMLCanvasElement;
   private readonly renderer: WebGLRenderer;
@@ -63,10 +73,20 @@ export default class EditorApp {
 
   private leftButtonActive = false;
   private isDragging = false;
+  private draggingCursorApplied = false;
   private dragStartPoint: Vector3 | null = null;
   private dragTargets: Array<{ id: string; origin: SelectionTransform }> = [];
+  private dragAxisConstraint: DragAxisConstraint = null;
+  private dragPointerAccumulator = { x: 0, y: 0 };
+  private lastPointerEvent: { clientX: number; clientY: number } | null = null;
   private animationFrame?: number;
   private lastFrameTime = 0;
+  private readonly dragWorkingDelta = new Vector3();
+  private readonly dragTranslationDelta = new Vector3();
+  private readonly dragCameraRight = new Vector3();
+  private readonly dragCameraUp = new Vector3();
+  private readonly dragPointerWorld = new Vector3();
+  private readonly dragCameraQuaternion = new Quaternion();
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -122,12 +142,66 @@ export default class EditorApp {
     window.addEventListener("resize", this.handleResize);
   }
 
+  private setDraggingCursor(active: boolean): void {
+    if (active === this.draggingCursorApplied) {
+      return;
+    }
+    this.draggingCursorApplied = active;
+    this.canvas.style.cursor = active ? "pointer" : "default";
+  }
+
+  private resetDragPointerAccumulator(): void {
+    this.dragPointerAccumulator.x = 0;
+    this.dragPointerAccumulator.y = 0;
+  }
+
+  private resetDragStartFromPointer(): void {
+    if (!this.lastPointerEvent) {
+      return;
+    }
+    const nextStart = this.intersectGround(this.lastPointerEvent.clientX, this.lastPointerEvent.clientY);
+    if (nextStart) {
+      this.dragStartPoint = nextStart;
+    }
+  }
+
+  private refreshDragOrigins(): void {
+    if (this.dragTargets.length === 0) {
+      return;
+    }
+    const ids = this.dragTargets.map((target) => target.id);
+    const current = this.getTransformsForIds(ids);
+    this.dragTargets = current.map((entry) => ({ id: entry.id, origin: entry.transform }));
+  }
+
   public getCanvas(): HTMLCanvasElement {
     return this.canvas;
   }
 
   public getCamera(): PerspectiveCamera {
     return this.camera;
+  }
+
+  public isDraggingBlock(): boolean {
+    return this.isDragging;
+  }
+
+  public toggleDragAxis(axis: "x" | "y" | "z"): void {
+    if (!this.isDragging) {
+      return;
+    }
+    const next: DragAxisConstraint = this.dragAxisConstraint === axis ? null : axis;
+    if (next === this.dragAxisConstraint) {
+      return;
+    }
+    this.dragAxisConstraint = next;
+    this.resetDragPointerAccumulator();
+    this.refreshDragOrigins();
+    if (next === "y") {
+      this.dragStartPoint = null;
+    } else {
+      this.resetDragStartFromPointer();
+    }
   }
 
   public addSelectionListener(listener: SelectionListener): () => void {
@@ -761,6 +835,10 @@ export default class EditorApp {
       event.preventDefault();
       event.stopImmediatePropagation();
 
+      this.dragAxisConstraint = null;
+      this.resetDragPointerAccumulator();
+      this.lastPointerEvent = { clientX: event.clientX, clientY: event.clientY };
+
       // Try to pick a block under the cursor; update selection accordingly
       const additive = event.shiftKey || event.metaKey || event.ctrlKey;
       const hit = this.pickBlock(event.clientX, event.clientY, additive);
@@ -775,6 +853,8 @@ export default class EditorApp {
           this.dragStartPoint = start;
           const ids = selection.map((b) => b.id);
           this.dragTargets = this.getTransformsForIds(ids).map((entry) => ({ id: entry.id, origin: entry.transform }));
+          this.dragTranslationDelta.set(0, 0, 0);
+          this.setDraggingCursor(true);
         }
       }
       return;
@@ -792,26 +872,56 @@ export default class EditorApp {
     // Prevent OrbitControls gestures while dragging
     event.preventDefault();
     event.stopImmediatePropagation();
-    const current = this.intersectGround(event.clientX, event.clientY);
-    if (!current || !this.dragStartPoint || this.dragTargets.length === 0) {
+    this.lastPointerEvent = { clientX: event.clientX, clientY: event.clientY };
+
+    if (this.dragTargets.length === 0) {
       return;
     }
 
-    // Compute horizontal delta on XZ plane
-    const delta = new Vector3(
-      current.x - this.dragStartPoint.x,
-      0,
-      current.z - this.dragStartPoint.z,
-    );
+    const axis = this.dragAxisConstraint;
+    if (axis === "y") {
+      this.dragPointerAccumulator.x += event.movementX;
+      this.dragPointerAccumulator.y += event.movementY;
+
+      this.camera.getWorldQuaternion(this.dragCameraQuaternion);
+      this.dragCameraRight.set(1, 0, 0).applyQuaternion(this.dragCameraQuaternion);
+      this.dragCameraUp.set(0, 1, 0).applyQuaternion(this.dragCameraQuaternion);
+      this.dragPointerWorld
+        .copy(this.dragCameraRight)
+        .multiplyScalar(this.dragPointerAccumulator.x)
+        .addScaledVector(this.dragCameraUp, -this.dragPointerAccumulator.y);
+
+      const amount = this.dragPointerWorld.dot(DRAG_AXIS_VECTORS.y) * DRAG_VERTICAL_SENSITIVITY;
+      this.dragTranslationDelta.copy(DRAG_AXIS_VECTORS.y).multiplyScalar(amount);
+    } else {
+      const current = this.intersectGround(event.clientX, event.clientY);
+      if (!current) {
+        return;
+      }
+      if (!this.dragStartPoint) {
+        this.dragStartPoint = current;
+      }
+
+      this.dragWorkingDelta
+        .copy(current)
+        .sub(this.dragStartPoint)
+        .setY(0);
+
+      if (axis === "x") {
+        this.dragWorkingDelta.set(this.dragWorkingDelta.x, 0, 0);
+      } else if (axis === "z") {
+        this.dragWorkingDelta.set(0, 0, this.dragWorkingDelta.z);
+      }
+
+      this.dragTranslationDelta.copy(this.dragWorkingDelta);
+    }
 
     const updates = this.dragTargets.map(({ id, origin }) => {
-      const newPos = origin.position.clone().add(delta);
-      // keep Y from origin to constrain movement to ground plane
-      newPos.y = origin.position.y;
+      const position = origin.position.clone().add(this.dragTranslationDelta);
       return {
         id,
         transform: {
-          position: newPos,
+          position,
           rotation: origin.rotation.clone(),
           scale: origin.scale.clone(),
         },
@@ -822,7 +932,8 @@ export default class EditorApp {
   };
 
   private handlePointerUpCapture = (event: PointerEvent): void => {
-    if (event.button === 0 && this.leftButtonActive) {
+    const isCancel = event.type === "pointercancel";
+    if ((event.button === 0 || isCancel) && this.leftButtonActive) {
       this.leftButtonActive = false;
       this.controls.enabled = true;
       event.preventDefault();
@@ -831,17 +942,28 @@ export default class EditorApp {
       this.isDragging = false;
       this.dragStartPoint = null;
       this.dragTargets = [];
+      this.dragAxisConstraint = null;
+      this.resetDragPointerAccumulator();
+      this.lastPointerEvent = null;
+      this.dragTranslationDelta.set(0, 0, 0);
+      this.setDraggingCursor(false);
     }
   };
 
   private handleWindowPointerUpCapture = (event: PointerEvent): void => {
-    if (event.button === 0 && this.leftButtonActive) {
+    const isCancel = event.type === "pointercancel";
+    if ((event.button === 0 || isCancel) && this.leftButtonActive) {
       this.leftButtonActive = false;
       this.controls.enabled = true;
       // Cancel drag if pointer released outside the canvas
       this.isDragging = false;
       this.dragStartPoint = null;
       this.dragTargets = [];
+      this.dragAxisConstraint = null;
+      this.resetDragPointerAccumulator();
+      this.lastPointerEvent = null;
+      this.dragTranslationDelta.set(0, 0, 0);
+      this.setDraggingCursor(false);
     }
   };
 

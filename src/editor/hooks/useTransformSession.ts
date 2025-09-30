@@ -46,16 +46,22 @@ export function useTransformSession(
   releasePointerLock: () => void;
 } {
   const transformSessionRef = useRef<TransformSession | null>(null);
+  const pointerLockRequestedRef = useRef(false);
   const [transformMode, setTransformMode] = useState<TransformMode | null>(null);
   const [activeAxis, setActiveAxis] = useState<AxisConstraint>(null);
 
   const releasePointerLock = useCallback(() => {
+    pointerLockRequestedRef.current = false;
     if (typeof document === "undefined") {
       return;
     }
     const canvas = editor.getCanvas();
     if (document.pointerLockElement === canvas) {
-      document.exitPointerLock();
+      try {
+        document.exitPointerLock();
+      } catch {
+        // ignore pointer lock exit errors
+      }
     }
   }, [editor]);
 
@@ -247,9 +253,16 @@ export function useTransformSession(
       if (typeof document !== "undefined") {
         const canvas = editor.getCanvas();
         if (document.pointerLockElement !== canvas) {
+          pointerLockRequestedRef.current = true;
           try {
-            canvas.requestPointerLock();
+            const result = (canvas.requestPointerLock as unknown as () => void | Promise<void>)();
+            if (result && typeof (result as Promise<void>).catch === "function") {
+              (result as Promise<void>).catch(() => {
+                pointerLockRequestedRef.current = false;
+              });
+            }
           } catch {
+            pointerLockRequestedRef.current = false;
             // ignore pointer lock errors
           }
         }
@@ -289,7 +302,8 @@ export function useTransformSession(
     transformSessionRef.current = null;
     setTransformMode(null);
     setActiveAxis(null);
-  }, []);
+    releasePointerLock();
+  }, [releasePointerLock]);
 
   useEffect(() => {
     if (typeof document === "undefined") {
@@ -297,12 +311,29 @@ export function useTransformSession(
     }
     const canvas = editor.getCanvas();
     const handlePointerLockChange = () => {
-      if (document.pointerLockElement !== canvas && transformSessionRef.current) {
+      const lockedElement = document.pointerLockElement;
+      if (lockedElement === canvas) {
+        if (!pointerLockRequestedRef.current) {
+          try {
+            document.exitPointerLock();
+          } catch {
+            // ignore pointer lock exit errors
+          }
+        }
+        return;
+      }
+
+      pointerLockRequestedRef.current = false;
+      if (transformSessionRef.current) {
         finishTransform(false);
       }
     };
     document.addEventListener("pointerlockchange", handlePointerLockChange);
-    return () => document.removeEventListener("pointerlockchange", handlePointerLockChange);
+    document.addEventListener("pointerlockerror", handlePointerLockChange);
+    return () => {
+      document.removeEventListener("pointerlockchange", handlePointerLockChange);
+      document.removeEventListener("pointerlockerror", handlePointerLockChange);
+    };
   }, [editor, finishTransform]);
 
   return {
