@@ -42,6 +42,14 @@ import type { SerializedScenario } from "./scenarioStore";
 const COMPONENT_MASTER_OUTLINE_COLOR = 0x9b5cff;
 const COMPONENT_INSTANCE_OUTLINE_COLOR = 0xff4dff;
 
+export type DragCommitEntry = {
+  id: string;
+  before: SelectionTransform;
+  after: SelectionTransform;
+};
+
+type PointerUpListener = (event: PointerEvent, context: { dragged: boolean }) => void;
+
 export default class EditorApp {
   private readonly canvas: HTMLCanvasElement;
   private readonly renderer: WebGLRenderer;
@@ -60,6 +68,8 @@ export default class EditorApp {
   private readonly groups: GroupManager;
   private readonly movement: MovementController;
   private readonly components: ComponentManager;
+  private readonly pointerUpListeners = new Set<PointerUpListener>();
+  private readonly dragCommitListeners = new Set<(changes: DragCommitEntry[]) => void>();
 
   private leftButtonActive = false;
   private isDragging = false;
@@ -132,6 +142,20 @@ export default class EditorApp {
 
   public addSelectionListener(listener: SelectionListener): () => void {
     return this.selection.addListener(listener);
+  }
+
+  public addPointerUpListener(listener: PointerUpListener): () => void {
+    this.pointerUpListeners.add(listener);
+    return () => {
+      this.pointerUpListeners.delete(listener);
+    };
+  }
+
+  public addDragCommitListener(listener: (changes: DragCommitEntry[]) => void): () => void {
+    this.dragCommitListeners.add(listener);
+    return () => {
+      this.dragCommitListeners.delete(listener);
+    };
   }
 
   public start(): void {
@@ -753,6 +777,63 @@ export default class EditorApp {
     this.camera.updateProjectionMatrix();
   };
 
+  private emitPointerUp(event: PointerEvent, context: { dragged: boolean }): void {
+    for (const listener of this.pointerUpListeners) {
+      listener(event, context);
+    }
+  }
+
+  private emitDragCommit(changes: DragCommitEntry[]): void {
+    if (changes.length === 0) {
+      return;
+    }
+    for (const listener of this.dragCommitListeners) {
+      listener(changes.map((entry) => ({
+        id: entry.id,
+        before: cloneTransform(entry.before),
+        after: cloneTransform(entry.after),
+      })));
+    }
+  }
+
+  private collectDragChanges(targets: Array<{ id: string; origin: SelectionTransform }>): DragCommitEntry[] {
+    if (targets.length === 0) {
+      return [];
+    }
+    const ids = targets.map((target) => target.id);
+    const current = this.getTransformsForIds(ids);
+    const changes: DragCommitEntry[] = [];
+    for (const target of targets) {
+      const currentEntry = current.find((entry) => entry.id === target.id);
+      if (!currentEntry) {
+        continue;
+      }
+      if (hasTransformChanged(target.origin, currentEntry.transform)) {
+        changes.push({
+          id: target.id,
+          before: cloneTransform(target.origin),
+          after: cloneTransform(currentEntry.transform),
+        });
+      }
+    }
+    return changes;
+  }
+
+  private finalizePointerRelease(event: PointerEvent, commit: boolean): void {
+    const wasDragging = this.isDragging;
+    const dragTargets = this.dragTargets;
+    this.isDragging = false;
+    this.dragStartPoint = null;
+    this.dragTargets = [];
+
+    if (commit && wasDragging) {
+      const changes = this.collectDragChanges(dragTargets);
+      this.emitDragCommit(changes);
+    }
+
+    this.emitPointerUp(event, { dragged: wasDragging });
+  }
+
   private handlePointerDownCapture = (event: PointerEvent): void => {
     if (event.button === 0) {
       this.leftButtonActive = true;
@@ -827,21 +908,17 @@ export default class EditorApp {
       this.controls.enabled = true;
       event.preventDefault();
       event.stopImmediatePropagation();
-      // Finish any active drag
-      this.isDragging = false;
-      this.dragStartPoint = null;
-      this.dragTargets = [];
+      this.finalizePointerRelease(event, true);
     }
   };
 
   private handleWindowPointerUpCapture = (event: PointerEvent): void => {
-    if (event.button === 0 && this.leftButtonActive) {
+    const isPrimaryButton = event.button === 0 || event.type === "pointercancel";
+    if (isPrimaryButton && this.leftButtonActive) {
       this.leftButtonActive = false;
       this.controls.enabled = true;
-      // Cancel drag if pointer released outside the canvas
-      this.isDragging = false;
-      this.dragStartPoint = null;
-      this.dragTargets = [];
+      const commit = event.type === "pointerup";
+      this.finalizePointerRelease(event, commit);
     }
   };
 
@@ -877,4 +954,26 @@ export default class EditorApp {
     }
     return ray.origin.clone().add(ray.direction.clone().multiplyScalar(t));
   }
+}
+
+function cloneTransform(input: SelectionTransform): SelectionTransform {
+  return {
+    position: input.position.clone(),
+    rotation: input.rotation.clone(),
+    scale: input.scale.clone(),
+  };
+}
+
+function hasTransformChanged(before: SelectionTransform, after: SelectionTransform): boolean {
+  return (
+    Math.abs(after.position.x - before.position.x) > 1e-6 ||
+    Math.abs(after.position.y - before.position.y) > 1e-6 ||
+    Math.abs(after.position.z - before.position.z) > 1e-6 ||
+    Math.abs(after.rotation.x - before.rotation.x) > 1e-6 ||
+    Math.abs(after.rotation.y - before.rotation.y) > 1e-6 ||
+    Math.abs(after.rotation.z - before.rotation.z) > 1e-6 ||
+    Math.abs(after.scale.x - before.scale.x) > 1e-6 ||
+    Math.abs(after.scale.y - before.scale.y) > 1e-6 ||
+    Math.abs(after.scale.z - before.scale.z) > 1e-6
+  );
 }
