@@ -191,12 +191,15 @@ export default class Controls {
     // Next send not before 1/20s
     this.nextSendAt = now + 1000 / 20;
   }
+
   private initKeyboardListeners() {
     document.addEventListener("keydown", (e) => {
       if (this.paused) return;
-      this.keysPressed[e.key.toLowerCase()] = true;
 
-      if (e.key.toLowerCase() === "c") {
+      const key = e.key.toLowerCase();
+      this.keysPressed[key] = true;
+
+      if (key === "c") {
         this.isCrouching = true;
       }
 
@@ -207,9 +210,11 @@ export default class Controls {
 
     document.addEventListener("keyup", (e) => {
       if (this.paused) return;
-      this.keysPressed[e.key.toLowerCase()] = false;
 
-      if (e.key.toLowerCase() === "c") {
+      const key = e.key.toLowerCase();
+      this.keysPressed[key] = false;
+
+      if (key === "c") {
         this.isCrouching = false;
       }
     });
@@ -285,10 +290,15 @@ export default class Controls {
     targetDirection.applyQuaternion(this.yawObject.quaternion);
     targetDirection.y = 0;
 
-    this.velocity.lerp(
-      targetDirection.multiplyScalar(effectiveSpeed),
-      this.acceleration
-    );
+    const desiredVel = targetDirection.clone().multiplyScalar(effectiveSpeed);
+    const bothLateralPressed = !!this.keysPressed["a"] && !!this.keysPressed["d"];
+
+    if (bothLateralPressed) {
+      this.velocity.set(0, 0, 0)
+    } else {
+      this.velocity.lerp(desiredVel, this.acceleration);
+    }
+   
     this.velocity.multiplyScalar(Math.pow(this.damping, deltaTime));
     this.yawObject.position.addScaledVector(this.velocity, deltaTime);
 
