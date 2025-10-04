@@ -598,6 +598,38 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     return () => window.removeEventListener("pointermove", handlePointerMove);
   }, [transformMode, updatePointerDelta]);
 
+  useEffect(() => {
+    const removeListener = editor.addPointerUpListener((event, context) => {
+      if (event.type !== "pointerup" || event.button !== 0) {
+        return;
+      }
+      if (context.dragged) {
+        return;
+      }
+      if (transformMode) {
+        finishTransform(true);
+      }
+    });
+    return removeListener;
+  }, [editor, finishTransform, transformMode]);
+
+  useEffect(() => {
+    const removeListener = editor.addDragCommitListener((changes) => {
+      if (changes.length === 0) {
+        return;
+      }
+      if (changes.length === 1) {
+        const [entry] = changes;
+        pushHistory({ type: "transform", id: entry.id, before: entry.before, after: entry.after });
+        applyTransformToState(entry.after);
+      } else {
+        pushHistory({ type: "multi-transform", entries: changes });
+        applyTransformToState(changes[0]?.after ?? null);
+      }
+    });
+    return removeListener;
+  }, [applyTransformToState, editor, pushHistory]);
+
   // Clipboard helpers must be declared before effects that depend on them
   const copySelection = useCallback(() => {
     const currentSelection = selection
