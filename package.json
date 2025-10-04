@@ -6,6 +6,7 @@
     "dev": "next dev -p 3001",
     "build": "next build",
     "build:test": "dotenv -e .env.test -- next build",
+    "prebuild:test": "node -e \"require('fs').rmSync('.next',{recursive:true,force:true});\"",
     "build:prod": "dotenv -e .env.production -- next build",
     "start": "next start -p 3001",
     "start:test": "dotenv -e .env.test -- next start -p 3001",
@@ -13,7 +14,9 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "lint-staged": "lint-staged",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@types/node": "24.5.2",
@@ -24,16 +27,21 @@
     "@typescript-eslint/parser": "^7.16.1",
     "@vitest/browser": "^3.2.4",
     "@vitest/coverage-v8": "^3.2.4",
+    "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "dotenv-cli": "^10.0.0",
     "eslint": "^8.57.1",
     "eslint-config-next": "^15.0.4",
     "husky": "^9.1.6",
     "lint-staged": "^15.2.8",
-    "playwright": "^1.55.1",
     "postcss": "^8.4.41",
     "tailwindcss": "^3.4.10",
-    "typescript": "~5.8.3"
+    "typescript": "~5.8.3",
+    "vitest": "^3.2.4",
+    "jsdom": "^25.0.1",
+    "@testing-library/react": "^16.0.1",
+    "@testing-library/user-event": "^14.6.1",
+    "@testing-library/jest-dom": "^6.6.3"
   },
   "dependencies": {
     "gsap": "^3.13.0",
