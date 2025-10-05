@@ -1,4 +1,5 @@
 import { Group, Mesh, MeshToonMaterial, MeshBasicMaterial, Camera, Euler, Vector3, BoxGeometry, CylinderGeometry } from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import gsap from "gsap";
 
 export default class Pistol extends Group {
@@ -35,23 +36,48 @@ export default class Pistol extends Group {
   constructor(camera: Camera, callback?: (pistol: Pistol) => void) {
     super();
     this.camera = camera;
-    this.prevRotationY = camera.rotation.y; // Initialize with current camera rotation
+    this.prevRotationY = camera.rotation.y;
 
     // set initial transform
     this.position.copy(this.basePos);
     this.rotation.copy(this.baseRot);
     this.scale.set(0.1, 0.1, 0.1);
 
-    // Create low poly pistol
-    this.createLowPolyPistol();
-    
-    // Initialize previous camera position correctly
-    camera.getWorldPosition(this.prevCameraPos);
-    
-    // Call callback immediately since we don't need to load a model
-    if (callback) {
-      callback(this);
-    }
+    // Load GLTF model
+    const loader = new GLTFLoader();
+    loader.load(
+      "/models/pistol.glb",
+      (gltf) => {
+        // Add the loaded model to this group
+        const model = gltf.scene;
+        
+        // Paint all meshes white
+        model.traverse((child) => {
+          if (child instanceof Mesh) {
+            child.material = new MeshToonMaterial({ color: 0xffffff });
+          }
+        });
+        
+        this.add(model);
+        
+        // Initialize previous camera position
+        camera.getWorldPosition(this.prevCameraPos);
+        
+        if (callback) {
+          callback(this);
+        }
+      },
+      undefined,
+      (error) => {
+        console.error("Error loading pistol model:", error);
+        // Fallback to low poly if model fails to load
+        this.createLowPolyPistol();
+        camera.getWorldPosition(this.prevCameraPos);
+        if (callback) {
+          callback(this);
+        }
+      }
+    );
   }
 
   private createLowPolyPistol() {
