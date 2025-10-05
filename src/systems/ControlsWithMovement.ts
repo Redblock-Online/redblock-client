@@ -1,7 +1,7 @@
 // src/systems/Controls.ts
 import * as THREE from "three";
 import type WSManager from "@/utils/ws/WSManager";
-import type Cube from "@/objects/Cube";
+import type Target from "@/objects/Target";
 import { buildTargetsInfo } from "@/utils/targetsInfo";
 export default class Controls {
   private camera: THREE.Camera;
@@ -9,7 +9,7 @@ export default class Controls {
   private pitchObject = new THREE.Object3D();
   private yawObject = new THREE.Object3D();
   private paused = false;
-  private targets: Cube[] = [];
+  private targets: Target[] = [];
   private sensitivity = 0.0002;
   private PI_2 = Math.PI / 2;
   private moveSpeed = 8;
@@ -64,7 +64,7 @@ export default class Controls {
   private nextSendAt = 0; // ms timestamp
 
   constructor(
-    targets: Cube[],
+    targets: Target[],
     camera: THREE.Camera,
     domElement: HTMLCanvasElement,
     wsManager: WSManager,
@@ -75,21 +75,31 @@ export default class Controls {
     this.domElement = domElement;
     this.wsManager = wsManager;
     this.getAmmountOfTargetsSelected = getAmmountOfTargetsSelected;
+
+    const VALORANT_M_YAW = 0.07; 
+    const DEG_TO_RAD = Math.PI / 180;
+    const valorantMultiplier = VALORANT_M_YAW * DEG_TO_RAD;
+
     // Initialize sensitivity from localStorage, fallback to default
     const saved = localStorage.getItem("mouseSensitivity");
     if (saved !== null) {
       const v = parseFloat(saved);
-      if (!Number.isNaN(v)) this.sensitivity = v * 0.0002;
+      if (!Number.isNaN(v)) {
+        this.sensitivity = v * valorantMultiplier;
+      }
     }
     // Bind input changes (works even if slider mounts later)
     const onSensitivityInput = (e: Event) => {
       const target = e.target as HTMLInputElement | null;
       if (target && target.id === "sensitivityRange") {
         const value = parseFloat(target.value);
-        if (!Number.isNaN(value)) this.sensitivity = value * 0.0002;
+        if (!Number.isNaN(value)) {
+          this.sensitivity = value * valorantMultiplier;
+        }
       }
     };
     document.addEventListener("input", onSensitivityInput, true);
+    
     this.camera.position.set(0, 0, 0);
     this.camera.rotation.set(0, 0, 0);
     this.pitchObject.add(this.camera);
@@ -181,12 +191,15 @@ export default class Controls {
     // Next send not before 1/20s
     this.nextSendAt = now + 1000 / 20;
   }
+
   private initKeyboardListeners() {
     document.addEventListener("keydown", (e) => {
       if (this.paused) return;
-      this.keysPressed[e.key.toLowerCase()] = true;
 
-      if (e.key.toLowerCase() === "c") {
+      const key = e.key.toLowerCase();
+      this.keysPressed[key] = true;
+
+      if (key === "c") {
         this.isCrouching = true;
       }
 
@@ -197,9 +210,11 @@ export default class Controls {
 
     document.addEventListener("keyup", (e) => {
       if (this.paused) return;
-      this.keysPressed[e.key.toLowerCase()] = false;
 
-      if (e.key.toLowerCase() === "c") {
+      const key = e.key.toLowerCase();
+      this.keysPressed[key] = false;
+
+      if (key === "c") {
         this.isCrouching = false;
       }
     });
@@ -275,10 +290,15 @@ export default class Controls {
     targetDirection.applyQuaternion(this.yawObject.quaternion);
     targetDirection.y = 0;
 
-    this.velocity.lerp(
-      targetDirection.multiplyScalar(effectiveSpeed),
-      this.acceleration
-    );
+    const desiredVel = targetDirection.clone().multiplyScalar(effectiveSpeed);
+    const bothLateralPressed = !!this.keysPressed["a"] && !!this.keysPressed["d"];
+
+    if (bothLateralPressed) {
+      this.velocity.set(0, 0, 0)
+    } else {
+      this.velocity.lerp(desiredVel, this.acceleration);
+    }
+   
     this.velocity.multiplyScalar(Math.pow(this.damping, deltaTime));
     this.yawObject.position.addScaledVector(this.velocity, deltaTime);
 

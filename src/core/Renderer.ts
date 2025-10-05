@@ -3,15 +3,15 @@ import { EffectComposer, FXAAShader, RenderPass, ShaderPass } from "three/exampl
 import CustomOutlinePass from "./CustomPass/CustomOutlinePass";
 
 const minPixelRatio = 1;
-const maxPixelRatio = 1.5;
+const maxPixelRatio = 4; // Increased for better edge rendering
 const pixelRatio = Math.min(maxPixelRatio, Math.max(minPixelRatio, window.devicePixelRatio));
 
 export default class Renderer {
   renderer: THREE.WebGLRenderer;
   composer: EffectComposer;
   camera: THREE.PerspectiveCamera;
-  private fxaaPass: ShaderPass;
-  private outlinePass: CustomOutlinePass;
+  private fxaaPass?: ShaderPass;
+  private outlinePass?: CustomOutlinePass;
 
   constructor(scene: THREE.Scene, camera: THREE.PerspectiveCamera, canvas?: HTMLCanvasElement) {
     this.camera = camera;
@@ -28,7 +28,7 @@ export default class Renderer {
     const renderPass = new RenderPass(scene, camera);
     this.composer.addPass(renderPass);
 
-    // 2) Outline (after scene render, before AA)
+    // 2) Custom outline pass
     this.outlinePass = new CustomOutlinePass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
       scene,
@@ -43,15 +43,7 @@ export default class Renderer {
       }
     );
     this.composer.addPass(this.outlinePass);
-
-    // 3) FXAA at the end
-    this.fxaaPass = new ShaderPass(FXAAShader);
-    this.fxaaPass.material.uniforms["resolution"].value.set(
-      1 / (window.innerWidth * pixelRatio),
-      1 / (window.innerHeight * pixelRatio)
-    );
-    this.composer.addPass(this.fxaaPass);
-
+    
     // Handle resize
     window.addEventListener("resize", () => {
       const width = window.innerWidth;
@@ -64,11 +56,15 @@ export default class Renderer {
       this.composer.setSize(width, height);
 
       // update passes
-      this.fxaaPass.material.uniforms["resolution"].value.set(
-        1 / (width * pixelRatio),
-        1 / (height * pixelRatio)
-      );
-      this.outlinePass.setSize(width, height);
+      if (this.outlinePass) {
+        this.outlinePass.setSize(width, height);
+      }
+      if (this.fxaaPass) {
+        this.fxaaPass.material.uniforms["resolution"].value.set(
+          1 / (width * pixelRatio),
+          1 / (height * pixelRatio)
+        );
+      }
     });
   }
 

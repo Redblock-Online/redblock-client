@@ -38,9 +38,32 @@ import { MovementController } from "./core/MovementController";
 import { GroupManager } from "./core/GroupManager";
 import { ComponentManager } from "./core/ComponentManager";
 import type { SerializedScenario } from "./scenarioStore";
+import { EditorModeManager } from "./core/EditorModeManager";
+import { InputRouter } from "./core/InputRouter";
+import { DragHandler } from "./core/handlers/DragHandler";
+import { TransformHandler } from "./core/handlers/TransformHandler";
+import { SelectionHandler } from "./core/handlers/SelectionHandler";
 
 const COMPONENT_MASTER_OUTLINE_COLOR = 0x9b5cff;
 const COMPONENT_INSTANCE_OUTLINE_COLOR = 0xff4dff;
+
+type DragAxisConstraint = "x" | "y" | "z" | null;
+
+type PointerUpListener = (event: PointerEvent, context: { dragged: boolean }) => void;
+
+type DragCommitEntry = {
+  id: string;
+  before: SelectionTransform;
+  after: SelectionTransform;
+};
+
+const DRAG_AXIS_VECTORS = {
+  x: new Vector3(1, 0, 0),
+  y: new Vector3(0, 1, 0),
+  z: new Vector3(0, 0, 1),
+} as const;
+
+const DRAG_VERTICAL_SENSITIVITY = 0.02;
 
 export default class EditorApp {
   private readonly canvas: HTMLCanvasElement;
@@ -60,10 +83,33 @@ export default class EditorApp {
   private readonly groups: GroupManager;
   private readonly movement: MovementController;
   private readonly components: ComponentManager;
+  private readonly pointerUpListeners = new Set<PointerUpListener>();
+  private readonly dragCommitListeners = new Set<(changes: DragCommitEntry[]) => void>();
 
   private leftButtonActive = false;
+  private isDragging = false;
+  private draggingCursorApplied = false;
+  private dragStartPoint: Vector3 | null = null;
+  private dragTargets: Array<{ id: string; origin: SelectionTransform }> = [];
+  private dragAxisConstraint: DragAxisConstraint = null;
+  private dragPointerAccumulator = { x: 0, y: 0 };
+  private lastPointerEvent: { clientX: number; clientY: number } | null = null;
   private animationFrame?: number;
   private lastFrameTime = 0;
+  private readonly dragWorkingDelta = new Vector3();
+  private readonly dragTranslationDelta = new Vector3();
+  private readonly dragCameraRight = new Vector3();
+  private readonly dragCameraUp = new Vector3();
+  private readonly dragPointerWorld = new Vector3();
+  private readonly dragCameraQuaternion = new Quaternion();
+  public readonly dragCameraQuaternionPublic = new Quaternion(); // For handlers
+
+  // New mode system
+  public readonly modeManager: EditorModeManager;
+  private readonly inputRouter: InputRouter;
+  private readonly dragHandler: DragHandler;
+  private readonly transformHandler: TransformHandler;
+  private readonly selectionHandler: SelectionHandler;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -85,7 +131,10 @@ export default class EditorApp {
     this.controls.enableZoom = true;
     this.controls.enablePan = true;
     this.controls.enableRotate = true;
-    this.controls.mouseButtons.RIGHT = MOUSE.ROTATE;
+    // Only right click for orbit, left click is for selection/drag
+    this.controls.mouseButtons.LEFT = undefined; // Disable left click
+    this.controls.mouseButtons.MIDDLE = undefined; // Disable middle click
+    this.controls.mouseButtons.RIGHT = MOUSE.ROTATE; // Right click for orbit
 
     this.blocks = new BlockStore(this.scene);
     this.selection = new SelectionManager(this.scene, this.blocks, {
@@ -98,16 +147,44 @@ export default class EditorApp {
     this.movement = new MovementController(this.camera, this.controls);
     this.components = new ComponentManager(this.blocks, this.selection, this.groups);
 
-    canvas.addEventListener("contextmenu", (event) => event.preventDefault());
-    canvas.addEventListener("pointerdown", this.handlePointerDownCapture, true);
-    canvas.addEventListener("pointerup", this.handlePointerUpCapture, true);
-    canvas.addEventListener("pointercancel", this.handleWindowPointerUpCapture, true);
+    // Initialize new mode system
+    this.modeManager = new EditorModeManager();
+    this.dragHandler = new DragHandler(this.modeManager, this);
+    this.transformHandler = new TransformHandler(this.modeManager, this);
+    this.selectionHandler = new SelectionHandler(this.modeManager, this);
+    
+    // Connect handlers
+    this.selectionHandler.setDragHandler(this.dragHandler);
+    
+    this.inputRouter = new InputRouter(
+      this.modeManager,
+      this.dragHandler,
+      this.transformHandler,
+      this.selectionHandler,
+    );
 
-    window.addEventListener("pointerup", this.handleWindowPointerUpCapture, true);
-    window.addEventListener("pointercancel", this.handleWindowPointerUpCapture, true);
+    // Setup callbacks
+    this.dragHandler.setCommitCallback((changes) => {
+      this.emitDragCommit(changes);
+    });
+
+    this.transformHandler.setCommitCallback((changes) => {
+      this.emitDragCommit(changes);
+    });
+
+    // Note: Transform update callback will be set by EditorRoot via modeManager listener
+
+    canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+    
+    // NEW: Single event listeners using InputRouter
+    canvas.addEventListener("pointerdown", (e) => this.inputRouter.handlePointerDown(e));
+    canvas.addEventListener("pointermove", (e) => this.inputRouter.handlePointerMove(e));
+    canvas.addEventListener("pointerup", (e) => this.inputRouter.handlePointerUp(e));
+    window.addEventListener("keydown", (e) => this.inputRouter.handleKeyDown(e));
+
+    // Keep movement keys
     window.addEventListener("keydown", this.handleMovementKeyChange, true);
     window.addEventListener("keyup", this.handleMovementKeyChange, true);
-
     document.addEventListener("keydown", this.handleMovementKeyChange, true);
     document.addEventListener("keyup", this.handleMovementKeyChange, true);
     this.canvas.addEventListener("keydown", this.handleMovementKeyChange, true);
@@ -118,6 +195,38 @@ export default class EditorApp {
     window.addEventListener("resize", this.handleResize);
   }
 
+  public setDraggingCursor(active: boolean): void {
+    if (active === this.draggingCursorApplied) {
+      return;
+    }
+    this.draggingCursorApplied = active;
+    this.canvas.style.cursor = active ? "pointer" : "default";
+  }
+
+  private resetDragPointerAccumulator(): void {
+    this.dragPointerAccumulator.x = 0;
+    this.dragPointerAccumulator.y = 0;
+  }
+
+  private resetDragStartFromPointer(): void {
+    if (!this.lastPointerEvent) {
+      return;
+    }
+    const nextStart = this.intersectGround(this.lastPointerEvent.clientX, this.lastPointerEvent.clientY);
+    if (nextStart) {
+      this.dragStartPoint = nextStart;
+    }
+  }
+
+  private refreshDragOrigins(): void {
+    if (this.dragTargets.length === 0) {
+      return;
+    }
+    const ids = this.dragTargets.map((target) => target.id);
+    const current = this.getTransformsForIds(ids);
+    this.dragTargets = current.map((entry) => ({ id: entry.id, origin: entry.transform }));
+  }
+
   public getCanvas(): HTMLCanvasElement {
     return this.canvas;
   }
@@ -126,8 +235,48 @@ export default class EditorApp {
     return this.camera;
   }
 
+  public getControls(): OrbitControls {
+    return this.controls;
+  }
+
+  public isDraggingBlock(): boolean {
+    return this.isDragging;
+  }
+
+  public toggleDragAxis(axis: "x" | "y" | "z"): void {
+    if (!this.isDragging) {
+      return;
+    }
+    const next: DragAxisConstraint = this.dragAxisConstraint === axis ? null : axis;
+    if (next === this.dragAxisConstraint) {
+      return;
+    }
+    this.dragAxisConstraint = next;
+    this.resetDragPointerAccumulator();
+    this.refreshDragOrigins();
+    if (next === "y") {
+      this.dragStartPoint = null;
+    } else {
+      this.resetDragStartFromPointer();
+    }
+  }
+
   public addSelectionListener(listener: SelectionListener): () => void {
     return this.selection.addListener(listener);
+  }
+
+  public addPointerUpListener(listener: PointerUpListener): () => void {
+    this.pointerUpListeners.add(listener);
+    return () => {
+      this.pointerUpListeners.delete(listener);
+    };
+  }
+
+  public addDragCommitListener(listener: (changes: DragCommitEntry[]) => void): () => void {
+    this.dragCommitListeners.add(listener);
+    return () => {
+      this.dragCommitListeners.delete(listener);
+    };
   }
 
   public start(): void {
@@ -153,11 +302,7 @@ export default class EditorApp {
     }
 
     window.removeEventListener("resize", this.handleResize);
-    this.canvas.removeEventListener("pointerdown", this.handlePointerDownCapture, true);
-    this.canvas.removeEventListener("pointerup", this.handlePointerUpCapture, true);
-    this.canvas.removeEventListener("pointercancel", this.handleWindowPointerUpCapture, true);
-    window.removeEventListener("pointerup", this.handleWindowPointerUpCapture, true);
-    window.removeEventListener("pointercancel", this.handleWindowPointerUpCapture, true);
+    // Note: InputRouter listeners are removed automatically when the canvas is removed
     window.removeEventListener("keydown", this.handleMovementKeyChange, true);
     window.removeEventListener("keyup", this.handleMovementKeyChange, true);
     document.removeEventListener("keydown", this.handleMovementKeyChange, true);
@@ -243,6 +388,11 @@ export default class EditorApp {
 
     let hit: EditorBlock | null = null;
     for (const result of intersects) {
+      // Ignore outline helpers and any line-only helpers
+      if (result.object instanceof LineSegments) {
+        continue;
+      }
+      // Only count actual Mesh or Group objects that belong to blocks
       const mesh = result.object as Object3D;
       const block = this.blocks.findBlockByMesh(mesh);
       if (!block) {
@@ -743,10 +893,98 @@ export default class EditorApp {
     this.camera.updateProjectionMatrix();
   };
 
+  private emitPointerUp(event: PointerEvent, context: { dragged: boolean }): void {
+    for (const listener of this.pointerUpListeners) {
+      listener(event, context);
+    }
+  }
+
+  private emitDragCommit(changes: DragCommitEntry[]): void {
+    if (changes.length === 0) {
+      return;
+    }
+    for (const listener of this.dragCommitListeners) {
+      listener(changes.map((entry) => ({
+        id: entry.id,
+        before: cloneTransform(entry.before),
+        after: cloneTransform(entry.after),
+      })));
+    }
+  }
+
+  private collectDragChanges(targets: Array<{ id: string; origin: SelectionTransform }>): DragCommitEntry[] {
+    if (targets.length === 0) {
+      return [];
+    }
+    const ids = targets.map((target) => target.id);
+    const current = this.getTransformsForIds(ids);
+    const changes: DragCommitEntry[] = [];
+    for (const target of targets) {
+      const currentEntry = current.find((entry) => entry.id === target.id);
+      if (!currentEntry) {
+        continue;
+      }
+      if (hasTransformChanged(target.origin, currentEntry.transform)) {
+        changes.push({
+          id: target.id,
+          before: cloneTransform(target.origin),
+          after: cloneTransform(currentEntry.transform),
+        });
+      }
+    }
+    return changes;
+  }
+
+  private finalizePointerRelease(event: PointerEvent, commit: boolean): void {
+    const wasDragging = this.isDragging;
+    const dragTargets = this.dragTargets;
+    this.isDragging = false;
+    this.dragStartPoint = null;
+    this.dragTargets = [];
+
+    if (commit && wasDragging) {
+      const changes = this.collectDragChanges(dragTargets);
+      this.emitDragCommit(changes);
+    }
+
+    this.emitPointerUp(event, { dragged: wasDragging });
+  }
+
   private handlePointerDownCapture = (event: PointerEvent): void => {
     if (event.button === 0) {
+      // If event was already handled (e.g., by transform mode), don't start drag
+      if (event.defaultPrevented) {
+        return;
+      }
+      
       this.leftButtonActive = true;
       this.controls.enabled = false;
+      // Prevent OrbitControls from attempting pointer capture
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      this.dragAxisConstraint = null;
+      this.resetDragPointerAccumulator();
+      this.lastPointerEvent = { clientX: event.clientX, clientY: event.clientY };
+
+      // Try to pick a block under the cursor; update selection accordingly
+      const additive = event.shiftKey || event.metaKey || event.ctrlKey;
+      const hit = this.pickBlock(event.clientX, event.clientY, additive);
+
+      // Start drag only if we hit something directly
+      const selection = this.getSelectionArray();
+      const shouldDrag = !!hit;
+      if (shouldDrag) {
+        const start = this.intersectGround(event.clientX, event.clientY);
+        if (start) {
+          this.isDragging = true;
+          this.dragStartPoint = start;
+          const ids = selection.map((b) => b.id);
+          this.dragTargets = this.getTransformsForIds(ids).map((entry) => ({ id: entry.id, origin: entry.transform }));
+          this.dragTranslationDelta.set(0, 0, 0);
+          this.setDraggingCursor(true);
+        }
+      }
       return;
     }
 
@@ -755,17 +993,93 @@ export default class EditorApp {
     }
   };
 
+  private handlePointerMoveCapture = (event: PointerEvent): void => {
+    if (!this.isDragging || !this.leftButtonActive) {
+      return;
+    }
+    // Prevent OrbitControls gestures while dragging
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    this.lastPointerEvent = { clientX: event.clientX, clientY: event.clientY };
+
+    if (this.dragTargets.length === 0) {
+      return;
+    }
+
+    const axis = this.dragAxisConstraint;
+    if (axis === "y") {
+      this.dragPointerAccumulator.x += event.movementX;
+      this.dragPointerAccumulator.y += event.movementY;
+
+      this.camera.getWorldQuaternion(this.dragCameraQuaternion);
+      this.dragCameraRight.set(1, 0, 0).applyQuaternion(this.dragCameraQuaternion);
+      this.dragCameraUp.set(0, 1, 0).applyQuaternion(this.dragCameraQuaternion);
+      this.dragPointerWorld
+        .copy(this.dragCameraRight)
+        .multiplyScalar(this.dragPointerAccumulator.x)
+        .addScaledVector(this.dragCameraUp, -this.dragPointerAccumulator.y);
+
+      const amount = this.dragPointerWorld.dot(DRAG_AXIS_VECTORS.y) * DRAG_VERTICAL_SENSITIVITY;
+      this.dragTranslationDelta.copy(DRAG_AXIS_VECTORS.y).multiplyScalar(amount);
+    } else {
+      const current = this.intersectGround(event.clientX, event.clientY);
+      if (!current) {
+        return;
+      }
+      if (!this.dragStartPoint) {
+        this.dragStartPoint = current;
+      }
+
+      this.dragWorkingDelta
+        .copy(current)
+        .sub(this.dragStartPoint)
+        .setY(0);
+
+      if (axis === "x") {
+        this.dragWorkingDelta.set(this.dragWorkingDelta.x, 0, 0);
+      } else if (axis === "z") {
+        this.dragWorkingDelta.set(0, 0, this.dragWorkingDelta.z);
+      }
+
+      this.dragTranslationDelta.copy(this.dragWorkingDelta);
+    }
+
+    const updates = this.dragTargets.map(({ id, origin }) => {
+      const position = origin.position.clone().add(this.dragTranslationDelta);
+      return {
+        id,
+        transform: {
+          position,
+          rotation: origin.rotation.clone(),
+          scale: origin.scale.clone(),
+        },
+      };
+    });
+
+    this.applyTransformsForIds(updates);
+  };
+
   private handlePointerUpCapture = (event: PointerEvent): void => {
-    if (event.button === 0 && this.leftButtonActive) {
+    const isCancel = event.type === "pointercancel";
+    if ((event.button === 0 || isCancel) && this.leftButtonActive) {
       this.leftButtonActive = false;
       this.controls.enabled = true;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      // Finish any active drag with commit
+      this.finalizePointerRelease(event, !isCancel);
+      this.setDraggingCursor(false);
     }
   };
 
   private handleWindowPointerUpCapture = (event: PointerEvent): void => {
-    if (event.button === 0 && this.leftButtonActive) {
+    const isCancel = event.type === "pointercancel";
+    if ((event.button === 0 || isCancel) && this.leftButtonActive) {
       this.leftButtonActive = false;
       this.controls.enabled = true;
+      // Cancel drag if pointer released outside the canvas (no commit)
+      this.finalizePointerRelease(event, false);
+      this.setDraggingCursor(false);
     }
   };
 
@@ -782,7 +1096,7 @@ export default class EditorApp {
     this.movement.update(deltaSeconds);
   }
 
-  private intersectGround(clientX: number, clientY: number): Vector3 | null {
+  public intersectGround(clientX: number, clientY: number): Vector3 | null {
     const rect = this.canvas.getBoundingClientRect();
     this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
@@ -801,4 +1115,26 @@ export default class EditorApp {
     }
     return ray.origin.clone().add(ray.direction.clone().multiplyScalar(t));
   }
+}
+
+function cloneTransform(input: SelectionTransform): SelectionTransform {
+  return {
+    position: input.position.clone(),
+    rotation: input.rotation.clone(),
+    scale: input.scale.clone(),
+  };
+}
+
+function hasTransformChanged(before: SelectionTransform, after: SelectionTransform): boolean {
+  return (
+    Math.abs(after.position.x - before.position.x) > 1e-6 ||
+    Math.abs(after.position.y - before.position.y) > 1e-6 ||
+    Math.abs(after.position.z - before.position.z) > 1e-6 ||
+    Math.abs(after.rotation.x - before.rotation.x) > 1e-6 ||
+    Math.abs(after.rotation.y - before.rotation.y) > 1e-6 ||
+    Math.abs(after.rotation.z - before.rotation.z) > 1e-6 ||
+    Math.abs(after.scale.x - before.scale.x) > 1e-6 ||
+    Math.abs(after.scale.y - before.scale.y) > 1e-6 ||
+    Math.abs(after.scale.z - before.scale.z) > 1e-6
+  );
 }

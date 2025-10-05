@@ -4,7 +4,6 @@ import { Pass, FullScreenQuad } from "three/examples/jsm/postprocessing/Pass.js"
 type Uniforms = { [key: string]: THREE.IUniform };
 
 function getCameraNearFar(camera: THREE.Camera): { near: number; far: number } {
-  // Perspective & Orthographic cameras expose near/far
   const asAny = camera as unknown as { near?: number; far?: number };
   const near = typeof asAny.near === "number" ? asAny.near : 0.1;
   const far = typeof asAny.far === "number" ? asAny.far : 1000;
@@ -15,7 +14,6 @@ export default class CustomOutlinePass extends Pass {
   scene: THREE.Scene;
   camera: THREE.Camera;
 
-  // One RT that stores normals in color and depth in a depthTexture
   rtNormalsDepth: THREE.WebGLRenderTarget;
   depthTexture: THREE.DepthTexture;
   normalMaterial: THREE.MeshNormalMaterial;
@@ -28,11 +26,11 @@ export default class CustomOutlinePass extends Pass {
     scene: THREE.Scene,
     camera: THREE.Camera,
     options?: {
-      edgeStrength?: number;    // weight for depth edges
-      edgeThreshold?: number;   // sensitivity for depth edges
-      thickness?: number;       // kernel radius in pixels
-      normalThreshold?: number; // sensitivity for normal edges
-      normalStrength?: number;  // weight for normal edges
+      edgeStrength?: number;
+      edgeThreshold?: number;
+      thickness?: number;
+      normalThreshold?: number;
+      normalStrength?: number;
       outlineColor?: THREE.Color | number | string;
     }
   ) {
@@ -44,7 +42,6 @@ export default class CustomOutlinePass extends Pass {
     const width = Math.max(1, Math.floor(size.x));
     const height = Math.max(1, Math.floor(size.y));
 
-    // ---- RT for normals (color) + depth (depthTexture). This guarantees occlusion correctness.
     this.depthTexture = new THREE.DepthTexture(width, height);
     this.depthTexture.type = THREE.UnsignedShortType;
     this.depthTexture.format = THREE.DepthFormat;
@@ -57,33 +54,29 @@ export default class CustomOutlinePass extends Pass {
       stencilBuffer: false,
     });
 
-    // Mesh normals (view-space). flatShading ayuda a marcar aristas internas.
     this.normalMaterial = new THREE.MeshNormalMaterial({ flatShading: true });
-    this.normalMaterial.depthTest = true;   // ensure depth test is used
-    this.normalMaterial.depthWrite = true;  // write depth so nearest fragments win
+    this.normalMaterial.depthTest = true;
+    this.normalMaterial.depthWrite = true;
     this.normalMaterial.transparent = false;
 
     const outlineColor = new THREE.Color(options?.outlineColor ?? 0x000000);
 
     const { near: initNear, far: initFar } = getCameraNearFar(this.camera);
     this.uniforms = {
-      tDiffuse:   { value: null },                              // scene color
-      tDepth:     { value: this.depthTexture },                  // depth from rtNormalsDepth
-      tNormal:    { value: this.rtNormalsDepth.texture },        // normals color
+      tDiffuse: { value: null },
+      tDepth: { value: this.depthTexture },
+      tNormal: { value: this.rtNormalsDepth.texture },
       cameraNear: { value: initNear },
-      cameraFar:  { value: initFar },
+      cameraFar: { value: initFar },
       resolution: { value: new THREE.Vector2(width, height) },
-
-      // Depth edges
-      edgeThreshold:  { value: options?.edgeThreshold ?? 0.0025 },
-      edgeStrength:   { value: options?.edgeStrength ?? 1.0 },
-      thickness:      { value: options?.thickness ?? 1.0 },
-
-      // Normal edges
-      normalThreshold:{ value: options?.normalThreshold ?? 0.15 },
+      edgeThreshold: { value: options?.edgeThreshold ?? 0.0025 },
+      edgeStrength: { value: options?.edgeStrength ?? 1.0 },
+      thickness: { value: options?.thickness ?? 1.0 },
+      normalThreshold: { value: options?.normalThreshold ?? 0.15 },
       normalStrength: { value: options?.normalStrength ?? 1.0 },
-
-      outlineColor:   { value: new THREE.Vector3(outlineColor.r, outlineColor.g, outlineColor.b) },
+      outlineColor: {
+        value: new THREE.Vector3(outlineColor.r, outlineColor.g, outlineColor.b),
+      },
     };
 
     const material = new THREE.ShaderMaterial({
@@ -109,12 +102,12 @@ export default class CustomOutlinePass extends Pass {
         uniform float cameraNear;
         uniform float cameraFar;
 
-        uniform float edgeThreshold;    // depth sensitivity
-        uniform float edgeStrength;     // depth weight
-        uniform float thickness;        // kernel radius in pixels
+        uniform float edgeThreshold;
+        uniform float edgeStrength;
+        uniform float thickness;
 
-        uniform float normalThreshold;  // normal sensitivity
-        uniform float normalStrength;   // normal weight
+        uniform float normalThreshold;
+        uniform float normalStrength;
 
         uniform vec3  outlineColor;
 
@@ -155,7 +148,7 @@ export default class CustomOutlinePass extends Pass {
 
             vec3 ni = readNormal(tNormal, vUv + offsets[i]);
             float nDot = clamp(dot(n0, ni), -1.0, 1.0);
-            float ndelta = 1.0 - nDot; // 0=same, 1=very different
+            float ndelta = 1.0 - nDot;
             maxNormalDelta = max(maxNormalDelta, ndelta);
           }
 
@@ -187,7 +180,6 @@ export default class CustomOutlinePass extends Pass {
   ) {
     const prevRT = renderer.getRenderTarget();
 
-    // 1) Render normals+depth in ONE pass, so depth keeps nearest fragments only.
     const prevBG = this.scene.background;
     const prevOM = this.scene.overrideMaterial;
     this.scene.overrideMaterial = this.normalMaterial;
@@ -197,17 +189,15 @@ export default class CustomOutlinePass extends Pass {
     renderer.clear();
     renderer.render(this.scene, this.camera);
 
-    // Restore scene state
     this.scene.overrideMaterial = prevOM;
     this.scene.background = prevBG;
 
-    // 2) Fullscreen composite
     this.uniforms.tDiffuse.value = readBuffer.texture;
-    this.uniforms.tDepth.value   = this.depthTexture;
-    this.uniforms.tNormal.value  = this.rtNormalsDepth.texture;
+    this.uniforms.tDepth.value = this.depthTexture;
+    this.uniforms.tNormal.value = this.rtNormalsDepth.texture;
     const { near, far } = getCameraNearFar(this.camera);
     this.uniforms.cameraNear.value = near;
-    this.uniforms.cameraFar.value  = far;
+    this.uniforms.cameraFar.value = far;
 
     if (this.renderToScreen) {
       renderer.setRenderTarget(null);

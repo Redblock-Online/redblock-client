@@ -6,7 +6,7 @@ import ControlsWithMovement from "@/systems/ControlsWithMovement";
 import Crosshair from "@/objects/Crosshair";
 import { Raycaster, Vector2, Vector3 } from "three";
 import Pistol from "@/objects/Pistol";
-import Cube from "@/objects/Cube";
+import Target from "@/objects/Target";
 import WSManager, { type PlayerCore } from "@/utils/ws/WSManager";
 import type { UIController } from "@/ui/react/mountUI";
 import type { TimerHint, TimerHintTableRow } from "@/ui/react/TimerDisplay";
@@ -51,12 +51,12 @@ export default class App {
   controls: ControlsWithMovement;
   pistol: Pistol;
   private ui?: UIController;
-  targets: Cube[] = [];
+  targets: Target[] = [];
   gameRunning: boolean = false;
   wsManager: WSManager;
   private currentScenarioIndex: number | null = null;
   private scenarios: ScenarioConfig[] = SCENARIOS;
-  private scenarioPortals: Cube[] = [];
+  private scenarioPortals: Target[] = [];
   private currentScenarioTargetCount = 3;
   private currentScenarioTargetScale = 0.4;
   private crosshair?: Crosshair;
@@ -149,8 +149,8 @@ export default class App {
 
     const first = intersects[0].object;
     let node: import("three").Object3D | null = first;
-    while (node && !(node instanceof Cube)) node = node.parent;
-    const hitTarget = node as Cube | undefined;
+    while (node && !(node instanceof Target)) node = node.parent;
+    const hitTarget = node as Target | undefined;
     if (!hitTarget) return null;
 
     if (hitTarget.scenarioPortal) {
@@ -171,8 +171,8 @@ export default class App {
       this.camera.instance.getWorldPosition(this.cameraWorldPos);
       this.camera.instance.getWorldDirection(this.cameraViewDir);
 
-      let forwardBest: { cube: Cube; alignment: number; distanceSq: number } | null = null;
-      let nearestBest: { cube: Cube; distanceSq: number } | null = null;
+      let forwardBest: { cube: Target; alignment: number; distanceSq: number } | null = null;
+      let nearestBest: { cube: Target; distanceSq: number } | null = null;
 
       const lastPosition = hitTarget.position;
 
@@ -284,7 +284,7 @@ export default class App {
     this.shotsFired += 1;
   }
 
-  private recordHit(target: Cube) {
+  private recordHit(target: Target) {
     this.shotsHit += 1;
     const activatedAt = target.shootableActivatedAt;
     if (typeof activatedAt === "number") {
@@ -535,14 +535,14 @@ export default class App {
 
     portals.forEach((portal) => {
       if (!portal.enabled) return;
-      const cube = new Cube(false, true, true);
-      cube.scenarioPortal = portal.type;
-      cube.position.set(...portal.position);
-      cube.baseScale = 0.5;
-      cube.scale.set(0.5, 0.5, 0.5);
-      cube.makeShootable(portal.color);
-      this.scenarioPortals.push(cube);
-      this.scene.add(cube);
+      const target = new Target(0xffffff, true, true);
+      target.scenarioPortal = portal.type;
+      target.position.set(...portal.position);
+      target.baseScale = 0.5;
+      target.scale.set(0.5, 0.5, 0.5);
+      target.makeShootable(portal.color);
+      this.scenarioPortals.push(target);
+      this.scene.add(target);
     });
   }
 
@@ -570,7 +570,8 @@ export default class App {
     }
 
     this.resetTargets();
-    this.scene.loadScenario(scenario.targetCount);
+    const useHalfSize = scenario.targetScale === 0.2;
+    this.scene.loadScenario(scenario.targetCount, useHalfSize);
     this.applyScenarioTargetScale();
     this.setupScenarioPortals();
 

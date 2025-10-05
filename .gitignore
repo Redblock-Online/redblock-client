@@ -29,3 +29,4 @@ dist-ssr
 
 # Next.js
 .next
+tsconfig.tsbuildinfo
