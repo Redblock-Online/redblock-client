@@ -1019,14 +1019,8 @@ export default class EditorApp {
       this.controls.enabled = true;
       event.preventDefault();
       event.stopImmediatePropagation();
-      // Finish any active drag
-      this.isDragging = false;
-      this.dragStartPoint = null;
-      this.dragTargets = [];
-      this.dragAxisConstraint = null;
-      this.resetDragPointerAccumulator();
-      this.lastPointerEvent = null;
-      this.dragTranslationDelta.set(0, 0, 0);
+      // Finish any active drag with commit
+      this.finalizePointerRelease(event, !isCancel);
       this.setDraggingCursor(false);
     }
   };
@@ -1036,14 +1030,8 @@ export default class EditorApp {
     if ((event.button === 0 || isCancel) && this.leftButtonActive) {
       this.leftButtonActive = false;
       this.controls.enabled = true;
-      // Cancel drag if pointer released outside the canvas
-      this.isDragging = false;
-      this.dragStartPoint = null;
-      this.dragTargets = [];
-      this.dragAxisConstraint = null;
-      this.resetDragPointerAccumulator();
-      this.lastPointerEvent = null;
-      this.dragTranslationDelta.set(0, 0, 0);
+      // Cancel drag if pointer released outside the canvas (no commit)
+      this.finalizePointerRelease(event, false);
       this.setDraggingCursor(false);
     }
   };
