@@ -175,41 +175,54 @@ export function useTransformSession(
 
   const finishTransform = useCallback(
     (commit: boolean) => {
+      console.log('[useTransformSession] finishTransform called, commit:', commit);
       const session = transformSessionRef.current;
       if (!session || session.targets.length === 0) {
+        console.log('[useTransformSession] No active session');
         return;
       }
+      console.log('[useTransformSession] Session mode:', session.mode, 'targets:', session.targets.length);
 
       if (!commit) {
+        console.log('[useTransformSession] Reverting transforms (commit=false)');
         editor.applyTransformsForIds(
           session.targets.map((target) => ({ id: target.id, transform: cloneTransform(target.origin) })),
         );
         applyTransformToState(session.targets[0]?.origin ?? null);
       } else {
+        console.log('[useTransformSession] Committing transforms');
         const ids = session.targets.map((target) => target.id);
         const current = editor.getTransformsForIds(ids);
+        console.log('[useTransformSession] Current transforms:', current);
         const changes: Array<{ id: string; before: SelectionTransform; after: SelectionTransform }> = [];
         for (const target of session.targets) {
           const currentEntry = current.find((entry) => entry.id === target.id);
           if (!currentEntry) {
+            console.log('[useTransformSession] No current entry for', target.id);
             continue;
           }
-          if (hasTransformChanged(target.origin, currentEntry.transform)) {
+          const hasChanged = hasTransformChanged(target.origin, currentEntry.transform);
+          console.log('[useTransformSession] Block', target.id, 'changed:', hasChanged);
+          if (hasChanged) {
             changes.push({ id: target.id, before: cloneTransform(target.origin), after: cloneTransform(currentEntry.transform) });
           }
         }
 
+        console.log('[useTransformSession] Collected', changes.length, 'changes');
         if (changes.length > 0) {
           if (changes.length === 1) {
             const entry = changes[0];
+            console.log('[useTransformSession] Pushing single transform to history');
             pushHistory({ type: "transform", id: entry.id, before: entry.before, after: entry.after });
             applyTransformToState(entry.after);
           } else {
+            console.log('[useTransformSession] Pushing multi-transform to history');
             pushHistory({ type: "multi-transform", entries: changes });
             applyTransformToState(changes[0]?.after ?? null);
           }
           onCommit?.();
         } else {
+          console.log('[useTransformSession] No changes detected, not pushing to history');
           applyTransformToState(session.targets[0]?.origin ?? null);
         }
       }
@@ -224,8 +237,11 @@ export function useTransformSession(
 
   const startTransform = useCallback(
     (mode: TransformMode) => {
+      console.log('[useTransformSession] startTransform called, mode:', mode);
       const selectionArray = editor.getSelectionArray();
+      console.log('[useTransformSession] Selection array:', selectionArray.length, 'blocks');
       if (!selectionArray.length) {
+        console.log('[useTransformSession] No selection, aborting');
         return;
       }
       const targets = editor.getTransformsForIds(selectionArray.map((block) => block.id)).map((entry) => ({
@@ -233,10 +249,12 @@ export function useTransformSession(
         origin: cloneTransform(entry.transform),
       }));
       if (targets.length === 0) {
+        console.log('[useTransformSession] No targets, aborting');
         return;
       }
 
       if (transformSessionRef.current) {
+        console.log('[useTransformSession] Finishing previous transform session');
         finishTransform(true);
       }
 
@@ -246,6 +264,7 @@ export function useTransformSession(
         targets,
         delta: { x: 0, y: 0 },
       };
+      console.log('[useTransformSession] Transform session started with', targets.length, 'targets');
 
       setTransformMode(mode);
       setActiveAxis(null);
@@ -286,11 +305,14 @@ export function useTransformSession(
 
   const toggleAxis = useCallback(
     (axis: Exclude<AxisConstraint, null>) => {
+      console.log('[useTransformSession] toggleAxis called, axis:', axis);
       const session = transformSessionRef.current;
       if (!session) {
+        console.log('[useTransformSession] No active session');
         return;
       }
       const next = session.axis === axis ? null : axis;
+      console.log('[useTransformSession] Axis constraint changed from', session.axis, 'to', next);
       session.axis = next;
       setActiveAxis(next);
       applyTransform();

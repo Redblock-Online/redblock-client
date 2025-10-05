@@ -38,6 +38,11 @@ import { MovementController } from "./core/MovementController";
 import { GroupManager } from "./core/GroupManager";
 import { ComponentManager } from "./core/ComponentManager";
 import type { SerializedScenario } from "./scenarioStore";
+import { EditorModeManager } from "./core/EditorModeManager";
+import { InputRouter } from "./core/InputRouter";
+import { DragHandler } from "./core/handlers/DragHandler";
+import { TransformHandler } from "./core/handlers/TransformHandler";
+import { SelectionHandler } from "./core/handlers/SelectionHandler";
 
 const COMPONENT_MASTER_OUTLINE_COLOR = 0x9b5cff;
 const COMPONENT_INSTANCE_OUTLINE_COLOR = 0xff4dff;
@@ -97,6 +102,14 @@ export default class EditorApp {
   private readonly dragCameraUp = new Vector3();
   private readonly dragPointerWorld = new Vector3();
   private readonly dragCameraQuaternion = new Quaternion();
+  public readonly dragCameraQuaternionPublic = new Quaternion(); // For handlers
+
+  // New mode system
+  public readonly modeManager: EditorModeManager;
+  private readonly inputRouter: InputRouter;
+  private readonly dragHandler: DragHandler;
+  private readonly transformHandler: TransformHandler;
+  private readonly selectionHandler: SelectionHandler;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -118,7 +131,10 @@ export default class EditorApp {
     this.controls.enableZoom = true;
     this.controls.enablePan = true;
     this.controls.enableRotate = true;
-    this.controls.mouseButtons.RIGHT = MOUSE.ROTATE;
+    // Only right click for orbit, left click is for selection/drag
+    this.controls.mouseButtons.LEFT = undefined; // Disable left click
+    this.controls.mouseButtons.MIDDLE = undefined; // Disable middle click
+    this.controls.mouseButtons.RIGHT = MOUSE.ROTATE; // Right click for orbit
 
     this.blocks = new BlockStore(this.scene);
     this.selection = new SelectionManager(this.scene, this.blocks, {
@@ -131,17 +147,44 @@ export default class EditorApp {
     this.movement = new MovementController(this.camera, this.controls);
     this.components = new ComponentManager(this.blocks, this.selection, this.groups);
 
-    canvas.addEventListener("contextmenu", (event) => event.preventDefault());
-    canvas.addEventListener("pointerdown", this.handlePointerDownCapture, true);
-    canvas.addEventListener("pointermove", this.handlePointerMoveCapture, true);
-    canvas.addEventListener("pointerup", this.handlePointerUpCapture, true);
-    canvas.addEventListener("pointercancel", this.handleWindowPointerUpCapture, true);
+    // Initialize new mode system
+    this.modeManager = new EditorModeManager();
+    this.dragHandler = new DragHandler(this.modeManager, this);
+    this.transformHandler = new TransformHandler(this.modeManager, this);
+    this.selectionHandler = new SelectionHandler(this.modeManager, this);
+    
+    // Connect handlers
+    this.selectionHandler.setDragHandler(this.dragHandler);
+    
+    this.inputRouter = new InputRouter(
+      this.modeManager,
+      this.dragHandler,
+      this.transformHandler,
+      this.selectionHandler,
+    );
 
-    window.addEventListener("pointerup", this.handleWindowPointerUpCapture, true);
-    window.addEventListener("pointercancel", this.handleWindowPointerUpCapture, true);
+    // Setup callbacks
+    this.dragHandler.setCommitCallback((changes) => {
+      this.emitDragCommit(changes);
+    });
+
+    this.transformHandler.setCommitCallback((changes) => {
+      this.emitDragCommit(changes);
+    });
+
+    // Note: Transform update callback will be set by EditorRoot via modeManager listener
+
+    canvas.addEventListener("contextmenu", (event) => event.preventDefault());
+    
+    // NEW: Single event listeners using InputRouter
+    canvas.addEventListener("pointerdown", (e) => this.inputRouter.handlePointerDown(e));
+    canvas.addEventListener("pointermove", (e) => this.inputRouter.handlePointerMove(e));
+    canvas.addEventListener("pointerup", (e) => this.inputRouter.handlePointerUp(e));
+    window.addEventListener("keydown", (e) => this.inputRouter.handleKeyDown(e));
+
+    // Keep movement keys
     window.addEventListener("keydown", this.handleMovementKeyChange, true);
     window.addEventListener("keyup", this.handleMovementKeyChange, true);
-
     document.addEventListener("keydown", this.handleMovementKeyChange, true);
     document.addEventListener("keyup", this.handleMovementKeyChange, true);
     this.canvas.addEventListener("keydown", this.handleMovementKeyChange, true);
@@ -152,7 +195,7 @@ export default class EditorApp {
     window.addEventListener("resize", this.handleResize);
   }
 
-  private setDraggingCursor(active: boolean): void {
+  public setDraggingCursor(active: boolean): void {
     if (active === this.draggingCursorApplied) {
       return;
     }
@@ -190,6 +233,10 @@ export default class EditorApp {
 
   public getCamera(): PerspectiveCamera {
     return this.camera;
+  }
+
+  public getControls(): OrbitControls {
+    return this.controls;
   }
 
   public isDraggingBlock(): boolean {
@@ -255,12 +302,7 @@ export default class EditorApp {
     }
 
     window.removeEventListener("resize", this.handleResize);
-    this.canvas.removeEventListener("pointerdown", this.handlePointerDownCapture, true);
-    this.canvas.removeEventListener("pointermove", this.handlePointerMoveCapture, true);
-    this.canvas.removeEventListener("pointerup", this.handlePointerUpCapture, true);
-    this.canvas.removeEventListener("pointercancel", this.handleWindowPointerUpCapture, true);
-    window.removeEventListener("pointerup", this.handleWindowPointerUpCapture, true);
-    window.removeEventListener("pointercancel", this.handleWindowPointerUpCapture, true);
+    // Note: InputRouter listeners are removed automatically when the canvas is removed
     window.removeEventListener("keydown", this.handleMovementKeyChange, true);
     window.removeEventListener("keyup", this.handleMovementKeyChange, true);
     document.removeEventListener("keydown", this.handleMovementKeyChange, true);
@@ -910,6 +952,11 @@ export default class EditorApp {
 
   private handlePointerDownCapture = (event: PointerEvent): void => {
     if (event.button === 0) {
+      // If event was already handled (e.g., by transform mode), don't start drag
+      if (event.defaultPrevented) {
+        return;
+      }
+      
       this.leftButtonActive = true;
       this.controls.enabled = false;
       // Prevent OrbitControls from attempting pointer capture
@@ -1049,7 +1096,7 @@ export default class EditorApp {
     this.movement.update(deltaSeconds);
   }
 
-  private intersectGround(clientX: number, clientY: number): Vector3 | null {
+  public intersectGround(clientX: number, clientY: number): Vector3 | null {
     const rect = this.canvas.getBoundingClientRect();
     this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
