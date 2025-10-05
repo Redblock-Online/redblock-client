@@ -1,8 +1,8 @@
-import type Cube from "@/objects/Cube";
+import type Target from "@/objects/Target";
 import type { TargetInfo } from "@/scenes/MainScene";
 
 export function buildTargetsInfo(
-  targets: Cube[],
+  targets: Target[],
   ammountOfTargetsSelected: number
 ): TargetInfo[] {
   // keep only the last `ammountOfTargetsSelected` targets
