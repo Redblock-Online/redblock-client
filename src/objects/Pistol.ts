@@ -1,4 +1,4 @@
-import { Group, Mesh, MeshBasicMaterial, Camera, Euler, Vector3 } from "three";
+import { Group, Mesh, MeshBasicMaterial, Camera, Euler, Vector3, Object3D } from "three";
 import GLTFLoader from "@/loaders/GLTFLoader";
 import gsap from "gsap";
 
@@ -12,6 +12,7 @@ export default class Pistol extends Group {
   private firing: boolean = false; // cooldown flag
   private fireRate = 8; // shots per second
   private tl?: gsap.core.Timeline;
+  private muzzle: Object3D | null = null;
 
   constructor(camera: Camera, callback?: (pistol: Pistol) => void) {
     super();
@@ -34,6 +35,19 @@ export default class Pistol extends Group {
           mesh.material = new MeshBasicMaterial({ color: "white" });
         }
       });
+
+      const foundMuzzle =
+        model.getObjectByName("Muzzle") ?? model.getObjectByName("muzzle") ?? null;
+
+      if (foundMuzzle) {
+        this.muzzle = foundMuzzle;
+      } else {
+        const proxyMuzzle = new Object3D();
+        proxyMuzzle.name = "Muzzle";
+        proxyMuzzle.position.set(0.50, -0.08, +1.8);
+        model.add(proxyMuzzle);
+        this.muzzle = proxyMuzzle;
+      }
 
       this.add(model);
       callback?.(this);
@@ -90,6 +104,17 @@ export default class Pistol extends Group {
       );
 
     gsap.delayedCall(cooldown, () => (this.firing = false));
+  }
+
+  public getMuzzleWorldPosition(out?: Vector3): Vector3 {
+    const res = out ?? new Vector3();
+    if (this.muzzle) {
+      this.muzzle.getWorldPosition(res);
+      return res;
+    }
+
+    this.getWorldPosition(res);
+    return res;
   }
 
   public update(delta: number, camera: Camera) {

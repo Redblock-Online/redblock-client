@@ -4,13 +4,14 @@ import MainScene from "@/scenes/MainScene";
 import Loop from "./Loop";
 import ControlsWithMovement from "@/systems/ControlsWithMovement";
 import Crosshair from "@/objects/Crosshair";
-import { Raycaster, Vector2, Vector3 } from "three";
+import { Raycaster, Vector2, Vector3, BufferGeometry, Line, LineBasicMaterial, BufferAttribute, Mesh, SphereGeometry, MeshBasicMaterial } from "three";
 import Pistol from "@/objects/Pistol";
 import Cube from "@/objects/Cube";
 import WSManager, { type PlayerCore } from "@/utils/ws/WSManager";
 import type { UIController } from "@/ui/react/mountUI";
 import type { TimerHint, TimerHintTableRow } from "@/ui/react/TimerDisplay";
 import { SCENARIOS, type ScenarioConfig, getScenarioById } from "@/config/scenarios";
+import gsap from "gsap";
 
 type StoredMetricSet = {
   accuracy: number | null;
@@ -228,6 +229,66 @@ export default class App {
     return this.currentScenarioTargetCount;
   }
 
+  private spawnTracer(from: Vector3, to: Vector3, color = 0xffff66) {
+    const positions = new Float32Array([
+      from.x, from.y, from.z,
+      to.x, to.y, to.z,
+    ]);
+
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new BufferAttribute(positions, 3));
+    const material = new LineBasicMaterial({ color, transparent: true, opacity: 1 });
+    const line = new (Line)(geometry, material) as Line;
+
+    this.scene.add(line);
+
+    try {
+      gsap.to(material, {
+        opacity: 0,
+        duration: 0.22,
+        ease: "power2.out",
+        onComplete: () => {
+          this.scene.remove(line);
+          geometry.dispose();
+          material.dispose && material.dispose();
+        },
+      });
+
+    } catch {
+      setTimeout(() => {
+        this.scene.remove(line);
+        geometry.dispose();
+        material.dispose && material.dispose();
+      }, 250);
+    }
+  }
+
+  private spawnImpactAt(pos: Vector3, color = 0xffe07a) {
+    const geom = new SphereGeometry(0.06, 8, 8);
+    const mat = new MeshBasicMaterial({ color, transparent: true, opacity: 1 });
+    const sphere = new Mesh(geom, mat);
+    sphere.position.copy(pos);
+    this.scene.add(sphere);
+
+    try {
+      gsap.timeline()
+        .to(sphere.scale, { x: 1.6, y: 1.6, z: 1.6, duration: 0.08 })
+        .to(mat, {
+          opacity: 0, duration: 0.18, onComplete: () => {
+            this.scene.remove(sphere);
+            geom.dispose();
+            mat.dispose && mat.dispose();
+          }
+        });
+    } catch {
+      setTimeout(() => {
+        this.scene.remove(sphere);
+        geom.dispose();
+        mat.dispose && mat.dispose();
+      }, 250);
+    }
+  }
+
   // ===== Helpers =====
   private onMouseDown = (e: MouseEvent) => {
     if (!this.gameRunning) {
@@ -242,6 +303,41 @@ export default class App {
       if (this.paused) return;
       this.recordShotFired();
       this.pistol.shoot();
+
+      const objects = [...this.targets, ...this.scenarioPortals] as unknown as import("three").Object3D[];
+      const camPos = new Vector3();
+      this.camera.instance.getWorldPosition(camPos);
+
+      const camDir = new Vector3();
+      this.camera.instance.getWorldDirection(camDir);
+
+      const muzzleWorld = new Vector3();
+      try {
+        if (this.pistol) {
+          (this.pistol).getMuzzleWorldPosition(muzzleWorld);
+        } else {
+          muzzleWorld.copy(camPos).add(camDir.clone().multiplyScalar(0.18));
+        }
+      } catch {
+        muzzleWorld.copy(camPos).add(camDir.clone().multiplyScalar(0.18));
+      }
+
+      this.raycaster.setFromCamera(this.mouse, this.camera.instance);
+
+      const intersects = this.raycaster.intersectObjects(objects, true);
+
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+        const hitPoint = hit.point.clone();
+
+        this.spawnTracer(muzzleWorld, hitPoint);
+        this.spawnImpactAt(hitPoint);
+
+      } else {
+        const farPoint = camPos.clone().add(camDir.multiplyScalar(50));
+
+        this.spawnTracer(muzzleWorld, farPoint, 0x9999ff);
+      }
       const result = this.checkCrosshairIntersections();
       if (result === "portal") {
         this.shotsFired = Math.max(0, this.shotsFired - 1);
@@ -314,7 +410,9 @@ export default class App {
     };
 
     const hits = this.shotsHit;
-    const roundTime = roundDurationSeconds !== null && roundDurationSeconds > 0 ? roundDurationSeconds : null;
+    let roundTime: number| null = 0;
+
+    roundTime = roundDurationSeconds !== null && roundDurationSeconds > 0 ? hits / roundTime : null;
 
     const baselineReaction = stored.best.avgReaction ?? avgReaction ?? null;
     const reactionNormalized =
