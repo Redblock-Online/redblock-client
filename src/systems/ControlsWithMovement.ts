@@ -1,7 +1,7 @@
 // src/systems/Controls.ts
 import * as THREE from "three";
 import type WSManager from "@/utils/ws/WSManager";
-import type Cube from "@/objects/Cube";
+import type Target from "@/objects/Target";
 import { buildTargetsInfo } from "@/utils/targetsInfo";
 export default class Controls {
   private camera: THREE.Camera;
@@ -9,7 +9,7 @@ export default class Controls {
   private pitchObject = new THREE.Object3D();
   private yawObject = new THREE.Object3D();
   private paused = false;
-  private targets: Cube[] = [];
+  private targets: Target[] = [];
   private sensitivity = 0.0002;
   private PI_2 = Math.PI / 2;
   private moveSpeed = 8;
@@ -64,7 +64,7 @@ export default class Controls {
   private nextSendAt = 0; // ms timestamp
 
   constructor(
-    targets: Cube[],
+    targets: Target[],
     camera: THREE.Camera,
     domElement: HTMLCanvasElement,
     wsManager: WSManager,

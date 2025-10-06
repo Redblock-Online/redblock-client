@@ -2,7 +2,7 @@
 import * as THREE from "three";
 import RandomCubeGenerator from "@/objects/RandomCubeGenerator";
 import Light from "@/objects/Light";
-import Cube from "@/objects/Cube";
+import Target from "@/objects/Target";
 import type { PlayerCore } from "@/utils/ws/WSManager";
 import WSManager from "@/utils/ws/WSManager";
 export type TargetInfo = {
@@ -68,35 +68,54 @@ function targetsInfoChanged(prev: TargetInfo[], next: TargetInfo[]): boolean {
 
 export default class MainScene extends THREE.Scene {
   private neighborRooms: Map<string, { x: number; z: number }> = new Map();
-  public targets: Cube[] = [];
+  public targets: Target[] = [];
   public me: PlayerCore;
   public wsManager: WSManager;
   public neighborMeshes: Map<string, THREE.Group> = new Map();
   public neighborTargetInfos: Map<string, TargetInfo[]> = new Map();
-  public neighborTargetsRendered: Map<string, THREE.Group[]> = new Map();
+  public neighborTargetsRendered: Map<string, Target[]> = new Map();
   private clock = new THREE.Clock();
   private neighborStates = new Map<string, NeighborState>();
 
-  private static floorGeom = new THREE.PlaneGeometry(1, 1);
-  private static floorEdgesGeom = new THREE.EdgesGeometry(MainScene.floorGeom);
-  private static floorEdgesMat = new THREE.LineBasicMaterial({
+  private static edgeMaterial = new THREE.MeshBasicMaterial({ 
     color: 0x000000,
+    depthWrite: true,
+    depthTest: true,
   });
+  private static edgeRadius = 0.01; // Increased for better visibility at distance
 
   private static roomPrototype = (() => {
     const group = new THREE.Group();
 
-    const floorEdges = new THREE.LineSegments(
-      MainScene.floorEdgesGeom,
-      MainScene.floorEdgesMat
+    // Create 4 cylindrical edges for the floor (square perimeter)
+    // Make them slightly longer to overlap at corners for perfect angles
+    const floorSize = 1.02; // Slightly longer than 1 to overlap at corners
+    const cylinderGeometry = new THREE.CylinderGeometry(
+      MainScene.edgeRadius,
+      MainScene.edgeRadius,
+      floorSize,
+      16
     );
-    floorEdges.rotation.x = -Math.PI / 2;
-    floorEdges.position.y = -2;
-    group.add(floorEdges);
+
+    // Define the 4 edges of the floor square
+    const edges = [
+      { pos: [0, -2, -0.5], rot: [0, 0, Math.PI / 2] },      // front edge (along X)
+      { pos: [0, -2, 0.5], rot: [0, 0, Math.PI / 2] },       // back edge (along X)
+      { pos: [-0.5, -2, 0], rot: [0, 0, Math.PI / 2], rotY: Math.PI / 2 },  // left edge (along Z)
+      { pos: [0.5, -2, 0], rot: [0, 0, Math.PI / 2], rotY: Math.PI / 2 },   // right edge (along Z)
+    ];
+
+    edges.forEach(({ pos, rot, rotY }) => {
+      const edge = new THREE.Mesh(cylinderGeometry, MainScene.edgeMaterial);
+      edge.position.set(pos[0], pos[1], pos[2]);
+      edge.rotation.set(rot[0], rotY || 0, rot[2]);
+      group.add(edge);
+    });
+
     return group;
   })();
 
-  constructor(targets: Cube[], me: PlayerCore, wsManager: WSManager) {
+  constructor(targets: Target[], me: PlayerCore, wsManager: WSManager) {
     super();
     const white = new THREE.Color(0xffffff);
     this.background = white;
@@ -119,21 +138,21 @@ export default class MainScene extends THREE.Scene {
     this.add(room);
   }
 
-  public loadScenario(targetCount: number) {
+  public loadScenario(targetCount: number, halfSize: boolean = false) {
     const amount = Math.max(1, Math.floor(targetCount));
-    this.generateCubes(amount, this.me.room_coord_x, this.me.room_coord_z);
+    this.generateCubes(amount, this.me.room_coord_x, this.me.room_coord_z, halfSize);
   }
 
-  public generateCubes(amount: number, roomCoordX: number, roomCoordZ: number) {
+  public generateCubes(amount: number, roomCoordX: number, roomCoordZ: number, halfSize: boolean = false) {
     const rcg = new RandomCubeGenerator(
       this.targets,
       this,
       false,
       this.wsManager
     );
-    rcg.generate(true);
+    rcg.generate(true, halfSize);
     for (let i = 0; i < amount - 1; i++) {
-      rcg.generate();
+      rcg.generate(false, halfSize);
     }
     this.targets.forEach((target) => {
       target.position.set(
@@ -145,118 +164,82 @@ export default class MainScene extends THREE.Scene {
     });
   }
 
-  public update() {
-    const dt = this.clock.getDelta();
-    const neighbors = this.wsManager.getNeighbors();
-    const currentIds = new Set<string>();
+  private updateNeighborTargets(neighborId: string, targetsInfo: TargetInfo[]) {
+    const targetInfoChanged = targetsInfoChanged(
+      this.neighborTargetInfos.get(neighborId) ?? [],
+      targetsInfo
+    );
+    
+    if (!targetInfoChanged) return;
 
-    neighbors.forEach((n) => {
-      /* Render  targets */
-
-      const targetInfoChanged = targetsInfoChanged(
-        this.neighborTargetInfos.get(n.id) ?? [],
-        n.targetsInfo
-      );
-      if (targetInfoChanged) {
-        this.neighborTargetInfos.set(n.id, n.targetsInfo);
-        this.neighborTargetsRendered.get(n.id)?.forEach((cube) => {
-          this.remove(cube);
-        });
-        this.neighborTargetsRendered.set(n.id, []);
-        n.targetsInfo.forEach((targetInfo) => {
-          if (targetInfo.disabled) return;
-          const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
-          const cubeMaterial = new THREE.MeshToonMaterial({
-            color: targetInfo.shootable ? 0xff0000 : 0xffffff,
-          });
-          cubeMaterial.transparent = true;
-          const cubeMesh = new THREE.Mesh(cubeGeometry, cubeMaterial);
-
-          const outlineMaterial = new THREE.MeshBasicMaterial({
-            color: 0x000000,
-            side: THREE.BackSide,
-          });
-          outlineMaterial.transparent = true;
-          const outlineMesh = new THREE.Mesh(cubeGeometry.clone(), outlineMaterial);
-          outlineMesh.scale.set(1.02, 1.02, 1.02);
-
-          const cube = new THREE.Group();
-          cube.add(cubeMesh);
-          cube.add(outlineMesh);
-          cube.position.set(targetInfo.x, targetInfo.y, targetInfo.z);
-
-          this.neighborTargetsRendered.get(n.id)?.push(cube);
-          this.add(cube);
-        });
-      }
-
-      currentIds.add(n.id);
-
-      const stored = this.neighborRooms.get(n.id);
-      const roomChanged =
-        !stored || stored.x !== n.room_coord_x || stored.z !== n.room_coord_z;
-
-      if (roomChanged) {
-        this.generateRoom(n.room_coord_x, n.room_coord_z);
-        this.neighborRooms.set(n.id, { x: n.room_coord_x, z: n.room_coord_z });
-      }
-
-      let mesh = this.neighborMeshes.get(n.id);
-      if (!mesh) {
-        const geom = new THREE.BoxGeometry(1, 1, 1);
-        const mat = new THREE.MeshToonMaterial({ color: 0xffffff });
-        mat.transparent = true;
-        const cubeMesh = new THREE.Mesh(geom, mat);
-
-        const outlineMat = new THREE.MeshBasicMaterial({
-          color: 0x000000,
-          side: THREE.BackSide,
-        });
-        outlineMat.transparent = true;
-        const outlineMesh = new THREE.Mesh(geom.clone(), outlineMat);
-        outlineMesh.scale.set(1.02, 1.02, 1.02);
-
-        mesh = new THREE.Group();
-        mesh.add(cubeMesh);
-        mesh.add(outlineMesh);
-        this.neighborMeshes.set(n.id, mesh);
-        this.add(mesh);
-      }
-
-      // Objetivos desde red
-      const targetPos = new THREE.Vector3(
-        n.local_player_position_x,
-        n.local_player_position_y ?? 0,
-        n.local_player_position_z
-      );
-      const targetQuat = getTargetQuatFromNet(n);
-
-      // Estado por vecino
-      let state = this.neighborStates.get(n.id);
-      if (!state) {
-        state = {
-          target: new THREE.Vector3(),
-          targetQuat: new THREE.Quaternion(),
-          lastPacketTs: performance.now(),
-        };
-        this.neighborStates.set(n.id, state);
-      }
-
-      state.target.copy(targetPos);
-      state.targetQuat.copy(targetQuat);
-      state.lastPacketTs = performance.now();
-
-      if (roomChanged) {
-        // Si cambió de room, salta directo para evitar "desliz"
-        mesh.position.copy(targetPos);
-        mesh.quaternion.copy(targetQuat);
-      }
+    this.neighborTargetInfos.set(neighborId, targetsInfo);
+    this.neighborTargetsRendered.get(neighborId)?.forEach((target) => {
+      this.remove(target);
     });
+    this.neighborTargetsRendered.set(neighborId, []);
+    
+    targetsInfo.forEach((targetInfo) => {
+      if (targetInfo.disabled) return;
+      
+      const target = new Target(targetInfo.shootable ? 0xff0000 : 0xffffff);
+      target.position.set(targetInfo.x, targetInfo.y, targetInfo.z);
 
-    // Interpolación suave
-    const responsiveness = 12; // sube/baja para más/menos reactividad
+      this.neighborTargetsRendered.get(neighborId)?.push(target);
+      this.add(target);
+    });
+  }
+
+  private checkNeighborRoomChange(neighborId: string, roomX: number, roomZ: number): boolean {
+    const stored = this.neighborRooms.get(neighborId);
+    const roomChanged = !stored || stored.x !== roomX || stored.z !== roomZ;
+    
+    if (roomChanged) {
+      this.generateRoom(roomX, roomZ);
+      this.neighborRooms.set(neighborId, { x: roomX, z: roomZ });
+    }
+    
+    return roomChanged;
+  }
+
+  private getOrCreateNeighborMesh(neighborId: string): THREE.Group {
+    let mesh = this.neighborMeshes.get(neighborId);
+    
+    if (!mesh) {
+      mesh = new Target(0xffffff);
+      this.neighborMeshes.set(neighborId, mesh);
+      this.add(mesh);
+    }
+    
+    return mesh;
+  }
+
+  private updateNeighborState(
+    neighborId: string,
+    targetPos: THREE.Vector3,
+    targetQuat: THREE.Quaternion
+  ): NeighborState {
+    let state = this.neighborStates.get(neighborId);
+    
+    if (!state) {
+      state = {
+        target: new THREE.Vector3(),
+        targetQuat: new THREE.Quaternion(),
+        lastPacketTs: performance.now(),
+      };
+      this.neighborStates.set(neighborId, state);
+    }
+
+    state.target.copy(targetPos);
+    state.targetQuat.copy(targetQuat);
+    state.lastPacketTs = performance.now();
+    
+    return state;
+  }
+
+  private interpolateNeighborMeshes(dt: number) {
+    const responsiveness = 12;
     const alpha = 1 - Math.exp(-responsiveness * dt);
-    const alphaRot = alpha; // puedes usar otro valor si quieres distinta suavidad
+    const alphaRot = alpha;
 
     this.neighborMeshes.forEach((mesh, id) => {
       const state = this.neighborStates.get(id);
@@ -265,8 +248,9 @@ export default class MainScene extends THREE.Scene {
       mesh.position.lerp(state.target, alpha);
       mesh.quaternion.slerp(state.targetQuat, alphaRot);
     });
+  }
 
-    // Limpieza de desconectados
+  private cleanupDisconnectedNeighbors(currentIds: Set<string>) {
     Array.from(this.neighborMeshes.keys()).forEach((id) => {
       if (!currentIds.has(id)) {
         const m = this.neighborMeshes.get(id)!;
@@ -276,5 +260,36 @@ export default class MainScene extends THREE.Scene {
         this.neighborRooms.delete(id);
       }
     });
+  }
+
+  public update() {
+    const dt = this.clock.getDelta();
+    const neighbors = this.wsManager.getNeighbors();
+    const currentIds = new Set<string>();
+
+    neighbors.forEach((n) => {
+      currentIds.add(n.id);
+
+      this.updateNeighborTargets(n.id, n.targetsInfo);
+      const roomChanged = this.checkNeighborRoomChange(n.id, n.room_coord_x, n.room_coord_z);
+      const mesh = this.getOrCreateNeighborMesh(n.id);
+
+      const targetPos = new THREE.Vector3(
+        n.local_player_position_x,
+        n.local_player_position_y ?? 0,
+        n.local_player_position_z
+      );
+      const targetQuat = getTargetQuatFromNet(n);
+
+      this.updateNeighborState(n.id, targetPos, targetQuat);
+
+      if (roomChanged) {
+        mesh.position.copy(targetPos);
+        mesh.quaternion.copy(targetQuat);
+      }
+    });
+
+    this.interpolateNeighborMeshes(dt);
+    this.cleanupDisconnectedNeighbors(currentIds);
   }
 }

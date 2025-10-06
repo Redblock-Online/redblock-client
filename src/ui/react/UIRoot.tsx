@@ -152,7 +152,7 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
         <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_49%,#000_49%,#000_51%,transparent_51%),linear-gradient(0deg,transparent_49%,#000_49%,#000_51%,transparent_51%)] [background-size:80px_80px] opacity-10" />
         <div className="relative z-10 flex flex-col p-5 text-center max-w-md">
           <h1 className="text-2xl font-bold mb-2">This game is designed for PC</h1>
-        <IGBadge />
+        <IGBadge started={false} />
           <p>Please switch to a desktop or laptop for the best experience.</p>
         </div>
       </div>
@@ -197,8 +197,8 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
         />
       )}
       {!started && <Navbar />}
-      <ControlsHint />
-      <IGBadge />
+      <ControlsHint started={started} />
+      <IGBadge started={started} />
       <PauseMenu
         visible={started && paused}
         onContinue={() => {

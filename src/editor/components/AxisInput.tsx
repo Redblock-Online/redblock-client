@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { ReactElement } from "react";
 
 export type AxisInputProps = {
@@ -12,6 +12,8 @@ export type AxisInputProps = {
 
 export function AxisInput({ label, value, onChange, step = 0.1, min, precision }: AxisInputProps): ReactElement {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState<string>("");
 
   const format = useCallback(
     (v: number): string => {
@@ -45,11 +47,22 @@ export function AxisInput({ label, value, onChange, step = 0.1, min, precision }
         ref={inputRef}
         type="text"
         className="h-8 w-full rounded border border-rb-border bg-white pl-7 pr-2 text-right text-rb-text outline-none focus:ring-1 focus:ring-black/20"
-        value={format(value)}
+        value={isEditing ? draft : format(value)}
+        onFocus={(e) => {
+          setIsEditing(true);
+          setDraft(e.currentTarget.value);
+        }}
         onChange={(e) => {
-          const parsed = parse(e.target.value);
-          if (parsed === null) return; // ignore invalid
-          onChange(applyBounds(parsed));
+          // Allow free-form typing while focused; validate on blur/enter
+          setDraft(e.target.value);
+        }}
+        onBlur={() => {
+          const parsed = parse(draft);
+          if (parsed !== null) {
+            onChange(applyBounds(parsed));
+          }
+          // reset editing state and reflect the latest external value
+          setIsEditing(false);
         }}
         onKeyDown={(e) => {
           // prevent arrow up/down page scroll while focusing input
@@ -58,6 +71,26 @@ export function AxisInput({ label, value, onChange, step = 0.1, min, precision }
             const dir = e.key === "ArrowUp" ? 1 : -1;
             const factor = e.shiftKey ? 10 : e.altKey || e.metaKey ? 0.1 : 1;
             onChange(applyBounds(value + dir * step * factor));
+            return;
+          }
+          if (e.key === "Enter") {
+            e.preventDefault();
+            const parsed = parse(isEditing ? draft : format(value));
+            if (parsed !== null) {
+              onChange(applyBounds(parsed));
+            }
+            // Commit and exit edit mode
+            setIsEditing(false);
+            // blur to trigger consistent formatting
+            inputRef.current?.blur();
+            return;
+          }
+          if (e.key === "Escape") {
+            e.preventDefault();
+            // Cancel edits and revert display
+            setIsEditing(false);
+            setDraft("");
+            inputRef.current?.blur();
           }
         }}
         inputMode="decimal"

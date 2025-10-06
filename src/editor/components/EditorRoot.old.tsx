@@ -8,7 +8,11 @@ import { useComponentRegistry } from "../hooks/useComponentRegistry";
 import { ItemMenu } from "./ItemMenu";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { useHistoryStack, type GroupMember } from "../hooks/useHistoryStack";
-import type { TransformMode, AxisConstraint } from "../core/EditorModeManager";
+import {
+  useTransformSession,
+  type AxisConstraint,
+  type TransformMode,
+} from "../hooks/useTransformSession";
 import { ScenarioModal } from "./ScenarioModal";
 import { Portal } from "./Portal";
 import { ComponentDeleteModal } from "./ComponentDeleteModal";
@@ -475,26 +479,26 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
 
   const { pushHistory, undo, redo } = useHistoryStack(editor, applyTransformSnapshot, autoSaveScenario);
 
-  // NEW: Use mode system instead of useTransformSession
-  const [transformMode, setTransformMode] = useState<TransformMode | null>(null);
-  const [activeAxis, setActiveAxis] = useState<AxisConstraint>(null);
+  const {
+    transformMode,
+    activeAxis,
+    startTransform,
+    finishTransform,
+    updatePointerDelta,
+    toggleAxis,
+    resetSession,
+    releasePointerLock,
+  } = useTransformSession(editor, applyTransformToState, pushHistory, autoSaveScenario);
 
-  // Listen to mode changes from the new system
   useEffect(() => {
-    const removeListener = editor.modeManager.addListener((mode) => {
-      if (mode.type === "transforming") {
-        setTransformMode(mode.mode);
-        setActiveAxis(mode.axis);
-      } else {
-        setTransformMode(null);
-        setActiveAxis(null);
-      }
-    });
-    return removeListener;
-  }, [editor]);
+    return () => {
+      releasePointerLock();
+    };
+  }, [releasePointerLock]);
 
   useEffect(() => {
     return editor.addSelectionListener((block) => {
+      resetSession();
       setSelection(block);
       const t = editor.getSelectionTransform();
       // When entering component edit mode, selection becomes multiple and getSelectionTransform() returns null.
@@ -503,12 +507,32 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         applyTransformToState(t);
       }
     });
-  }, [editor, applyTransformToState, editingActive]);
+  }, [editor, applyTransformToState, resetSession, editingActive]);
 
-  // NOTE: Event handling (pointer, keyboard) is now done by InputRouter in EditorApp
-  // We only need to handle drag/drop from the palette
   useEffect(() => {
     const canvas = editor.getCanvas();
+
+    const handlePointerDown = (event: PointerEvent) => {
+      // Only react to left-click for selection/placement
+      if (event.button !== 0) {
+        return;
+      }
+      if (transformMode) {
+        event.preventDefault();
+        finishTransform(true);
+        return;
+      }
+
+      const additive = (event.ctrlKey ?? false) || (event.metaKey ?? false);
+      const picked = editor.pickBlock(event.clientX, event.clientY, additive);
+      if (picked) {
+        // If a palette item was selected, clear it when user picks a world block
+        if (selectedItemRef.current) {
+          setActiveItem(null);
+        }
+      }
+      editor.clearMovementState?.();
+    };
 
     const handleDragOver = (event: DragEvent) => {
       if (editingActive) return;
@@ -551,13 +575,43 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       editor.clearMovementState?.();
     };
 
+    canvas.addEventListener("pointerdown", handlePointerDown);
     canvas.addEventListener("dragover", handleDragOver);
     canvas.addEventListener("drop", handleDrop);
     return () => {
+      canvas.removeEventListener("pointerdown", handlePointerDown);
       canvas.removeEventListener("dragover", handleDragOver);
       canvas.removeEventListener("drop", handleDrop);
     };
-  }, [autoSaveScenario, editor, editingActive, pushHistory]);
+  }, [autoSaveScenario, editor, finishTransform, editingActive, pushHistory, transformMode]);
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!transformMode) {
+        return;
+      }
+      event.preventDefault();
+      updatePointerDelta(event.movementX, event.movementY);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    return () => window.removeEventListener("pointermove", handlePointerMove);
+  }, [transformMode, updatePointerDelta]);
+
+  useEffect(() => {
+    const removeListener = editor.addPointerUpListener((event, context) => {
+      if (event.type !== "pointerup" || event.button !== 0) {
+        return;
+      }
+      if (context.dragged) {
+        return;
+      }
+      if (transformMode) {
+        finishTransform(true);
+      }
+    });
+    return removeListener;
+  }, [editor, finishTransform, transformMode]);
 
   useEffect(() => {
     const removeListener = editor.addDragCommitListener((changes) => {
@@ -646,39 +700,63 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     autoSaveScenario();
   }, [autoSaveScenario, editor, pushHistory, selection]);
 
-  // NOTE: Keyboard handling is now done by InputRouter in EditorApp
-  // We only keep UI-specific shortcuts here (copy/paste/save/undo/redo/delete)
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat) return;
+      if (event.repeat) {
+        return;
+      }
 
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
         return;
       }
 
+      if (event.key === "Escape") {
+        if (transformMode) {
+          event.preventDefault();
+          finishTransform(false);
+          return;
+        }
+        setActiveItem(null);
+        editor.clearSelection();
+        return;
+      }
+
       const key = event.key.toLowerCase();
+
       const meta = event.metaKey;
       const ctrl = event.ctrlKey;
 
-      // Copy/Paste/Save
       if ((meta || ctrl) && key === "c") {
         event.preventDefault();
         copySelection();
         return;
       }
+
       if ((meta || ctrl) && key === "v") {
         event.preventDefault();
         pasteClipboard();
         return;
       }
+
       if ((meta || ctrl) && key === "s") {
         event.preventDefault();
         handleSaveCurrentScenario();
         return;
       }
 
-      // Undo/Redo
+      // Finish component editing with Enter
+      if (event.key === "Enter") {
+        const editingId = editor.getEditingComponentId();
+        if (editingId) {
+          event.preventDefault();
+          editor.finishEditingComponent(editingId);
+          autoSaveScenario();
+          return;
+        }
+      }
+
+      // Undo/Redo (Win/Linux: Ctrl+Z / Ctrl+Y, macOS: Cmd+Z / Cmd+Shift+Z)
       const isMac = navigator.platform.toLowerCase().includes("mac");
       const shift = event.shiftKey;
       if ((ctrl && key === "z") || (isMac && meta && key === "z" && !shift)) {
@@ -691,36 +769,47 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         redo();
         return;
       }
-
-      // Delete
       if ((event.key === "Delete" || event.key === "Backspace") && (selection || editor.getSelectionArray().length > 0)) {
         event.preventDefault();
         deleteSelection();
         return;
       }
-
-      // Escape to clear selection
-      if (event.key === "Escape" && !transformMode) {
-        setActiveItem(null);
-        editor.clearSelection();
-        return;
-      }
-
-      // Component editing
-      if (event.key === "Enter") {
-        const editingId = editor.getEditingComponentId();
-        if (editingId) {
+      if (transformMode) {
+        if (key === "x" || key === "y" || key === "z") {
           event.preventDefault();
-          editor.finishEditingComponent(editingId);
-          autoSaveScenario();
+          toggleAxis(key as Exclude<AxisConstraint, null>);
           return;
         }
+
+        if (event.key === "Enter" || event.key === "Return" || event.key === " ") {
+          event.preventDefault();
+          finishTransform(true);
+          return;
+        }
+      }
+
+      if (!transformMode && editor.isDraggingBlock()) {
+        if (key === "x" || key === "y" || key === "z") {
+          event.preventDefault();
+          editor.toggleDragAxis(key as "x" | "y" | "z");
+          return;
+        }
+      }
+
+      if (key === "g" || key === "r" || key === "f") {
+        const hasSelection = editor.getSelection() !== null || editor.getSelectionArray().length > 0;
+        if (!hasSelection) {
+          return;
+        }
+        event.preventDefault();
+        const mode: TransformMode = key === "g" ? "translate" : key === "r" ? "rotate" : "scale";
+        startTransform(mode);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [autoSaveScenario, copySelection, deleteSelection, editor, handleSaveCurrentScenario, pasteClipboard, selection, transformMode, undo, redo]);
+  }, [autoSaveScenario, copySelection, deleteSelection, editor, finishTransform, handleSaveCurrentScenario, pasteClipboard, selection, startTransform, transformMode, toggleAxis, undo, redo]);
 
   useEffect(() => {
     if (!selection || Array.isArray(selection)) {
