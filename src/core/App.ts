@@ -70,6 +70,11 @@ export default class App {
   private shotsHit = 0;
   private reactionTimes: number[] = [];
   private readonly statsStorageKey = "redblockScenarioStats";
+  private tracerPool: Line[] = [];
+  private impactPool: Mesh[] = [];
+  private tracerGeom?: BufferGeometry;
+  private impactGeom?: SphereGeometry;
+
 
   constructor(ui?: UIController) {
     this.ui = ui;
@@ -84,6 +89,10 @@ export default class App {
       this.wsManager.getMe()!,
       this.wsManager
     );
+    this.tracerGeom = new BufferGeometry();
+    const positions = new Float32Array(6);
+    this.tracerGeom.setAttribute('position', new BufferAttribute(positions, 3));
+    this.impactGeom = new SphereGeometry(0.06, 8, 8);
 
     this.renderer = new Renderer(this.scene, this.camera.instance, this.canvas);
     this.controls = new ControlsWithMovement(
@@ -230,61 +239,75 @@ export default class App {
   }
 
   private spawnTracer(from: Vector3, to: Vector3, color = 0xffff66) {
-    const positions = new Float32Array([
-      from.x, from.y, from.z,
-      to.x, to.y, to.z,
-    ]);
+    let line: Line | undefined;
+    if (this.tracerPool.length > 0) {
+      line = this.tracerPool.pop()!;
 
-    const geometry = new BufferGeometry();
-    geometry.setAttribute("position", new BufferAttribute(positions, 3));
-    const material = new LineBasicMaterial({ color, transparent: true, opacity: 1 });
-    const line = new (Line)(geometry, material) as Line;
+      if (!line.geometry.getAttribute("position")) {
+        line.geometry = this.tracerGeom!.clone();
+      }
+      const posAttr = line.geometry.getAttribute("position") as BufferAttribute;
+      posAttr.setXYZ(0, from.x, from.y, from.z);
+      posAttr.setXYZ(1, to.x, to.y, to.z);
+      posAttr.needsUpdate = true;
+      (line.material as LineBasicMaterial).color.set(color);
+      (line.material as LineBasicMaterial).opacity = 1;
+    } else {
+      const pos = new Float32Array([from.x, from.y, from.z, to.x, to.y, to.z]);
+      const geom = new BufferGeometry();
+      geom.setAttribute("position", new BufferAttribute(pos, 3));
+      const mat = new LineBasicMaterial({ color, transparent: true, opacity: 1 });
+      line = new (Line)(geom, mat) as Line;
+    }
 
     this.scene.add(line);
 
     try {
-      gsap.to(material, {
+      gsap.to((line.material as LineBasicMaterial), {
         opacity: 0,
-        duration: 0.22,
+        duration: 0.16,
         ease: "power2.out",
         onComplete: () => {
-          this.scene.remove(line);
-          geometry.dispose();
-          material.dispose && material.dispose();
+          this.scene.remove(line!);
+          this.tracerPool.push(line!);
         },
       });
-
     } catch {
       setTimeout(() => {
-        this.scene.remove(line);
-        geometry.dispose();
-        material.dispose && material.dispose();
-      }, 250);
+        this.scene.remove(line!);
+        this.tracerPool.push(line!);
+      }, 200);
     }
   }
 
   private spawnImpactAt(pos: Vector3, color = 0xffe07a) {
-    const geom = new SphereGeometry(0.06, 8, 8);
-    const mat = new MeshBasicMaterial({ color, transparent: true, opacity: 1 });
-    const sphere = new Mesh(geom, mat);
-    sphere.position.copy(pos);
+    let sphere: Mesh | undefined;
+    if (this.impactPool.length > 0) {
+      sphere = this.impactPool.pop()!;
+      sphere.position.copy(pos);
+      (sphere.material as MeshBasicMaterial).color.set(color);
+      (sphere.material as MeshBasicMaterial).opacity = 1;
+      sphere.scale.set(1, 1, 1);
+    } else {
+      const mat = new MeshBasicMaterial({ color, transparent: true, opacity: 1 });
+      sphere = new Mesh(this.impactGeom!, mat);
+      sphere.position.copy(pos);
+    }
     this.scene.add(sphere);
 
     try {
       gsap.timeline()
         .to(sphere.scale, { x: 1.6, y: 1.6, z: 1.6, duration: 0.08 })
-        .to(mat, {
+        .to((sphere.material as MeshBasicMaterial), {
           opacity: 0, duration: 0.18, onComplete: () => {
-            this.scene.remove(sphere);
-            geom.dispose();
-            mat.dispose && mat.dispose();
+            this.scene.remove(sphere!);
+            this.impactPool.push(sphere!);
           }
         });
     } catch {
       setTimeout(() => {
-        this.scene.remove(sphere);
-        geom.dispose();
-        mat.dispose && mat.dispose();
+        this.scene.remove(sphere!);
+        this.impactPool.push(sphere!);
       }, 250);
     }
   }
