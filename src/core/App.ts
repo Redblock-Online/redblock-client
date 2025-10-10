@@ -4,13 +4,14 @@ import MainScene from "@/scenes/MainScene";
 import Loop from "./Loop";
 import ControlsWithMovement from "@/systems/ControlsWithMovement";
 import Crosshair from "@/objects/Crosshair";
-import { Raycaster, Vector2, Vector3 } from "three";
+import { Raycaster, Vector2, Vector3, BufferGeometry, Line, LineBasicMaterial, BufferAttribute, Mesh, SphereGeometry, MeshBasicMaterial } from "three";
 import Pistol from "@/objects/Pistol";
 import Target from "@/objects/Target";
 import WSManager, { type PlayerCore } from "@/utils/ws/WSManager";
 import type { UIController } from "@/ui/react/mountUI";
 import type { TimerHint, TimerHintTableRow } from "@/ui/react/TimerDisplay";
 import { SCENARIOS, type ScenarioConfig, getScenarioById } from "@/config/scenarios";
+import gsap from "gsap";
 
 type StoredMetricSet = {
   accuracy: number | null;
@@ -69,6 +70,11 @@ export default class App {
   private shotsHit = 0;
   private reactionTimes: number[] = [];
   private readonly statsStorageKey = "redblockScenarioStats";
+  private tracerPool: Line[] = [];
+  private impactPool: Mesh[] = [];
+  private tracerGeom?: BufferGeometry;
+  private impactGeom?: SphereGeometry;
+
 
   constructor(ui?: UIController) {
     this.ui = ui;
@@ -83,6 +89,10 @@ export default class App {
       this.wsManager.getMe()!,
       this.wsManager
     );
+    this.tracerGeom = new BufferGeometry();
+    const positions = new Float32Array(6);
+    this.tracerGeom.setAttribute('position', new BufferAttribute(positions, 3));
+    this.impactGeom = new SphereGeometry(0.06, 8, 8);
 
     this.renderer = new Renderer(this.scene, this.camera.instance, this.canvas);
     this.controls = new ControlsWithMovement(
@@ -228,6 +238,80 @@ export default class App {
     return this.currentScenarioTargetCount;
   }
 
+  private spawnTracer(from: Vector3, to: Vector3, color = 0xffff66) {
+    let line: Line | undefined;
+    if (this.tracerPool.length > 0) {
+      line = this.tracerPool.pop()!;
+
+      if (!line.geometry.getAttribute("position")) {
+        line.geometry = this.tracerGeom!.clone();
+      }
+      const posAttr = line.geometry.getAttribute("position") as BufferAttribute;
+      posAttr.setXYZ(0, from.x, from.y, from.z);
+      posAttr.setXYZ(1, to.x, to.y, to.z);
+      posAttr.needsUpdate = true;
+      (line.material as LineBasicMaterial).color.set(color);
+      (line.material as LineBasicMaterial).opacity = 1;
+    } else {
+      const pos = new Float32Array([from.x, from.y, from.z, to.x, to.y, to.z]);
+      const geom = new BufferGeometry();
+      geom.setAttribute("position", new BufferAttribute(pos, 3));
+      const mat = new LineBasicMaterial({ color, transparent: true, opacity: 1 });
+      line = new (Line)(geom, mat) as Line;
+    }
+
+    this.scene.add(line);
+
+    try {
+      gsap.to((line.material as LineBasicMaterial), {
+        opacity: 0,
+        duration: 0.16,
+        ease: "power2.out",
+        onComplete: () => {
+          this.scene.remove(line!);
+          this.tracerPool.push(line!);
+        },
+      });
+    } catch {
+      setTimeout(() => {
+        this.scene.remove(line!);
+        this.tracerPool.push(line!);
+      }, 200);
+    }
+  }
+
+  private spawnImpactAt(pos: Vector3, color = 0xffe07a) {
+    let sphere: Mesh | undefined;
+    if (this.impactPool.length > 0) {
+      sphere = this.impactPool.pop()!;
+      sphere.position.copy(pos);
+      (sphere.material as MeshBasicMaterial).color.set(color);
+      (sphere.material as MeshBasicMaterial).opacity = 1;
+      sphere.scale.set(1, 1, 1);
+    } else {
+      const mat = new MeshBasicMaterial({ color, transparent: true, opacity: 1 });
+      sphere = new Mesh(this.impactGeom!, mat);
+      sphere.position.copy(pos);
+    }
+    this.scene.add(sphere);
+
+    try {
+      gsap.timeline()
+        .to(sphere.scale, { x: 1.6, y: 1.6, z: 1.6, duration: 0.08 })
+        .to((sphere.material as MeshBasicMaterial), {
+          opacity: 0, duration: 0.18, onComplete: () => {
+            this.scene.remove(sphere!);
+            this.impactPool.push(sphere!);
+          }
+        });
+    } catch {
+      setTimeout(() => {
+        this.scene.remove(sphere!);
+        this.impactPool.push(sphere!);
+      }, 250);
+    }
+  }
+
   // ===== Helpers =====
   private onMouseDown = (e: MouseEvent) => {
     if (!this.gameRunning) {
@@ -242,6 +326,41 @@ export default class App {
       if (this.paused) return;
       this.recordShotFired();
       this.pistol.shoot();
+
+      const objects = [...this.targets, ...this.scenarioPortals] as unknown as import("three").Object3D[];
+      const camPos = new Vector3();
+      this.camera.instance.getWorldPosition(camPos);
+
+      const camDir = new Vector3();
+      this.camera.instance.getWorldDirection(camDir);
+
+      const muzzleWorld = new Vector3();
+      try {
+        if (this.pistol) {
+          (this.pistol).getMuzzleWorldPosition(muzzleWorld);
+        } else {
+          muzzleWorld.copy(camPos).add(camDir.clone().multiplyScalar(0.18));
+        }
+      } catch {
+        muzzleWorld.copy(camPos).add(camDir.clone().multiplyScalar(0.18));
+      }
+
+      this.raycaster.setFromCamera(this.mouse, this.camera.instance);
+
+      const intersects = this.raycaster.intersectObjects(objects, true);
+
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+        const hitPoint = hit.point.clone();
+
+        this.spawnTracer(muzzleWorld, hitPoint);
+        this.spawnImpactAt(hitPoint);
+
+      } else {
+        const farPoint = camPos.clone().add(camDir.multiplyScalar(50));
+
+        this.spawnTracer(muzzleWorld, farPoint, 0x9999ff);
+      }
       const result = this.checkCrosshairIntersections();
       if (result === "portal") {
         this.shotsFired = Math.max(0, this.shotsFired - 1);
@@ -314,7 +433,9 @@ export default class App {
     };
 
     const hits = this.shotsHit;
-    const roundTime = roundDurationSeconds !== null && roundDurationSeconds > 0 ? roundDurationSeconds : null;
+    let roundTime: number| null = 0;
+
+    roundTime = roundDurationSeconds !== null && roundDurationSeconds > 0 ? hits / roundTime : null;
 
     const baselineReaction = stored.best.avgReaction ?? avgReaction ?? null;
     const reactionNormalized =

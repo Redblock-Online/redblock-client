@@ -1,4 +1,4 @@
-import { Group, Mesh, MeshToonMaterial, MeshBasicMaterial, Camera, Euler, Vector3, BoxGeometry, CylinderGeometry } from "three";
+import { Group, Mesh, MeshToonMaterial, MeshBasicMaterial, Camera, Euler, Vector3, BoxGeometry, CylinderGeometry, Object3D } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import gsap from "gsap";
 
@@ -32,6 +32,7 @@ export default class Pistol extends Group {
   private prevCameraPos = new Vector3();
   private velocity = new Vector3();
   private swayTween?: gsap.core.Tween;
+  private muzzle: Object3D | null = null;
 
   constructor(camera: Camera, callback?: (pistol: Pistol) => void) {
     super();
@@ -58,6 +59,19 @@ export default class Pistol extends Group {
           }
         });
         
+      const foundMuzzle =
+        model.getObjectByName("Muzzle") ?? model.getObjectByName("muzzle") ?? null;
+
+      if (foundMuzzle) {
+        this.muzzle = foundMuzzle;
+      } else {
+        const proxyMuzzle = new Object3D();
+        proxyMuzzle.name = "Muzzle";
+        proxyMuzzle.position.set(0.50, -0.08, +1.8);
+        model.add(proxyMuzzle);
+        this.muzzle = proxyMuzzle;
+      }
+
         this.add(model);
         
         // Initialize previous camera position
@@ -180,6 +194,17 @@ export default class Pistol extends Group {
       );
 
     gsap.delayedCall(cooldown, () => (this.firing = false));
+  }
+
+  public getMuzzleWorldPosition(out?: Vector3): Vector3 {
+    const res = out ?? new Vector3();
+    if (this.muzzle) {
+      this.muzzle.getWorldPosition(res);
+      return res;
+    }
+
+    this.getWorldPosition(res);
+    return res;
   }
 
   public update(delta: number, camera: Camera) {
