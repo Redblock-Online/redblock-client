@@ -1,5 +1,8 @@
-# Redblock Online 
-## Aim trainer for shooters, (in ThreeJS + Next.js)
+# 🎯 Redblock Online
+
+**A multiplayer FPS aim trainer built with Three.js, Next.js, and TypeScript**
+
+Redblock Online is a fast-paced 3D aim training game featuring a built-in world editor. Create custom training scenarios with blocks and spawn points, then jump straight into the action to improve your shooting accuracy and reaction time.
 
 <h3 align="center">🎮 Game Preview</h3>
 
@@ -7,22 +10,53 @@
   <img src="preview.gif" alt="Preview" width="800">
 </p>
 
-## How to install
+## 📖 About the Project
+
+Redblock Online combines two powerful experiences in one application:
+
+### 🎮 **Game Mode**
+- **FPS Aim Training**: Practice your aim with procedurally generated targets
+- **Multiple Difficulty Levels**: Choose from 3, 8, or 50 targets for quick warm-ups or intense sessions
+- **Real-time Performance Tracking**: Built-in timer tracks your completion time
+- **Smooth Movement**: WASD controls with adjustable mouse sensitivity and inertia
+- **Modern Graphics**: Cell-shaded visuals with post-processing effects (FXAA, outline rendering)
+
+### 🛠️ **World Editor**
+- **Visual Level Designer**: Drag-and-drop interface to build custom training scenarios
+- **Component System**: Create reusable prefabs from grouped blocks
+- **Transform Tools**: Move (G), Rotate (R), and Scale (F) with axis constraints (X/Y/Z)
+- **Undo/Redo System**: Full history stack for safe experimentation
+- **Scenario Management**: Save, load, and export custom worlds
+- **Spawn Point System**: Place cyan spawn points to define player starting positions
+
+### 🌐 **Multiplayer Ready**
+- WebSocket integration for real-time multiplayer (server implementation required)
+- Player position and rotation synchronization
+- Interpolation system for smooth remote player movement
+
+---
+
+## 🚀 Quick Start
+
+### Installation
 
 ```bash
 npm install
 ```
 
-## How to run
+### Development
 
 ```bash
 npm run dev
 ```
 
-## How to build
+Open [http://localhost:3000](http://localhost:3000) to play the game, or visit [http://localhost:3000/editor](http://localhost:3000/editor) to access the world editor.
+
+### Production Build
 
 ```bash
 npm run build
+npm start
 ```
 
 ---
@@ -41,48 +75,146 @@ npm run build
 
 Use the **sensitivity slider** in the start screen to fine-tune mouse sensitivity. The value is stored in `localStorage` so your preference persists across sessions.
 
-## ✨ Features
+## 🎨 Editor Controls
 
-- Three target presets (3, 8, 50) for quick warm-ups.
-- Procedurally generated colored cubes that become shootable one at a time.
-- Animated target absorption effect when hit.
-- Die-cut cell-shaded pistol model that follows camera rotation.
-- FPS-style WASD movement with adjustable sensitivity and inertia.
-- Built-in timer that stops automatically when the last target disappears.
-- Post-processing pipeline (`EffectComposer`, FXAA pass) ready for expansion.
-- Fully written in **TypeScript** + **Three.js** and powered by **Next.js**.
+| Action                  | Key/Mouse                    |
+| ----------------------- | ---------------------------- |
+| Select Block            | `Left Click`                 |
+| Multi-Select            | `Shift/Ctrl + Left Click`    |
+| Move Block              | `G` (then move mouse)        |
+| Rotate Block            | `R` (then move mouse)        |
+| Scale Block             | `F` (then move mouse)        |
+| Constrain to Axis       | `X` / `Y` / `Z` (during transform) |
+| Confirm Transform       | `Left Click` or `Enter`      |
+| Cancel Transform        | `Esc`                        |
+| Orbit Camera            | `Right Click + Drag`         |
+| Pan Camera              | `Shift + Right Click + Drag` |
+| Zoom Camera             | `Mouse Wheel`                |
+| Move Camera             | `W` / `A` / `S` / `D`        |
+| Copy Selection          | `Ctrl/Cmd + C`               |
+| Paste                   | `Ctrl/Cmd + V`               |
+| Delete Selection        | `Delete` or `Backspace`      |
+| Undo                    | `Ctrl/Cmd + Z`               |
+| Redo                    | `Ctrl/Cmd + Y` or `Cmd + Shift + Z` |
+| Save Scenario           | `Ctrl/Cmd + S`               |
+
+## ✨ Key Features
+
+### Game Features
+- **Three Target Presets**: Choose 3, 8, or 50 targets for different difficulty levels
+- **Procedural Generation**: Colored cubes spawn randomly in the play area
+- **Hit Detection**: Raycasting-based shooting with visual feedback
+- **Animated Effects**: Target absorption animation when hit
+- **Cell-Shaded Graphics**: Modern low-poly aesthetic with outline rendering
+- **Performance Timer**: Automatic timing from first to last target
+- **Adjustable Sensitivity**: Mouse sensitivity slider with localStorage persistence
+
+### Editor Features
+- **Drag & Drop Placement**: Intuitive block and spawn point placement
+- **Transform Gizmos**: Visual feedback for move, rotate, and scale operations
+- **Component System**: Group blocks into reusable prefabs
+- **History Stack**: Unlimited undo/redo for all operations
+- **Scenario Management**: Save, load, import, and export custom worlds
+- **Auto-Save**: Automatic saving to prevent data loss
+- **Multi-Selection**: Select and transform multiple blocks at once
+- **Clipboard**: Copy/paste blocks with automatic offset
+
+### Technical Features
+- **TypeScript**: Full type safety throughout the codebase
+- **Three.js**: Modern WebGL rendering with post-processing
+- **Next.js App Router**: Server-side rendering and optimized bundling
+- **WebSocket Ready**: Infrastructure for multiplayer gameplay
+- **Modular Architecture**: Clean separation of concerns with systems and components
 
 ## 🗂️ Project Structure
 
 ```text
-three-shooter/
-├── app/                  # Next.js App Router routes (game & editor)
-├── public/               # Static assets (models, textures, icons…)
+redblock-client/
+├── app/
+│   ├── page.tsx                    # Game route (/)
+│   └── editor/
+│       └── page.tsx                # Editor route (/editor)
+├── public/
+│   ├── models/
+│   │   └── pistol.glb              # Low-poly pistol 3D model
+│   ├── preview.gif                 # Gameplay preview
+│   └── controls.png                # Control hints image
 ├── src/
-│   ├── core/             # Engine wrappers (Camera, Renderer, Loop, App)
-│   ├── next/             # Client bootstrappers for Next.js routes
-│   ├── objects/          # 3D objects & generators (Cube, Pistol …)
-│   ├── scenes/           # Three.js scenes (MainScene)
-│   ├── systems/          # Behaviour modules (ControlsWithMovement)
-│   └── ui/               # DOM-based UI overlays (StartScreen)
-├── package.json          # NPM scripts & deps
-└── tsconfig.json         # TypeScript configuration
+│   ├── core/                       # Game engine core
+│   │   ├── App.ts                  # Main game application
+│   │   ├── Camera.ts               # Camera wrapper
+│   │   ├── Renderer.ts             # WebGL renderer with post-processing
+│   │   └── Loop.ts                 # Game loop manager
+│   ├── editor/                     # World editor
+│   │   ├── EditorApp.ts            # Editor application
+│   │   ├── components/             # React UI components
+│   │   ├── core/                   # Editor core systems
+│   │   │   ├── BlockStore.ts       # Block management
+│   │   │   ├── SelectionManager.ts # Selection system
+│   │   │   ├── GroupManager.ts     # Grouping system
+│   │   │   ├── ComponentManager.ts # Prefab system
+│   │   │   ├── EditorModeManager.ts # Mode state machine
+│   │   │   ├── InputRouter.ts      # Input event routing
+│   │   │   └── handlers/           # Input handlers (drag, transform, selection)
+│   │   ├── hooks/                  # React hooks
+│   │   └── types.ts                # TypeScript definitions
+│   ├── next/                       # Next.js bootstrappers
+│   │   ├── GameBootstrapper.tsx    # Game initialization
+│   │   └── EditorBootstrapper.tsx  # Editor initialization
+│   ├── objects/                    # 3D objects
+│   │   ├── Cube.ts                 # Target cube
+│   │   ├── Pistol.ts               # Player weapon
+│   │   └── generators/             # Procedural generation
+│   ├── scenes/                     # Three.js scenes
+│   │   └── MainScene.ts            # Main game scene
+│   ├── systems/                    # Game systems
+│   │   ├── ControlsWithMovement.ts # Player movement
+│   │   └── movement/               # Movement components
+│   ├── ui/                         # Game UI
+│   │   └── react/                  # React components
+│   └── utils/                      # Utilities
+│       └── ws/                     # WebSocket client
+├── package.json
+├── tsconfig.json
+└── next.config.ts
 ```
 
 ## 🛠️ Tech Stack
 
-- **Three.js** – WebGL abstraction layer for 3D rendering.
-- **TypeScript** – Static typing for safer code.
-- **Next.js** – Hybrid React framework for routing and bundling.
-- **Post-processing Addons** – `EffectComposer`, `RenderPass`, `FXAAShader`.
+### Core Technologies
+- **[Three.js](https://threejs.org/)** (r168) – WebGL rendering engine
+- **[TypeScript](https://www.typescriptlang.org/)** (5.x) – Type-safe JavaScript
+- **[Next.js](https://nextjs.org/)** (15.x) – React framework with App Router
+- **[React](https://react.dev/)** (19.x) – UI library
+
+### Three.js Addons
+- **EffectComposer** – Post-processing pipeline
+- **OutlinePass** – Object outline rendering
+- **FXAAShader** – Anti-aliasing
+- **OrbitControls** – Camera controls for editor
+
+### Additional Libraries
+- **GLTFLoader** – 3D model loading
+- **WebSocket** – Real-time multiplayer communication
 
 ## 🔧 Configuration
 
-| Option            | Location                              | Description                                                     |
+### Game Settings
+
+| Setting           | Location                              | Description                                                     |
 | ----------------- | ------------------------------------- | --------------------------------------------------------------- |
-| Mouse sensitivity | `localStorage` key `mouseSensitivity` | Set via slider on start screen. Multiplies base rotation speed. |
-| Renderer quality  | `src/core/Renderer.ts`                | Change antialias, pixel ratio, post FX.                         |
-| Target counts     | `src/scenes/MainScene.ts`             | `level1/2/3()` generate different numbers of cubes.             |
+| Mouse Sensitivity | `localStorage.mouseSensitivity`       | Adjustable via slider on start screen (0.1 - 2.0)               |
+| WebSocket Server  | `NEXT_PUBLIC_WS_SERVER` env variable  | Override default WebSocket URL for multiplayer                  |
+| Renderer Quality  | `src/core/Renderer.ts`                | Antialias, pixel ratio, shadow settings                         |
+| Target Counts     | `src/scenes/MainScene.ts`             | Modify `level1/2/3()` methods for different cube counts         |
+
+### Editor Settings
+
+| Setting           | Location                              | Description                                                     |
+| ----------------- | ------------------------------------- | --------------------------------------------------------------- |
+| Auto-Save         | `src/editor/components/EditorRoot.tsx`| Automatic scenario saving after changes                         |
+| Scenario Storage  | `localStorage`                        | Scenarios saved as JSON in browser storage                      |
+| Grid Snapping     | `src/editor/EditorApp.ts`             | Currently disabled, can be enabled for precise placement        |
 
 ## 📜 Available NPM Scripts
 
@@ -94,11 +226,76 @@ three-shooter/
 
 ## 📦 Assets
 
-- `public/models/pistol.glb` – Low-poly pistol model.
-- `preview.gif` – Gameplay preview used in this README.
-- `controls.png` – Legend for keyboard controls shown in HUD.
+- **`public/models/pistol.glb`** – Low-poly pistol 3D model with cell-shaded material
+- **`preview.gif`** – Gameplay preview animation used in this README
+- **`controls.png`** – Keyboard/mouse control legend displayed in game HUD
+
+## 🎯 How to Use the Editor
+
+1. **Start the Editor**: Navigate to [http://localhost:3000/editor](http://localhost:3000/editor)
+2. **Place Blocks**: Drag "Block" from the left panel onto the canvas
+3. **Add Spawn Point**: Drag "Spawn Point" (cyan sphere) to set player start position
+4. **Transform Objects**: 
+   - Press `G` to move, `R` to rotate, `F` to scale
+   - Press `X`, `Y`, or `Z` to constrain to an axis
+   - Click or press `Enter` to confirm
+5. **Create Components**: 
+   - Select multiple blocks with `Shift + Click`
+   - Click "Group Selection" in the right panel
+   - Click "Create Component" to save as reusable prefab
+6. **Save Your Work**: Press `Ctrl/Cmd + S` or use the File menu
+7. **Start Playing**: Click the "Iniciar" button (enabled when spawn point exists)
+
+## 🌐 Multiplayer Setup (Optional)
+
+Redblock Online includes WebSocket client infrastructure for multiplayer. To enable it:
+
+1. Set up a WebSocket server (not included in this repo)
+2. Configure the server URL via environment variable:
+   ```bash
+   NEXT_PUBLIC_WS_SERVER=ws://your-server:port
+   ```
+3. The client will automatically connect and sync player positions
 
 ## 🚀 Deployment
 
-The production build is a standard Next.js application and can be deployed to any platform that supports Node.js (Vercel, Netlify, Render, etc.). Use `npm run build` followed by `npm start` (or your platform's deployment command).
+The production build is a standard Next.js application and can be deployed to any platform that supports Node.js:
+
+### Vercel (Recommended)
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Deploy
+vercel
+```
+
+### Other Platforms
+```bash
+# Build the application
+npm run build
+
+# Start the production server
+npm start
+```
+
+Supported platforms: Vercel, Netlify, Render, Railway, AWS, Google Cloud, Azure, etc.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+
+## 📄 License
+
+This project is open source and available under the [MIT License](LICENSE).
+
+## 🙏 Acknowledgments
+
+- Three.js community for excellent documentation and examples
+- Next.js team for the amazing React framework
+- All contributors who help improve this project
+
+---
+
+**Built with ❤️ using Three.js, Next.js, and TypeScript**
 
