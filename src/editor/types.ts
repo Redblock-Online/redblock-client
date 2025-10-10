@@ -38,4 +38,5 @@ export type SerializedNode = {
   transform: SerializedTransform;
   componentId?: string;
   children?: SerializedNode[];
+  isSpawnPoint?: boolean;
 };

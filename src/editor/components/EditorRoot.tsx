@@ -30,6 +30,7 @@ type ClipboardPayload = {
 
 const builtinItems: EditorItem[] = [
   { id: "block", label: "Block" },
+  { id: "spawn", label: "Spawn Point" },
 ];
 
 export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
@@ -60,6 +61,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const pasteOffsetRef = useRef(0);
   const unsavedChangesRef = useRef(false);
   const [componentPendingDelete, setComponentPendingDelete] = useState<{ id: string; label: string } | null>(null);
+  const [hasSpawnPoint, setHasSpawnPoint] = useState(false);
 
   const markUnsaved = useCallback(() => {
     if (!unsavedChangesRef.current) {
@@ -502,6 +504,8 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       if (t || !editingActive) {
         applyTransformToState(t);
       }
+      // Check if there's a spawn point
+      setHasSpawnPoint(editor.hasSpawnPoint());
     });
   }, [editor, applyTransformToState, editingActive]);
 
@@ -533,6 +537,8 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       let placed: EditorBlock | null = null;
       if (data === "block") {
         placed = editor.placeBlockAt(event.clientX, event.clientY);
+      } else if (data === "spawn") {
+        placed = editor.placeSpawnAt(event.clientX, event.clientY);
       } else if (data.startsWith("component:")) {
         const id = data.slice("component:".length);
         const def = getComponent(id);
@@ -546,6 +552,8 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
           pushHistory({ type: "add", id: placed.id, transform: t });
         }
         autoSaveScenario();
+        // Update spawn point status
+        setHasSpawnPoint(editor.hasSpawnPoint());
       }
       setActiveItem(builtinItems[0]);
       editor.clearMovementState?.();
@@ -644,6 +652,8 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     pasteOffsetRef.current = 0;
     panelAutoSavePendingRef.current = false;
     autoSaveScenario();
+    // Update spawn point status
+    setHasSpawnPoint(editor.hasSpawnPoint());
   }, [autoSaveScenario, editor, pushHistory, selection]);
 
   // NOTE: Keyboard handling is now done by InputRouter in EditorApp
@@ -823,6 +833,19 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     return selectedComponentId ? editor.isComponentEditing(selectedComponentId) : false;
   }, [editor, selectedComponentId]);
 
+  const handleStartGame = useCallback(() => {
+    if (!hasSpawnPoint) return;
+    
+    // Save current scenario
+    const scenario = editor.exportScenario(activeScenarioName);
+    saveScenario(activeScenarioName, scenario);
+    
+    // Navigate to game with the scenario
+    if (typeof window !== "undefined") {
+      window.location.href = `/?scenario=${encodeURIComponent(activeScenarioName)}`;
+    }
+  }, [activeScenarioName, editor, hasSpawnPoint]);
+
   return (
     <>
       <div className={`absolute inset-0 z-50 flex flex-col text-rb-text`}>
@@ -855,12 +878,26 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             ))}
           </nav>
         </div>
-        <div className="flex flex-col items-end text-right">
-          <div className="text-xs text-rb-muted">
-            Scenario: <span className="font-semibold text-rb-text">{activeScenarioName}</span>
-            {hasUnsavedChanges ? <span className="ml-1 text-rb-text">*</span> : null}
+        <div className="flex items-center gap-4">
+          <button
+            onClick={handleStartGame}
+            disabled={!hasSpawnPoint}
+            className={`h-9 rounded border px-4 text-xs font-semibold uppercase tracking-widest transition ${
+              hasSpawnPoint
+                ? "border-rb-border bg-black text-white hover:bg-rb-text"
+                : "border-rb-border bg-gray-100 text-gray-400 cursor-not-allowed"
+            }`}
+            title={!hasSpawnPoint ? "Add a Spawn Point to start the game" : "Start the game"}
+          >
+            Iniciar
+          </button>
+          <div className="flex flex-col items-end text-right">
+            <div className="text-xs text-rb-muted">
+              Scenario: <span className="font-semibold text-rb-text">{activeScenarioName}</span>
+              {hasUnsavedChanges ? <span className="ml-1 text-rb-text">*</span> : null}
+            </div>
+            <div className="text-sm font-semibold text-rb-text">{title}</div>
           </div>
-          <div className="text-sm font-semibold text-rb-text">{title}</div>
         </div>
         </header>
         {openMenuId && activeMenu && menuPosition ? (
