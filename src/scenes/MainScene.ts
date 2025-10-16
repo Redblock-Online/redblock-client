@@ -78,39 +78,33 @@ export default class MainScene extends THREE.Scene {
   private neighborStates = new Map<string, NeighborState>();
 
   private static edgeMaterial = new THREE.MeshBasicMaterial({ 
-    color: 0x000000,
+    color: 0xd0d0d0,
     depthWrite: true,
     depthTest: true,
   });
-  private static edgeRadius = 0.01; // Increased for better visibility at distance
+  private static edgeRadius = 0.02; // Slightly thicker lines
 
   private static roomPrototype = (() => {
     const group = new THREE.Group();
 
-    // Create 4 cylindrical edges for the floor (square perimeter)
-    // Make them slightly longer to overlap at corners for perfect angles
-    const floorSize = 1.02; // Slightly longer than 1 to overlap at corners
-    const cylinderGeometry = new THREE.CylinderGeometry(
-      MainScene.edgeRadius,
-      MainScene.edgeRadius,
-      floorSize,
-      16
-    );
-
-    // Define the 4 edges of the floor square
-    const edges = [
-      { pos: [0, -2, -0.5], rot: [0, 0, Math.PI / 2] },      // front edge (along X)
-      { pos: [0, -2, 0.5], rot: [0, 0, Math.PI / 2] },       // back edge (along X)
-      { pos: [-0.5, -2, 0], rot: [0, 0, Math.PI / 2], rotY: Math.PI / 2 },  // left edge (along Z)
-      { pos: [0.5, -2, 0], rot: [0, 0, Math.PI / 2], rotY: Math.PI / 2 },   // right edge (along Z)
-    ];
-
-    edges.forEach(({ pos, rot, rotY }) => {
-      const edge = new THREE.Mesh(cylinderGeometry, MainScene.edgeMaterial);
-      edge.position.set(pos[0], pos[1], pos[2]);
-      edge.rotation.set(rot[0], rotY || 0, rot[2]);
-      group.add(edge);
+    // Add a solid prism for the ground: top face stays at y=0, volume extrudes downward
+    const prismDepth = 50; // world units; extrude downward to make side faces 20x50
+    const groundGeometry = new THREE.BoxGeometry(1, prismDepth, 1);
+    // Use standard material with high emissive to stay white but allow subtle shadows
+    const groundMaterial = new THREE.MeshStandardMaterial({ 
+      color: 0xffffff,
+      emissive: 0xffffff,
+      emissiveIntensity: 0.3  // Subtle emissive glow to stay white
     });
+    const groundPrism = new THREE.Mesh(groundGeometry, groundMaterial);
+    // Align top face with previous square ground level (world y ≈ -2)
+    // room.position.y = -0.5, so local top must be -1.5
+    // For a box centered at its position, topLocal = position.y + prismDepth/2
+    // Solve position.y = topLocal - prismDepth/2 = -1.5 - prismDepth/2
+    groundPrism.position.y = -1.5 - prismDepth / 2;
+    groundPrism.castShadow = true;  // Enable shadow casting
+    groundPrism.receiveShadow = true;
+    group.add(groundPrism);
 
     return group;
   })();
