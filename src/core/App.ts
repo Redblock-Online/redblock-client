@@ -11,6 +11,7 @@ import WSManager, { type PlayerCore } from "@/utils/ws/WSManager";
 import type { UIController } from "@/ui/react/mountUI";
 import type { TimerHint, TimerHintTableRow } from "@/ui/react/TimerDisplay";
 import { SCENARIOS, type ScenarioConfig, getScenarioById } from "@/config/scenarios";
+import { AudioManager } from "@/utils/AudioManager";
 
 type StoredMetricSet = {
   accuracy: number | null;
@@ -69,11 +70,13 @@ export default class App {
   private shotsHit = 0;
   private reactionTimes: number[] = [];
   private readonly statsStorageKey = "redblockScenarioStats";
+  private audioManager: AudioManager;
 
   constructor(ui?: UIController) {
     this.ui = ui;
     this.canvas = document.querySelector("canvas") as HTMLCanvasElement;
     this.gameRunning = false;
+    this.audioManager = AudioManager.getInstance();
 
     // Core systems
     this.camera = new Camera();
@@ -292,6 +295,9 @@ export default class App {
       const reactionSeconds = Math.max(0, (now - activatedAt) / 1000);
       this.reactionTimes.push(reactionSeconds);
     }
+    
+    // Reproducir sonido de impacto
+    this.audioManager.playSound('impact', 0.12);
   }
 
   private buildRoundSummary(roundDurationSeconds: number | null): TimerHint {
