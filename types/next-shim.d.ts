@@ -14,16 +14,17 @@ declare module "next/dynamic" {
     loading?: ComponentType<P>;
   }
 
-  export default function dynamic<T extends ComponentType<any>, P = Record<string, unknown>>(
-    loader: () => Promise<{ default: T }> | Promise<T>,
+  export default function dynamic<P extends Record<string, unknown> = Record<string, unknown>>(
+    loader: () => Promise<{ default: ComponentType<P> }> | Promise<ComponentType<P>>,
     options?: DynamicOptions<P>
-  ): T;
+  ): ComponentType<P>;
 }
 
 declare namespace NodeJS {
   interface ProcessEnv {
     NEXT_PUBLIC_BACKEND_URL?: string;
     NEXT_PUBLIC_WS_SERVER?: string;
+    NEXT_PUBLIC_EXIT_URL?: string;
   }
 
   interface Process {

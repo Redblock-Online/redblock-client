@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import Button from "@/ui/react/components/Button";
 import type { ScenarioConfig } from "@/config/scenarios";
@@ -46,6 +47,20 @@ export default function StartScreen({ scenarios, onStart }: Props) {
     }
   };
 
+  const onExitClick = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+
+    const fallback = process.env.NEXT_PUBLIC_EXIT_URL ?? "about:blank";
+    try {
+      window.location.assign(fallback);
+    } catch (error) {
+      console.warn("Failed to navigate away via EXIT button", error);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-[radial-gradient(#fff,#fff)] flex flex-col items-center justify-center gap-6 text-black z-10">
       {/* background grid overlay */}
@@ -60,8 +75,23 @@ export default function StartScreen({ scenarios, onStart }: Props) {
 
       {/* Menu container */}
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-8">
-        <img src="logo.png" alt="Logo" className="h-[200px] mx-auto translate-x-[20px]" />
-        <img src="redblock-online.png" className="h-20 mt-10 mb-10" alt="Redblock Online" />
+        <Image
+          src="/logo.png"
+          alt="Logo"
+          width={498}
+          height={410}
+          priority
+          className="h-[200px] mx-auto translate-x-[20px]"
+          sizes="(max-width: 768px) 60vw, 498px"
+        />
+        <Image
+          src="/redblock-online.png"
+          alt="Redblock Online"
+          width={1719}
+          height={172}
+          className="h-20 mt-10 mb-10"
+          sizes="(max-width: 768px) 70vw, 600px"
+        />
         <div className="flex flex-col gap-4 items-center">
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-4">
             {scenarios.map((scenario, idx) => (
@@ -97,7 +127,7 @@ export default function StartScreen({ scenarios, onStart }: Props) {
             </div>
           </div>
 
-          <Button size="lg" variant="outline" onClick={() => window.close()}>
+          <Button size="lg" variant="outline" onClick={onExitClick}>
             EXIT
           </Button>
           <p className="text-sm opacity-65">Click or press Space to choose randomly</p>

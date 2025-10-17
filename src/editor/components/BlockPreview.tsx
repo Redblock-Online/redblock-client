@@ -17,6 +17,7 @@ import {
   Box3,
   Vector3,
   WebGLRenderer,
+  SphereGeometry,
 } from "three";
 import type { EditorItem } from "../types";
 import { getComponent } from "../componentsStore";
@@ -68,6 +69,19 @@ export function BlockPreview({ item }: BlockPreviewProps): ReactElement {
       return { mesh, geometry, material, edgesGeom, edgeMat };
     };
 
+    const createSpawnPoint = () => {
+      const geometry = new SphereGeometry(0.5, 16, 16);
+      const material = new MeshStandardMaterial({
+        color: new Color(0x00ffff), // Cyan
+        metalness: 0.3,
+        roughness: 0.4,
+        emissive: new Color(0x00ffff),
+        emissiveIntensity: 0.2,
+      });
+      const mesh = new Mesh(geometry, material);
+      return { mesh, geometry, material };
+    };
+
     const disposables: Array<{ dispose: () => void }> = [];
 
     const id = item.id;
@@ -79,6 +93,13 @@ export function BlockPreview({ item }: BlockPreviewProps): ReactElement {
         { dispose: () => material.dispose() },
         { dispose: () => edgesGeom.dispose() },
         { dispose: () => edgeMat.dispose() },
+      );
+    } else if (id === "spawn") {
+      const { mesh, geometry, material } = createSpawnPoint();
+      group.add(mesh);
+      disposables.push(
+        { dispose: () => geometry.dispose() },
+        { dispose: () => material.dispose() },
       );
     } else if (id.startsWith("component:")) {
       const compId = id.slice("component:".length);

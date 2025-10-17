@@ -159,28 +159,37 @@ export default class MainScene extends THREE.Scene {
   }
 
   private updateNeighborTargets(neighborId: string, targetsInfo: TargetInfo[]) {
-    const targetInfoChanged = targetsInfoChanged(
-      this.neighborTargetInfos.get(neighborId) ?? [],
-      targetsInfo
-    );
-    
-    if (!targetInfoChanged) return;
+    const prev = this.neighborTargetInfos.get(neighborId) ?? [];
+    if (!targetsInfoChanged(prev, targetsInfo)) return;
 
     this.neighborTargetInfos.set(neighborId, targetsInfo);
-    this.neighborTargetsRendered.get(neighborId)?.forEach((target) => {
-      this.remove(target);
-    });
-    this.neighborTargetsRendered.set(neighborId, []);
-    
-    targetsInfo.forEach((targetInfo) => {
-      if (targetInfo.disabled) return;
-      
-      const target = new Target(targetInfo.shootable ? 0xff0000 : 0xffffff);
-      target.position.set(targetInfo.x, targetInfo.y, targetInfo.z);
 
-      this.neighborTargetsRendered.get(neighborId)?.push(target);
-      this.add(target);
-    });
+    const rendered = this.neighborTargetsRendered.get(neighborId) ?? [];
+    while (rendered.length < targetsInfo.length) {
+      const t = new Target(0xffffff); 
+      rendered.push(t);
+      this.add(t);
+    }
+    while (rendered.length > targetsInfo.length) {
+      const t = rendered.pop()!;
+      t.visible = false;
+    }
+
+    for (let i = 0; i < targetsInfo.length; i++) {
+      const info = targetsInfo[i];
+      const t = rendered[i];
+      if (!info || info.disabled) {
+        t.visible = false;
+        continue;
+      }
+      t.visible = true;
+      t.position.set(info.x, info.y, info.z);
+
+      const desiredColor = info.shootable ? 0xff0000 : 0xffffff;
+      t.setColor(desiredColor);
+    }
+
+    this.neighborTargetsRendered.set(neighborId, rendered);
   }
 
   private checkNeighborRoomChange(neighborId: string, roomX: number, roomZ: number): boolean {

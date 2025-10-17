@@ -6,6 +6,7 @@ import {
   LineSegments,
   Mesh,
   MeshStandardMaterial,
+  SphereGeometry,
 } from "three";
 
 export function createPrimitiveCubeMesh(): Mesh {
@@ -19,6 +20,21 @@ export function createPrimitiveCubeMesh(): Mesh {
   const outline = new LineSegments(edges, edgeMaterial);
   outline.renderOrder = 1;
   mesh.add(outline);
+
+  return mesh;
+}
+
+export function createSpawnPointMesh(): Mesh {
+  const geometry = new SphereGeometry(0.5, 16, 16);
+  const material = new MeshStandardMaterial({ 
+    color: new Color(0x00ffff), // Cyan
+    roughness: 0.3, 
+    metalness: 0.7,
+    emissive: new Color(0x00ffff),
+    emissiveIntensity: 0.2
+  });
+  const mesh = new Mesh(geometry, material);
+  mesh.userData.isSpawnPoint = true;
 
   return mesh;
 }

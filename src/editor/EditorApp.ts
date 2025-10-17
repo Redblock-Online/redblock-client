@@ -43,6 +43,7 @@ import { InputRouter } from "./core/InputRouter";
 import { DragHandler } from "./core/handlers/DragHandler";
 import { TransformHandler } from "./core/handlers/TransformHandler";
 import { SelectionHandler } from "./core/handlers/SelectionHandler";
+import { createSpawnPointMesh } from "./core/blockFactory";
 
 const COMPONENT_MASTER_OUTLINE_COLOR = 0x9b5cff;
 const COMPONENT_INSTANCE_OUTLINE_COLOR = 0xff4dff;
@@ -324,6 +325,24 @@ export default class EditorApp {
     this.clearMovementState();
     this.selection.setSelectionSingle(block);
     return block;
+  }
+
+  public placeSpawnAt(clientX: number, clientY: number): EditorBlock | null {
+    const point = this.intersectGround(clientX, clientY);
+    if (!point) {
+      this.clearMovementState();
+      return null;
+    }
+
+    const spawn = this.blocks.createSpawnPoint({ position: point.setY(0.5) });
+    this.clearMovementState();
+    this.selection.setSelectionSingle(spawn);
+    return spawn;
+  }
+
+  public hasSpawnPoint(): boolean {
+    const blocks = this.blocks.getAllBlocks();
+    return blocks.some((block) => block.mesh.userData.isSpawnPoint === true);
   }
 
   public createBlock(options: {
@@ -669,9 +688,11 @@ export default class EditorApp {
     }
 
     if (block.mesh instanceof Mesh) {
+      const isSpawnPoint = block.mesh.userData.isSpawnPoint === true;
       return {
         type: "block",
         transform: this.toSerializedTransform(block.mesh, "world"),
+        isSpawnPoint: isSpawnPoint || undefined,
       };
     }
 
@@ -712,9 +733,11 @@ export default class EditorApp {
     }
 
     if (object instanceof Mesh) {
+      const isSpawnPoint = object.userData.isSpawnPoint === true;
       return {
         type: "block",
         transform: this.toSerializedTransform(object, space),
+        isSpawnPoint: isSpawnPoint || undefined,
       };
     }
 
@@ -747,6 +770,13 @@ export default class EditorApp {
     switch (node.type) {
       case "block": {
         const transform = this.transformFromSerialized(node.transform);
+        if (node.isSpawnPoint) {
+          return this.blocks.createSpawnPoint({
+            position: transform.position,
+            rotation: transform.rotation,
+            scale: transform.scale,
+          });
+        }
         return this.createBlock({
           position: transform.position,
           rotation: transform.rotation,
@@ -794,7 +824,9 @@ export default class EditorApp {
   private buildChildObject(child: SerializedNode, componentMap: Map<string, SavedComponent>): Object3D | null {
     switch (child.type) {
       case "block": {
-        const mesh = this.blocks.createPrimitiveBlockMesh();
+        const mesh = child.isSpawnPoint 
+          ? createSpawnPointMesh() 
+          : this.blocks.createPrimitiveBlockMesh();
         this.applySerializedTransform(mesh, child.transform);
         return mesh;
       }

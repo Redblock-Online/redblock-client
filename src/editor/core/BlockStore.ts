@@ -1,6 +1,6 @@
 import { Group, LineBasicMaterial, LineSegments, Mesh, Object3D, Scene, type Euler, type Vector3 } from "three";
 import type { EditorBlock } from "../types";
-import { createPrimitiveCubeMesh } from "./blockFactory";
+import { createPrimitiveCubeMesh, createSpawnPointMesh } from "./blockFactory";
 
 export type CreateBlockOptions = {
   position: Vector3;
@@ -9,7 +9,7 @@ export type CreateBlockOptions = {
   id?: string;
 };
 
-const BLOCK_ID_PATTERN = /^(?:block|group)-(\d+)$/;
+const BLOCK_ID_PATTERN = /^(?:block|group|spawn)-(\d+)$/;
 
 export class BlockStore {
   private readonly blocks = new Map<string, EditorBlock>();
@@ -28,6 +28,14 @@ export class BlockStore {
   public createPrimitiveBlockMesh(): Mesh {
     const mesh = createPrimitiveCubeMesh();
     return mesh;
+  }
+
+  public createSpawnPoint({ position, rotation, scale, id }: CreateBlockOptions): EditorBlock {
+    const mesh = createSpawnPointMesh();
+    mesh.position.copy(position);
+    if (rotation) mesh.rotation.copy(rotation);
+    if (scale) mesh.scale.copy(scale);
+    return this.registerMeshAsBlock(mesh, { id: id ?? this.nextId("spawn"), addToScene: true });
   }
 
   public registerGroup(group: Group, id?: string, options: { addToScene?: boolean } = {}): EditorBlock {
@@ -139,7 +147,7 @@ export class BlockStore {
     return block;
   }
 
-  private nextId(prefix: "block" | "group" = "block"): string {
+  private nextId(prefix: "block" | "group" | "spawn" = "block"): string {
     this.idSeed += 1;
     return `${prefix}-${this.idSeed}`;
   }
