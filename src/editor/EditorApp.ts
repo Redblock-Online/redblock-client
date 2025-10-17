@@ -74,10 +74,6 @@ export default class EditorApp {
   private readonly controls: OrbitControls;
   private readonly raycaster = new Raycaster();
   private readonly pointer = new Vector2();
-  private readonly groundPlane = new Mesh(
-    new BoxGeometry(200, 0.1, 200),
-    new MeshStandardMaterial({ color: new Color(0xe5e7eb) }),
-  );
 
   private readonly blocks: BlockStore;
   private readonly selection: SelectionManager;
@@ -898,9 +894,6 @@ export default class EditorApp {
     const directional = new DirectionalLight(0xffffff, 0.8);
     directional.position.set(10, 12, 6);
 
-    this.groundPlane.receiveShadow = true;
-    this.groundPlane.position.set(0, -0.05, 0);
-    this.groundPlane.visible = true;
 
     const grid = new GridHelper(200, 40, 0x000000, 0x505050);
     const gridMaterial = grid.material as LineBasicMaterial;

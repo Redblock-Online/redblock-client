@@ -5,8 +5,8 @@ export default class Light extends THREE.Group {
   constructor() {
     super();
     
-    // Main directional light (sun)
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
+    // Main directional light (sun) - increased intensity for white appearance
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 5);
     directionalLight.position.set(-30, 30, -30);
     directionalLight.target.position.set(0, 0, 0);
     directionalLight.castShadow = true;
@@ -21,8 +21,8 @@ export default class Light extends THREE.Group {
     directionalLight.shadow.camera.top = 50;
     directionalLight.shadow.camera.bottom = -50;
     
-    // Ambient light to lift shadows (prevent pure black)
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    // Ambient light to lift shadows (prevent pure black) - increased intensity
+    const ambientLight = new THREE.AmbientLight(0xffffff, 2.0);
     
     this.add(directionalLight);
     this.add(directionalLight.target);
