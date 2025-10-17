@@ -1,5 +1,7 @@
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type SetStateAction } from "react";
 import { Euler, Group, Vector3, Object3D, Quaternion as ThreeQuaternion } from "three";
+import { FaPlay, FaStop } from "react-icons/fa";
 import EditorApp from "../EditorApp";
 import type { EditorBlock, EditorSelection, SelectionTransform, SerializedNode } from "../types";
 import type { EditorItem } from "../types";
@@ -12,6 +14,7 @@ import type { TransformMode, AxisConstraint } from "../core/EditorModeManager";
 import { ScenarioModal } from "./ScenarioModal";
 import { Portal } from "./Portal";
 import { ComponentDeleteModal } from "./ComponentDeleteModal";
+import { GameTab } from "./GameTab";
 import {
   AUTO_SAVE_SCENARIO_NAME,
   listScenarios,
@@ -62,6 +65,9 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const unsavedChangesRef = useRef(false);
   const [componentPendingDelete, setComponentPendingDelete] = useState<{ id: string; label: string } | null>(null);
   const [hasSpawnPoint, setHasSpawnPoint] = useState(false);
+  const [isGameActive, setIsGameActive] = useState(false);
+  const [gameScenario, setGameScenario] = useState<SerializedScenario | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
   const markUnsaved = useCallback(() => {
     if (!unsavedChangesRef.current) {
@@ -834,25 +840,64 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   }, [editor, selectedComponentId]);
 
   const handleStartGame = useCallback(() => {
-    if (!hasSpawnPoint) return;
+    if (!hasSpawnPoint || isTransitioning) return;
+    
+    setIsTransitioning(true);
     
     // Save current scenario
     const scenario = editor.exportScenario(activeScenarioName);
+    console.log("[EditorRoot] Exported scenario:", scenario);
+    console.log("[EditorRoot] Scenario blocks:", scenario.blocks);
+    console.log("[EditorRoot] Number of blocks:", scenario.blocks.length);
     saveScenario(activeScenarioName, scenario);
     
-    // Navigate to game with the scenario
-    if (typeof window !== "undefined") {
-      window.location.href = `/?scenario=${encodeURIComponent(activeScenarioName)}`;
+    // Switch to game and load the scenario
+    setGameScenario(scenario);
+    setIsGameActive(true);
+    
+    // Allow transitions after a delay
+    setTimeout(() => setIsTransitioning(false), 1000);
+  }, [activeScenarioName, editor, hasSpawnPoint, isTransitioning]);
+
+  const handleStopGame = useCallback(() => {
+    if (isTransitioning) return;
+    
+    setIsTransitioning(true);
+    setGameScenario(null);
+    setIsGameActive(false);
+    
+    // Allow transitions after a delay
+    setTimeout(() => setIsTransitioning(false), 500);
+  }, [isTransitioning]);
+
+  // Hide editor canvas when in game mode
+  useEffect(() => {
+    const editorCanvas = document.getElementById("editor-canvas");
+    if (editorCanvas instanceof HTMLCanvasElement) {
+      if (isGameActive) {
+        editorCanvas.style.display = "none";
+        editorCanvas.style.pointerEvents = "none";
+      } else {
+        editorCanvas.style.display = "block";
+        editorCanvas.style.pointerEvents = "auto";
+      }
     }
-  }, [activeScenarioName, editor, hasSpawnPoint]);
+  }, [isGameActive]);
 
   return (
     <>
-      <div className={`absolute inset-0 z-50 flex flex-col text-rb-text`}>
-        <header className={`relative z-50 flex h-14 items-center justify-between border-b border-rb-border bg-white px-6 outline outline-3 outline-rb-border pointer-events-auto`}>
+      <div className="absolute inset-0 flex flex-col text-rb-text">
+        {/* Header - Always visible */}
+        <header className="relative z-50 flex h-16 items-center justify-between border-b border-white/60 bg-white px-8 shadow-[0_8px_24px_rgba(15,23,42,0.06)] pointer-events-auto">
         <div className="flex items-center gap-6">
-          <div className="text-xs uppercase tracking-widest text-rb-muted">World Builder</div>
-          <nav className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-rb-muted">
+          <Image
+            src="/logo.png"
+            alt="Redblock logo"
+            width={498}
+            height={410}
+            className="h-8 w-auto"
+          />
+          <nav className="flex items-center gap-1 text-[11px] font-display uppercase tracking-[0.3em] text-black/40">
             {menuGroups.map((menu) => (
               <div key={menu.id} className="relative">
                 <button
@@ -860,8 +905,10 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
                     menuAnchors.current[menu.id] = node;
                   }}
                   type="button"
-                  className={`rounded px-3 py-1 transition ${
-                    openMenuId === menu.id ? "bg-black text-white" : "text-rb-muted hover:text-rb-text"
+                  className={`rounded-lg px-4 py-2 transition ${
+                    openMenuId === menu.id
+                      ? "bg-black text-white shadow-[0_8px_20px_rgba(15,23,42,0.2)]"
+                      : "text-black/50 hover:text-black hover:bg-black/5"
                   }`}
                   onClick={() => {
                     if (openMenuId === menu.id) {
@@ -879,32 +926,53 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
           </nav>
         </div>
         <div className="flex items-center gap-4">
-          <button
-            onClick={handleStartGame}
-            disabled={!hasSpawnPoint}
-            className={`h-9 rounded border px-4 text-xs font-semibold uppercase tracking-widest transition ${
-              hasSpawnPoint
-                ? "border-rb-border bg-black text-white hover:bg-rb-text"
-                : "border-rb-border bg-gray-100 text-gray-400 cursor-not-allowed"
-            }`}
-            title={!hasSpawnPoint ? "Add a Spawn Point to start the game" : "Start the game"}
-          >
-            Iniciar
-          </button>
+          {!isGameActive ? (
+            <button
+              onClick={handleStartGame}
+              disabled={!hasSpawnPoint || isTransitioning}
+              className={`flex h-11 items-center gap-2 rounded-lg border border-black/10 px-6 text-[11px] font-display uppercase tracking-[0.3em] transition ${
+                hasSpawnPoint && !isTransitioning
+                  ? "bg-black text-white shadow-[0_18px_35px_rgba(15,23,42,0.22)] hover:-translate-y-[2px]"
+                  : "bg-black/10 text-black/30 cursor-not-allowed"
+              }`}
+              title={!hasSpawnPoint ? "Add a Spawn Point to start the game" : isTransitioning ? "Loading..." : "Start the game"}
+            >
+              <FaPlay className="text-sm" />
+              {isTransitioning ? "Loading..." : "Play"}
+            </button>
+          ) : (
+            <button
+              onClick={handleStopGame}
+              disabled={isTransitioning}
+              className={`flex h-11 items-center gap-2 rounded-lg border border-black/10 px-6 text-[11px] font-display uppercase tracking-[0.3em] text-white transition ${
+                isTransitioning
+                  ? "bg-black/30 cursor-not-allowed"
+                  : "bg-red-600 shadow-[0_18px_35px_rgba(239,68,68,0.35)] hover:bg-red-700 hover:-translate-y-[2px]"
+              }`}
+              title={isTransitioning ? "Loading..." : "Stop the game"}
+            >
+              <FaStop className="text-sm" />
+              {isTransitioning ? "Loading..." : "Stop"}
+            </button>
+          )}
           <div className="flex flex-col items-end text-right">
-            <div className="text-xs text-rb-muted">
-              Scenario: <span className="font-semibold text-rb-text">{activeScenarioName}</span>
-              {hasUnsavedChanges ? <span className="ml-1 text-rb-text">*</span> : null}
+            <div className="text-[11px] uppercase tracking-[0.24em] text-black/40">
+              Scenario:{" "}
+              <span className="font-display text-sm uppercase tracking-[0.3em] text-black/80">
+                {activeScenarioName}
+              </span>
+              {hasUnsavedChanges ? <span className="ml-1 text-black">*</span> : null}
             </div>
-            <div className="text-sm font-semibold text-rb-text">{title}</div>
+            <div className="font-display text-base uppercase tracking-[0.22em] text-black">{title}</div>
           </div>
         </div>
         </header>
+        
         {openMenuId && activeMenu && menuPosition ? (
           <Portal>
             <div className="fixed inset-0 z-[900]" onMouseDown={closeMenus}>
               <div
-                className="absolute min-w-[160px] rounded border border-rb-border bg-white shadow-lg"
+                className="absolute min-w-[180px] overflow-hidden rounded-lg border border-white/60 bg-white shadow-[0_12px_24px_rgba(15,23,42,0.08)]"
                 style={{ left: menuPosition.left, top: menuPosition.top, minWidth: Math.max(menuPosition.width, 160) }}
                 onMouseDown={(event) => event.stopPropagation()}
               >
@@ -914,8 +982,10 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
                     <button
                       key={item.id}
                       type="button"
-                      className={`block w-full px-4 py-2 text-left text-[11px] uppercase tracking-[0.3em] transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                        disabled ? "text-rb-muted" : "text-rb-muted hover:bg-black hover:text-white"
+                      className={`block w-full px-4 py-2 text-left text-[11px] font-display uppercase tracking-[0.28em] transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                        disabled
+                          ? "text-black/30"
+                          : "text-black/60 hover:bg-black/90 hover:text-white"
                       }`}
                       onClick={() => {
                         if (disabled) {
@@ -934,9 +1004,11 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             </div>
           </Portal>
         ) : null}
-        <div className="flex flex-1 overflow-hidden ">
-        <aside className={`relative z-50 flex w-64 flex-col border-r border-rb-border bg-rb-panel p-4 outline outline-3 outline-rb-border pointer-events-auto overflow-auto`}>
-          <div className="mb-4 text-xs uppercase text-rb-muted">Components</div>
+        
+        {/* Editor Content */}
+        <div className="relative flex flex-1 gap-4 overflow-hidden px-4 pb-6 pt-4">
+              <aside className="relative z-10 flex w-72 flex-col gap-4 rounded-xl border border-white/60 bg-white p-6 shadow-[0_12px_24px_rgba(15,23,42,0.08)] pointer-events-auto overflow-auto">
+          <div className="font-display text-xs uppercase tracking-[0.4em] text-black/45">Components</div>
           <ItemMenu
             items={items}
             activeItem={activeItem}
@@ -945,11 +1017,12 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
               const item = items.find((entry) => entry.id === itemId) ?? null;
               setActiveItem(item);
             }}
+            disabledItems={hasSpawnPoint ? ["spawn"] : []}
           />
           {activeItem && activeItem.id.startsWith("component:") ? (
             <div className="mt-4 flex flex-col gap-2">
               <button
-                className="h-9 rounded border border-rb-border bg-white px-3 text-xs font-semibold uppercase tracking-widest text-rb-text hover:bg-black hover:text-white"
+                className="h-10 rounded-lg border border-black/10 bg-black text-xs font-display uppercase tracking-[0.28em] text-white transition hover:-translate-y-[2px] hover:shadow-[0_10px_24px_rgba(15,23,42,0.18)]"
                 onClick={() => {
                   const id = activeItem.id.slice("component:".length);
                   const def = components.find((entry) => entry.id === id);
@@ -962,31 +1035,38 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
           ) : null}
         </aside>
         <main className="pointer-events-none relative flex-1">
-          <div className="pointer-events-none absolute inset-0">
-            <div className="absolute left-6 top-6 flex flex-col gap-1 rounded border border-rb-border bg-white/80 px-3 py-2 text-xs text-rb-muted shadow-sm outline outline-3 outline-rb-border">
-              <span>Orbit with right click · Pan with Shift + right click · Zoom with scroll</span>
-              <span>Select with left click · Move (G) · Rotate (R) · Scale (F) · constrain with X / Y / Z</span>
-              <span>Move camera with WASD</span>
+          <div className="pointer-events-none inset-0">
+            <div className="absolute left-8 top-8 flex max-w-md flex-col gap-2 rounded-lg border border-white/60 bg-white/95 px-5 py-4 text-[11px] text-black/60 shadow-[0_12px_24px_rgba(15,23,42,0.08)]">
+              <span className="font-display text-[11px] uppercase tracking-[0.3em] text-black/40">
+                Controls
+              </span>
+              <span className="leading-relaxed">
+                Orbit with right click · Pan with Shift + right click · Zoom with scroll
+              </span>
+              <span className="leading-relaxed">
+                Select with left click · Move (G) · Rotate (R) · Scale (F) · constrain with X / Y / Z
+              </span>
+              <span className="leading-relaxed">Move camera with WASD</span>
               {transformLabel ? (
-                <span className="mt-1 rounded border border-rb-border bg-rb-panel px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rb-muted outline outline-3 outline-rb-border">
+                <span className="mt-2 w-fit rounded-md border border-black/10 bg-black px-3 py-1 text-[10px] font-display uppercase tracking-[0.32em] text-white shadow-[0_8px_18px_rgba(15,23,42,0.2)]">
                   {transformLabel}
                 </span>
               ) : null}
             </div>
             {activeItem ? (
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded border border-rb-border bg-white/90 px-4 py-2 text-xs text-rb-muted outline outline-3 outline-rb-border">
+              <div className="absolute bottom-8 left-1/2 w-max -translate-x-1/2 rounded-lg border border-white/60 bg-white/95 px-6 py-3 text-[11px] font-display uppercase tracking-[0.32em] text-black/50 shadow-[0_12px_24px_rgba(15,23,42,0.08)]">
                 Drag the {activeItem.label.toLowerCase()} from the components panel onto the canvas to place it
               </div>
             ) : null}
             {editingActive ? (
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded border border-rb-border bg-black/80 px-4 py-2 text-xs font-semibold text-white outline outline-3 outline-rb-border z-20">
+              <div className="absolute bottom-8 left-1/2 z-20 -translate-x-1/2 rounded-lg border border-black/20 bg-black px-6 py-3 text-[11px] font-display uppercase tracking-[0.32em] text-white shadow-[0_16px_30px_rgba(15,23,42,0.2)]">
                 Press Enter to finish editing the component
               </div>
             ) : null}
           </div>
         </main>
         <aside
-          className={`relative z-50 w-72 border-l border-rb-border bg-rb-panel p-4 transition-opacity outline outline-3 outline-rb-border overflow-auto ${
+          className={`relative z-10 w-80 rounded-xl border border-white/60 bg-white p-6 shadow-[0_12px_24px_rgba(15,23,42,0.08)] transition-opacity overflow-auto ${
             inspectorVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-40"
           }`}
         >
@@ -1054,8 +1134,17 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             onDeleteSelection={deleteSelection}
           />
         </aside>
+        </div>
+
+        {/* Game Overlay - Positioned below header */}
+        <div className={`absolute left-0 right-0 top-16 bottom-0 z-40 pointer-events-auto ${!isGameActive ? 'hidden' : ''}`}>
+          <GameTab 
+            scenario={gameScenario} 
+            isActive={isGameActive} 
+            onStop={handleStopGame} 
+          />
+        </div>
       </div>
-    </div>
     <ScenarioModal
       open={isScenarioModalOpen}
       scenarios={scenarioRecords}

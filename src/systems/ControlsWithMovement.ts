@@ -2,6 +2,7 @@
 import * as THREE from "three";
 import type WSManager from "@/utils/ws/WSManager";
 import type Target from "@/objects/Target";
+import type { CollisionSystem } from "./CollisionSystem";
 import { buildTargetsInfo } from "@/utils/targetsInfo";
 export default class Controls {
   private camera: THREE.Camera;
@@ -23,23 +24,23 @@ export default class Controls {
   private crouchSpeedFactor = 0.6;
 
   private velocityY = 0;
-  private groundY = 0;
-  private maxY = 2.2;
   private gravity = -24;
   private jumpStrength = 8;
   private terminalVelocity = -50;
   private airControlFactor = 1;
-  private onGround = true;
+  private onGround = false;
   private lastGroundedTime = -Infinity;
   private lastJumpPressedTime = -Infinity;
   private jumpBuffer = 0.12;
   private coyoteTime = 0.1;
   private lastJumpTime = -Infinity;
   private jumpCooldown = 0.15;
+  private groundCheckDistance = 0.15; // Distance to check for ground below player
 
   private keysPressed: Record<string, boolean> = {};
   private wsManager: WSManager;
   private getAmmountOfTargetsSelected: () => number;
+  private collisionSystem?: CollisionSystem;
   private lastYawPos = new THREE.Vector3();
   private lastYawRot = new THREE.Euler();
   private lastPitchRot = new THREE.Euler();
@@ -68,13 +69,15 @@ export default class Controls {
     camera: THREE.Camera,
     domElement: HTMLCanvasElement,
     wsManager: WSManager,
-    getAmmountOfTargetsSelected: () => number
+    getAmmountOfTargetsSelected: () => number,
+    collisionSystem?: CollisionSystem
   ) {
     this.targets = targets;
     this.camera = camera;
     this.domElement = domElement;
     this.wsManager = wsManager;
     this.getAmmountOfTargetsSelected = getAmmountOfTargetsSelected;
+    this.collisionSystem = collisionSystem;
 
     const VALORANT_M_YAW = 0.07; 
     const DEG_TO_RAD = Math.PI / 180;
@@ -300,7 +303,19 @@ export default class Controls {
     }
    
     this.velocity.multiplyScalar(Math.pow(this.damping, deltaTime));
-    this.yawObject.position.addScaledVector(this.velocity, deltaTime);
+    
+    // Apply collision detection and resolution
+    if (this.collisionSystem) {
+      const desiredMovement = this.velocity.clone().multiplyScalar(deltaTime);
+      const newPos = this.collisionSystem.slidePlayerAlongWalls(
+        this.yawObject.position,
+        desiredMovement
+      );
+      this.yawObject.position.copy(newPos);
+    } else {
+      // No collision system, move freely
+      this.yawObject.position.addScaledVector(this.velocity, deltaTime);
+    }
 
     const now = performance.now() / 1000;
     const canUseBufferedJump =
@@ -318,27 +333,76 @@ export default class Controls {
       this.lastJumpPressedTime = -Infinity;
     }
 
-    this.velocityY += this.gravity * deltaTime;
-    if (this.velocityY < this.terminalVelocity)
-      this.velocityY = this.terminalVelocity;
-    this.yawObject.position.y += this.velocityY * deltaTime;
-
-    if (this.yawObject.position.y <= this.groundY) {
-      this.yawObject.position.y = this.groundY;
-      if (!this.onGround) {
-        this.onGround = true;
-        this.lastGroundedTime = now;
-      } else {
-        this.lastGroundedTime = now;
+    // Apply gravity (but not when firmly on ground to prevent vibration)
+    if (!this.onGround) {
+      this.velocityY += this.gravity * deltaTime;
+      if (this.velocityY < this.terminalVelocity) {
+        this.velocityY = this.terminalVelocity;
       }
-      this.velocityY = 0;
-    } else {
-      this.onGround = false;
     }
-
-    if (this.yawObject.position.y > this.maxY) {
-      this.yawObject.position.y = this.maxY;
-      if (this.velocityY > 0) this.velocityY = 0;
+    
+    if (this.collisionSystem) {
+      // Apply vertical velocity
+      const desiredY = this.yawObject.position.y + this.velocityY * deltaTime;
+      this.yawObject.position.y = desiredY;
+      
+      // Use MTV-based depenetration to push player out of any colliders
+      const correctedPos = this.collisionSystem.pushOutOfColliders(
+        this.yawObject.position,
+        false // Never use onGround flag to prevent special-case behavior
+      );
+      
+      // Check if position was corrected (meaning there was a collision)
+      const positionCorrected = !correctedPos.equals(this.yawObject.position);
+      
+      if (positionCorrected) {
+        // Collision detected
+        const correctionY = correctedPos.y - this.yawObject.position.y;
+        this.yawObject.position.copy(correctedPos);
+        
+        // If we were pushed up while falling, we hit the ground
+        if (correctionY > 0 && this.velocityY <= 0) {
+          this.onGround = true;
+          this.lastGroundedTime = now;
+          this.velocityY = 0;
+        }
+        // If we were pushed down while jumping, we hit a ceiling
+        else if (correctionY < 0 && this.velocityY > 0) {
+          this.velocityY = 0;
+          this.onGround = false;
+        }
+        // Horizontal correction only - stay in current ground state
+        else {
+          // Keep current onGround state
+        }
+      } else {
+        // No collision - check if we're near ground for ground detection
+        const groundCheckPos = this.yawObject.position.clone();
+        groundCheckPos.y -= this.groundCheckDistance;
+        
+        const groundCheckBottom = groundCheckPos.clone();
+        groundCheckBottom.y += this.collisionSystem.playerRadius;
+        const groundCheckTop = groundCheckPos.clone();
+        groundCheckTop.y += this.collisionSystem.playerHeight - this.collisionSystem.playerRadius;
+        
+        const nearGround = this.collisionSystem.checkCapsuleCollision(
+          groundCheckBottom,
+          groundCheckTop,
+          this.collisionSystem.playerRadius
+        );
+        
+        if (nearGround && this.velocityY <= 0) {
+          this.onGround = true;
+          this.lastGroundedTime = now;
+          this.velocityY = 0;
+        } else if (!nearGround) {
+          this.onGround = false;
+        }
+      }
+    } else {
+      // No collision system, just apply movement
+      const desiredY = this.yawObject.position.y + this.velocityY * deltaTime;
+      this.yawObject.position.y = desiredY;
     }
 
     const targetY = this.isCrouching ? this.crouchHeight : this.standHeight;

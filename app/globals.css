@@ -45,3 +45,9 @@ body {
     transform: scale(1.1);
   }
 }
+
+@layer utilities {
+  .will-change-transform {
+    will-change: transform;
+  }
+}

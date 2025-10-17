@@ -332,9 +332,14 @@ export default class EditorApp {
   }
 
   public placeSpawnAt(clientX: number, clientY: number): EditorBlock | null {
+    // Check if a spawn point already exists
+    if (this.hasSpawnPoint()) {
+      console.warn("Only one spawn point is allowed");
+      return null;
+    }
+
     const point = this.intersectGround(clientX, clientY);
     if (!point) {
-      this.clearMovementState();
       return null;
     }
 

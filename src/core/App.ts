@@ -3,6 +3,7 @@ import Camera from "./Camera";
 import MainScene from "@/scenes/MainScene";
 import Loop from "./Loop";
 import ControlsWithMovement from "@/systems/ControlsWithMovement";
+import { CollisionSystem } from "@/systems/CollisionSystem";
 import Crosshair from "@/objects/Crosshair";
 import { Raycaster, Vector2, Vector3, BufferGeometry, Line, LineBasicMaterial, BufferAttribute, Mesh, SphereGeometry, MeshBasicMaterial } from "three";
 import Pistol from "@/objects/Pistol";
@@ -50,6 +51,7 @@ export default class App {
   scene: MainScene;
   loop: Loop;
   controls: ControlsWithMovement;
+  collisionSystem: CollisionSystem;
   pistol: Pistol;
   private ui?: UIController;
   targets: Target[] = [];
@@ -76,14 +78,14 @@ export default class App {
   private impactGeom?: SphereGeometry;
 
 
-  constructor(ui?: UIController) {
+  constructor(ui?: UIController, options?: { disableServer?: boolean }) {
     this.ui = ui;
     this.canvas = document.querySelector("canvas") as HTMLCanvasElement;
     this.gameRunning = false;
 
     // Core systems
     this.camera = new Camera();
-    this.wsManager = new WSManager();
+    this.wsManager = new WSManager(options?.disableServer ? { disabled: true } : undefined);
     this.scene = new MainScene(
       this.targets,
       this.wsManager.getMe()!,
@@ -94,13 +96,19 @@ export default class App {
     this.tracerGeom.setAttribute('position', new BufferAttribute(positions, 3));
     this.impactGeom = new SphereGeometry(0.06, 8, 8);
 
+    // Initialize collision system
+    this.collisionSystem = new CollisionSystem();
+    this.collisionSystem.setPlayerDimensions(0.25, 1.8); // radius (smaller for smoother movement), height
+    this.collisionSystem.setStepHeight(0.5); // max step height
+
     this.renderer = new Renderer(this.scene, this.camera.instance, this.canvas);
     this.controls = new ControlsWithMovement(
       this.targets,
       this.camera.instance,
       this.canvas,
       this.wsManager,
-      () => this.getAmmountOfTargetsSelected
+      () => this.getAmmountOfTargetsSelected,
+      this.collisionSystem // Pass collision system to controls
     );
     this.scene.add(this.controls.object);
     this.camera.instance.rotation.set(0, (Math.PI / 2) * 3, 0);

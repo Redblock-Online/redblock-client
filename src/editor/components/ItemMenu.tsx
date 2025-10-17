@@ -6,21 +6,28 @@ type ItemMenuProps = {
   activeItem: EditorItem | null;
   onItemSelect: (item: EditorItem | null) => void;
   onItemDragStart: (itemId: string) => void;
+  disabledItems?: string[];
 };
 
 import type { ReactElement } from "react";
 
-export function ItemMenu({ items, activeItem, onItemSelect, onItemDragStart }: ItemMenuProps): ReactElement {
+export function ItemMenu({ items, activeItem, onItemSelect, onItemDragStart, disabledItems = [] }: ItemMenuProps): ReactElement {
   return (
     <div className="flex flex-1 flex-col gap-3">
       {items.map((item) => {
         const isActive = activeItem?.id === item.id;
+        const isDisabled = disabledItems.includes(item.id);
         return (
           <button
             key={item.id}
             type="button"
-            draggable
+            draggable={!isDisabled}
+            disabled={isDisabled}
             onDragStart={(event) => {
+              if (isDisabled) {
+                event.preventDefault();
+                return;
+              }
               event.dataTransfer?.setData("text/plain", item.id);
               if (event.dataTransfer) {
                 event.dataTransfer.effectAllowed = "copy";
@@ -43,14 +50,28 @@ export function ItemMenu({ items, activeItem, onItemSelect, onItemDragStart }: I
 
               onItemDragStart(item.id);
             }}
-            onClick={() => onItemSelect(isActive ? null : item)}
-            className={`group flex flex-col items-center rounded border border-rb-border bg-white p-4 text-rb-muted transition focus-visible:outline outline-3 outline-rb-red ${
-              isActive ? "border-rb-red bg-red-50 text-rb-text" : "hover:border-gray-400 hover:text-rb-text"
+            onClick={() => !isDisabled && onItemSelect(isActive ? null : item)}
+            className={`group flex flex-col items-center gap-2 rounded-lg border p-4 text-black/60 shadow-sm transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-black/80 ${
+              isDisabled
+                ? "cursor-not-allowed border-black/5 bg-black/5 opacity-50"
+                : isActive
+                  ? "border-black bg-black text-white shadow-[0_16px_32px_rgba(15,23,42,0.22)]"
+                  : "border-white/60 bg-white/90 hover:-translate-y-[3px] hover:shadow-[0_18px_35px_rgba(15,23,42,0.18)]"
             }`}
           >
             <BlockPreview item={item} />
-            <span className="mt-3 text-xs uppercase tracking-wide">{item.label}</span>
-            <span className="mt-1 text-[10px] uppercase text-rb-muted group-hover:text-rb-text">
+            <span
+              className={`font-display text-xs uppercase tracking-[0.32em] ${
+                isActive ? "text-white/80" : "text-black/60 group-hover:text-black"
+              }`}
+            >
+              {item.label}
+            </span>
+            <span
+              className={`text-[10px] uppercase tracking-[0.28em] ${
+                isActive ? "text-white/50" : "text-black/30 group-hover:text-black/60"
+              }`}
+            >
               Drag to place
             </span>
           </button>

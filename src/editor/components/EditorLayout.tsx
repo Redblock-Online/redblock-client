@@ -69,7 +69,7 @@ export function EditorLayout(props: EditorLayoutProps): ReactElement {
         closeMenus={props.closeMenus}
       />
       <DropdownMenu menu={props.activeMenu} position={props.menuPosition} onClose={props.closeMenus} />
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden px-4 pb-6 pt-4 gap-4">
         <EditorSidebar
           items={props.items}
           activeItem={props.activeItem}
@@ -80,7 +80,7 @@ export function EditorLayout(props: EditorLayoutProps): ReactElement {
         />
         <EditorOverlays activeItem={props.activeItem} editingActive={props.editingActive} transformLabel={props.transformLabel} />
         <aside
-          className={`relative z-50 w-72 border-l border-rb-border bg-rb-panel p-4 transition-opacity outline outline-3 outline-rb-border overflow-auto ${
+          className={`relative z-50 w-80 rounded-xl border border-white/60 bg-white/80 p-6 shadow-[0_18px_35px_rgba(15,23,42,0.12)] backdrop-blur transition-opacity ${
             inspectorVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-40"
           }`}
         >

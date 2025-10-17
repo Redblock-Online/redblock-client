@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { ReactElement } from "react";
 
 interface MenuGroup {
@@ -28,10 +29,16 @@ export function EditorHeader({
   closeMenus,
 }: EditorHeaderProps): ReactElement {
   return (
-    <header className="relative z-50 flex h-14 items-center justify-between border-b border-rb-border bg-white px-6 outline outline-3 outline-rb-border pointer-events-auto">
+    <header className="relative z-50 flex h-16 items-center justify-between border-b border-white/60 bg-white/80 px-8 shadow-[0_12px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl pointer-events-auto">
       <div className="flex items-center gap-6">
-        <div className="text-xs uppercase tracking-widest text-rb-muted">World Builder</div>
-        <nav className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-rb-muted">
+        <Image
+          src="/logo.png"
+          alt="Redblock logo"
+          width={498}
+          height={410}
+          className="h-8 w-auto"
+        />
+        <nav className="flex items-center gap-1 text-[11px] font-display uppercase tracking-[0.3em] text-black/40">
           {menuGroups.map((menu) => (
             <div key={menu.id} className="relative">
               <button
@@ -39,8 +46,10 @@ export function EditorHeader({
                   menuAnchors.current[menu.id] = node;
                 }}
                 type="button"
-                className={`rounded px-3 py-1 transition ${
-                  openMenuId === menu.id ? "bg-black text-white" : "text-rb-muted hover:text-rb-text"
+                className={`rounded-lg px-4 py-2 transition ${
+                  openMenuId === menu.id
+                    ? "bg-black text-white shadow-[0_8px_20px_rgba(15,23,42,0.2)]"
+                    : "text-black/50 hover:text-black hover:bg-black/5"
                 }`}
                 onClick={() => {
                   if (openMenuId === menu.id) {
@@ -57,11 +66,16 @@ export function EditorHeader({
         </nav>
       </div>
       <div className="flex flex-col items-end text-right">
-        <div className="text-xs text-rb-muted">
-          Scenario: <span className="font-semibold text-rb-text">{activeScenarioName}</span>
-          {hasUnsavedChanges ? <span className="ml-1 text-rb-text">*</span> : null}
+        <div className="text-[11px] uppercase tracking-[0.24em] text-black/40">
+          Scenario:{" "}
+          <span className="font-display text-sm uppercase tracking-[0.3em] text-black/80">
+            {activeScenarioName}
+          </span>
+          {hasUnsavedChanges ? <span className="ml-1 text-black">*</span> : null}
         </div>
-        <div className="text-sm font-semibold text-rb-text">{title}</div>
+        <div className="font-display text-base uppercase tracking-[0.22em] text-black">
+          {title}
+        </div>
       </div>
     </header>
   );

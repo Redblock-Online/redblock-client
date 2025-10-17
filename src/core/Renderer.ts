@@ -1,9 +1,9 @@
 import * as THREE from "three";
-import { EffectComposer, FXAAShader, RenderPass, ShaderPass } from "three/examples/jsm/Addons.js";
+import { EffectComposer, RenderPass, ShaderPass } from "three/examples/jsm/Addons.js";
 import CustomOutlinePass from "./CustomPass/CustomOutlinePass";
 
 const minPixelRatio = 1;
-const maxPixelRatio = 4; // Increased for better edge rendering
+const maxPixelRatio = 2; // Reduced from 4 to 2 for better performance (still sharp on retina)
 const pixelRatio = Math.min(maxPixelRatio, Math.max(minPixelRatio, window.devicePixelRatio));
 
 export default class Renderer {

@@ -20,8 +20,8 @@ export function EditorSidebar({
   onDeleteComponent,
 }: EditorSidebarProps): ReactElement {
   return (
-    <aside className="relative z-50 flex w-64 flex-col border-r border-rb-border bg-rb-panel p-4 outline outline-3 outline-rb-border pointer-events-auto overflow-auto">
-      <div className="mb-4 text-xs uppercase text-rb-muted">Components</div>
+    <aside className="relative z-50 flex w-72 flex-col gap-4 rounded-xl border border-white/60 bg-white/80 p-6 shadow-[0_18px_35px_rgba(15,23,42,0.12)] backdrop-blur pointer-events-auto overflow-auto">
+      <div className="font-display text-xs uppercase tracking-[0.4em] text-black/45">Components</div>
       <ItemMenu
         items={items}
         activeItem={activeItem}
@@ -31,7 +31,7 @@ export function EditorSidebar({
       {activeItem && activeItem.id.startsWith("component:") ? (
         <div className="mt-4 flex flex-col gap-2">
           <button
-            className="h-9 rounded border border-rb-border bg-white px-3 text-xs font-semibold uppercase tracking-widest text-rb-text hover:bg-black hover:text-white"
+            className="h-10 rounded-lg border border-black/10 bg-black text-xs font-display uppercase tracking-[0.28em] text-white transition hover:-translate-y-[2px] hover:shadow-[0_10px_24px_rgba(15,23,42,0.18)]"
             onClick={() => {
               const id = activeItem.id.slice("component:".length);
               const def = components.find((entry) => entry.id === id);
