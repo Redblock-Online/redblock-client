@@ -46,6 +46,10 @@ export default class Controls {
   private lastMovementTime = 0;
   private headBobbingDamping = 7.5; // Velocidad de transición balanceada
 
+  // Audio variables
+  private stepsAudio: HTMLAudioElement | null = null;
+  private isStepsPlaying = false;
+
   private keysPressed: Record<string, boolean> = {};
   private wsManager: WSManager;
   private getAmmountOfTargetsSelected: () => number;
@@ -117,6 +121,7 @@ export default class Controls {
     this.lastYawRot.copy(this.yawObject.rotation);
     this.lastPitchRot.copy(this.pitchObject.rotation);
 
+    this.initStepsAudio();
     this.initPointerLock();
     this.initKeyboardListeners();
   }
@@ -366,18 +371,27 @@ export default class Controls {
   }
 
   private updateHeadBobbing(deltaTime: number) {
-    // Detectar si el jugador se está moviendo
-    const isCurrentlyMoving = this.velocity.length() > 0.1 && this.onGround;
+    // Detectar si el jugador se está moviendo - usar una detección más sensible
+    const isCurrentlyMoving = this.velocity.length() > 0.05 && this.onGround;
+    
+    // Debug: mostrar estado del movimiento
+    if (isCurrentlyMoving && !this.isMoving) {
+      console.log('Movimiento detectado - velocidad:', this.velocity.length());
+    }
     
     if (isCurrentlyMoving) {
       this.isMoving = true;
       this.lastMovementTime = performance.now();
       this.headBobbingTime += deltaTime * this.headBobbingFrequency;
+      // Reproducir audio de pasos cuando se está moviendo
+      this.playStepsAudio();
     } else {
       // Si no se está moviendo, gradualmente reducir el head bobbing
       if (this.isMoving && performance.now() - this.lastMovementTime > 200) {
         this.isMoving = false;
         this.headBobbingTime = 0;
+        // Detener audio de pasos cuando se deja de mover
+        this.stopStepsAudio();
       }
     }
 
@@ -421,6 +435,81 @@ export default class Controls {
       this.velocity.set(0, 0, 0);
       this.velocityY = 0;
       this.lastJumpPressedTime = -Infinity;
+      this.stopStepsAudio();
+    }
+  }
+
+  private initStepsAudio() {
+    // Intentar diferentes rutas para el archivo de audio
+    const audioPaths = [
+      '/music/pasos.mp3',
+      './music/pasos.mp3',
+      '/public/music/pasos.mp3'
+    ];
+    
+    this.stepsAudio = new Audio(audioPaths[0]);
+    this.stepsAudio.loop = true;
+    this.stepsAudio.volume = 0.5; // Aumentar volumen para mejor audibilidad
+    this.stepsAudio.preload = 'auto';
+    
+    // Agregar listeners para debug
+    this.stepsAudio.addEventListener('loadstart', () => {
+      console.log('Audio de pasos: Iniciando carga...');
+    });
+    
+    this.stepsAudio.addEventListener('canplaythrough', () => {
+      console.log('Audio de pasos: Listo para reproducir');
+    });
+    
+    this.stepsAudio.addEventListener('error', (e) => {
+      console.error('Error cargando audio de pasos:', e);
+      // Intentar con rutas alternativas
+      this.tryAlternativeAudioPaths(audioPaths.slice(1));
+    });
+  }
+  
+  private tryAlternativeAudioPaths(paths: string[]) {
+    if (paths.length === 0) {
+      console.error('No se pudo cargar el audio de pasos con ninguna ruta');
+      return;
+    }
+    
+    console.log('Intentando ruta alternativa:', paths[0]);
+    this.stepsAudio = new Audio(paths[0]);
+    this.stepsAudio.loop = true;
+    this.stepsAudio.volume = 0.5;
+    this.stepsAudio.preload = 'auto';
+    
+    this.stepsAudio.addEventListener('error', (e) => {
+      console.error('Error con ruta alternativa:', paths[0], e);
+      this.tryAlternativeAudioPaths(paths.slice(1));
+    });
+    
+    this.stepsAudio.addEventListener('canplaythrough', () => {
+      console.log('Audio de pasos cargado exitosamente con ruta:', paths[0]);
+    });
+  }
+
+  private playStepsAudio() {
+    if (this.stepsAudio && !this.isStepsPlaying && !this.paused) {
+      console.log('Intentando reproducir audio de pasos...');
+      this.stepsAudio.play().then(() => {
+        console.log('Audio de pasos reproducido exitosamente');
+        this.isStepsPlaying = true;
+      }).catch((error) => {
+        console.error('No se pudo reproducir el audio de pasos:', error);
+        // Intentar cargar el audio nuevamente si hay error
+        this.stepsAudio?.load();
+      });
+    }
+  }
+
+  private stopStepsAudio() {
+    if (this.stepsAudio && this.isStepsPlaying) {
+      console.log('Deteniendo audio de pasos...');
+      this.stepsAudio.pause();
+      this.stepsAudio.currentTime = 0;
+      this.isStepsPlaying = false;
     }
   }
 }
