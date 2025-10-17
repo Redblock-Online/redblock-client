@@ -37,6 +37,15 @@ export default class Controls {
   private lastJumpTime = -Infinity;
   private jumpCooldown = 0.15;
 
+  // Head bobbing variables
+  private headBobbingTime = 0;
+  private headBobbingAmplitude = 0.065; // Amplitud del movimiento vertical (más notorio)
+  private headBobbingFrequency = 3.8; // Frecuencia del movimiento (más dinámico)
+  private headBobbingSideAmplitude = 0.038; // Amplitud del movimiento lateral (más notorio)
+  private isMoving = false;
+  private lastMovementTime = 0;
+  private headBobbingDamping = 7.5; // Velocidad de transición balanceada
+
   private keysPressed: Record<string, boolean> = {};
   private wsManager: WSManager;
   private getAmmountOfTargetsSelected: () => number;
@@ -345,11 +354,61 @@ export default class Controls {
     this.pitchObject.position.y +=
       (targetY - this.pitchObject.position.y) * this.heightLerp * deltaTime;
 
+    // Head bobbing logic
+    this.updateHeadBobbing(deltaTime);
+
     // Periodic check (you already had it)
     this.changeCheckAccumulator += deltaTime;
     if (this.changeCheckAccumulator >= this.changeCheckInterval) {
       this.checkChanges(); // <- optimized below
       this.changeCheckAccumulator = 0;
+    }
+  }
+
+  private updateHeadBobbing(deltaTime: number) {
+    // Detectar si el jugador se está moviendo
+    const isCurrentlyMoving = this.velocity.length() > 0.1 && this.onGround;
+    
+    if (isCurrentlyMoving) {
+      this.isMoving = true;
+      this.lastMovementTime = performance.now();
+      this.headBobbingTime += deltaTime * this.headBobbingFrequency;
+    } else {
+      // Si no se está moviendo, gradualmente reducir el head bobbing
+      if (this.isMoving && performance.now() - this.lastMovementTime > 200) {
+        this.isMoving = false;
+        this.headBobbingTime = 0;
+      }
+    }
+
+    if (this.isMoving && this.onGround && !this.isCrouching) {
+      // Detectar dirección del movimiento
+      const forwardMovement = this.keysPressed["w"];
+      const backwardMovement = this.keysPressed["s"];
+      const leftMovement = this.keysPressed["a"];
+      const rightMovement = this.keysPressed["d"];
+      
+      // Calcular amplitud basada en la dirección
+      let verticalAmplitude = this.headBobbingAmplitude;
+      let sideAmplitude = this.headBobbingSideAmplitude;
+      
+      // Aumentar movimiento para direcciones laterales y hacia atrás
+      if (leftMovement || rightMovement || backwardMovement) {
+        verticalAmplitude *= 1.4; // 40% más para laterales y atrás
+        sideAmplitude *= 1.6; // 60% más para laterales y atrás
+      }
+      
+      // Calcular el movimiento de head bobbing
+      const verticalBob = Math.sin(this.headBobbingTime * Math.PI * 2) * verticalAmplitude;
+      const sideBob = Math.sin(this.headBobbingTime * Math.PI * 2 * 0.5) * sideAmplitude;
+      
+      // Aplicar el movimiento a la cámara de forma más suave
+      this.camera.position.y += (verticalBob - this.camera.position.y) * 5 * deltaTime;
+      this.camera.position.x += (sideBob - this.camera.position.x) * 5 * deltaTime;
+    } else {
+      // Suavemente regresar a la posición original
+      this.camera.position.y += (0 - this.camera.position.y) * this.headBobbingDamping * deltaTime;
+      this.camera.position.x += (0 - this.camera.position.x) * this.headBobbingDamping * deltaTime;
     }
   }
 
