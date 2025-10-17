@@ -20,7 +20,6 @@ export interface SceneComponents {
   scene: Scene;
   camera: PerspectiveCamera;
   controls: OrbitControls;
-  groundPlane: Mesh;
 }
 
 export function createEditorScene(canvas: HTMLCanvasElement): SceneComponents {
@@ -44,13 +43,6 @@ export function createEditorScene(canvas: HTMLCanvasElement): SceneComponents {
   controls.enableRotate = true;
   controls.mouseButtons.RIGHT = MOUSE.ROTATE;
 
-  const groundPlane = new Mesh(
-    new BoxGeometry(200, 0.1, 200),
-    new MeshStandardMaterial({ color: new Color(0xe5e7eb) })
-  );
-  groundPlane.position.y = -0.05;
-  groundPlane.receiveShadow = true;
-  scene.add(groundPlane);
 
   const ambientLight = new AmbientLight(0xffffff, 0.6);
   scene.add(ambientLight);
@@ -75,7 +67,7 @@ export function createEditorScene(canvas: HTMLCanvasElement): SceneComponents {
   const axesHelper = new AxesHelper(5);
   scene.add(axesHelper);
 
-  return { renderer, scene, camera, controls, groundPlane };
+  return { renderer, scene, camera, controls };
 }
 
 export function handleResize(
