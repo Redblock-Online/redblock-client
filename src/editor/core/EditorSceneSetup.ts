@@ -29,7 +29,7 @@ export function createEditorScene(canvas: HTMLCanvasElement): SceneComponents {
   renderer.outputColorSpace = SRGBColorSpace;
 
   const scene = new Scene();
-  scene.background = new Color(0xffffff);
+  scene.background = new Color(0x3d3d3d); // Blender-style dark gray background
 
   const camera = new PerspectiveCamera(60, 1, 0.1, 1000);
   camera.position.set(8, 10, 14);

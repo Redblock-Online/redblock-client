@@ -10,7 +10,7 @@ This document helps contributors and AI agents work effectively in this repo. It
 
 **Run Commands**
 - **Install:** `npm install`
-- **Dev server:** `npm run dev` (serves on `localhost:3000` by default)
+- **Dev server:** `npm run dev` (serves on `localhost:3001` by default)
 - **Build:** `npm run build` (Next.js production build)
 - **Preview build:** `npm start`
 
@@ -23,10 +23,11 @@ This document helps contributors and AI agents work effectively in this repo. It
 **Codebase Map**
 - `src/core/` — engine wrappers (`Camera`, `Renderer`, `Loop`, `App`).
 - `src/scenes/` — Three.js scenes (game world and neighbors interpolation).
-- `src/systems/` — movement/controls and related logic.
+- `src/systems/` — movement/controls and **physics (Rapier3D)**.
 - `src/objects/` — 3D entities (`Cube`, `Pistol`, generators).
 - `src/ui/react/` — React UI (Start screen, Timer, hints, badges) mounted at `#ui-root`.
 - `public/` — static assets (images, icons, models).
+- `docs/` — documentation (including `PHYSICS.md` for Rapier integration).
 
 **Conventions**
 - **TypeScript:** keep types explicit; avoid `any`. Strict mode is on.
@@ -35,6 +36,7 @@ This document helps contributors and AI agents work effectively in this repo. It
 - **Pointer lock:** only request on canvas clicks (see `src/core/App.ts`).
 - **Sensitivity:** read from `localStorage` and react to `#sensitivityRange` updates (delegated input listener in controls).
 - **Networking:** WS throttled to ~20Hz; see `src/utils/ws/WSManager.ts` and `ControlsWithMovement.checkChanges()`.
+- **Physics:** Rapier3D handles collisions, gravity, and character movement. Always `await physicsSystem.waitForInit()` before adding colliders. See `docs/PHYSICS.md`.
 
 **React UI Architecture**
 - Root is mounted in `#ui-root`; see `src/ui/react/mountUI.tsx` and `src/ui/react/UIRoot.tsx`.
@@ -43,8 +45,10 @@ This document helps contributors and AI agents work effectively in this repo. It
 
 **Performance Tips**
 - Limit allocations in the render loop; reuse vectors and raycasters.
-- Keep network updates quantized and thresholded; don’t lower rate caps casually.
+- Keep network updates quantized and thresholded; don't lower rate caps casually.
 - When modifying post-processing, ensure pass order remains: Render → Outline → FXAA (`src/core/Renderer.ts`).
+- Physics step is called every frame; avoid adding/removing colliders in hot paths.
+- Rapier WASM initializes asynchronously; handle gracefully with `waitForInit()`.
 
 **Testing**
 - No test suite is configured yet. If you add tests, prefer Vitest.

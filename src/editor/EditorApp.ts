@@ -116,7 +116,7 @@ export default class EditorApp {
     this.renderer.outputColorSpace = SRGBColorSpace;
 
     this.scene = new Scene();
-    this.scene.background = new Color(0xffffff);
+    this.scene.background = new Color(0x3d3d3d); // Blender-style dark gray background
 
     this.camera = new PerspectiveCamera(60, 1, 0.1, 1000);
     this.camera.position.set(8, 10, 14);

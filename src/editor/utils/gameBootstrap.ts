@@ -127,94 +127,73 @@ function loadCustomScenario(app: App, scenario: SerializedScenario) {
     console.log(`[Bootstrap] Created cube at pos: (${cube.position.x.toFixed(2)}, ${cube.position.y.toFixed(2)}, ${cube.position.z.toFixed(2)}) scale: (${cube.scale.x.toFixed(2)}, ${cube.scale.y.toFixed(2)}, ${cube.scale.z.toFixed(2)})`);
     customGroup.add(cube);
     
-    // Calculate collider from cube's actual world transform
-    // The cube mesh has geometry(1,1,1) and is scaled by cube.scale
-    // So the actual size is simply the scale values
-    const boxCenter = cube.position.clone();
-    const boxSize = new THREE.Vector3(
-      Math.abs(cube.scale.x), // Actual width
-      Math.abs(cube.scale.y), // Actual height
-      Math.abs(cube.scale.z)  // Actual depth
-    );
+    // CRITICAL: Use Box3.setFromObject to get ACTUAL visual bounds
+    // Cube is a Group with outlineMesh scaled to 1.02, so we need the real bounding box
+    const boundingBox = new THREE.Box3().setFromObject(cube);
+    const boxCenter = new THREE.Vector3();
+    const boxSize = new THREE.Vector3();
     
-    console.log(`[Bootstrap] Cube world position: (${boxCenter.x.toFixed(2)}, ${boxCenter.y.toFixed(2)}, ${boxCenter.z.toFixed(2)})`);
-    console.log(`[Bootstrap] Cube scale/size: (${boxSize.x.toFixed(2)}, ${boxSize.y.toFixed(2)}, ${boxSize.z.toFixed(2)})`);
+    boundingBox.getCenter(boxCenter);
+    boundingBox.getSize(boxSize);
     
-    // Create collider matching the cube exactly
-    // DO NOT expand - the collision system already accounts for player radius (0.3m)
-    // Expanding would cause double-counting and allow player to penetrate visually
-    const halfSize = new THREE.Vector3(
-      boxSize.x / 2,
-      boxSize.y / 2,
-      boxSize.z / 2
-    );
+    console.log(`[Bootstrap] Actual bounding box center: (${boxCenter.x.toFixed(2)}, ${boxCenter.y.toFixed(2)}, ${boxCenter.z.toFixed(2)})`);
+    console.log(`[Bootstrap] Actual bounding box size: (${boxSize.x.toFixed(2)}, ${boxSize.y.toFixed(2)}, ${boxSize.z.toFixed(2)})`);
     
-    console.log(`[Bootstrap] Collider half-size: (${halfSize.x.toFixed(2)}, ${halfSize.y.toFixed(2)}, ${halfSize.z.toFixed(2)})`);
-    
-    // Ensure we don't make the collider negative or too small
-    halfSize.x = Math.max(halfSize.x, 0.05);
-    halfSize.y = Math.max(halfSize.y, 0.05);
-    halfSize.z = Math.max(halfSize.z, 0.05);
-    
+    // Create collider matching the VISUAL bounds exactly (including outline)
     const collider = {
-      min: new THREE.Vector3(
-        boxCenter.x - halfSize.x,
-        boxCenter.y - halfSize.y,
-        boxCenter.z - halfSize.z
-      ),
-      max: new THREE.Vector3(
-        boxCenter.x + halfSize.x,
-        boxCenter.y + halfSize.y,
-        boxCenter.z + halfSize.z
-      ),
+      min: boundingBox.min.clone(),
+      max: boundingBox.max.clone(),
       object: cube
     };
     
-    app.collisionSystem.addCollider(collider);
-    console.log(`[Bootstrap] Collider min: (${collider.min.x.toFixed(2)}, ${collider.min.y.toFixed(2)}, ${collider.min.z.toFixed(2)}) max: (${collider.max.x.toFixed(2)}, ${collider.max.y.toFixed(2)}, ${collider.max.z.toFixed(2)})`);
+    // Add collider to physics system (wait for initialization)
+    app.collisionSystem.waitForInit().then(() => {
+      app.collisionSystem.addCollider(collider);
+      console.log(`[Bootstrap] Collider added - min: (${collider.min.x.toFixed(2)}, ${collider.min.y.toFixed(2)}, ${collider.min.z.toFixed(2)}) max: (${collider.max.x.toFixed(2)}, ${collider.max.y.toFixed(2)}, ${collider.max.z.toFixed(2)})`);
+    });
   });
   
   // NOW process spawn point AFTER all colliders are added
   if (spawnBlock) {
-    console.log("[Bootstrap] ========== SPAWN POINT TELEPORT ==========");
-    console.log("[Bootstrap] Found spawn point at:", spawnBlock.transform.position);
-    console.log("[Bootstrap] Spawn block scale:", spawnBlock.transform.scale);
-    console.log("[Bootstrap] Colliders count:", app.collisionSystem.getColliders().length);
-    
-    const spawnX = spawnBlock.transform.position.x;
-    const spawnZ = spawnBlock.transform.position.z;
-    
-    // Calculate the TOP of the spawn block (position is center, so add half height)
-    const spawnBlockTop = spawnBlock.transform.position.y + (spawnBlock.transform.scale.y / 2);
-    console.log("[Bootstrap] Spawn block center Y:", spawnBlock.transform.position.y, "top Y:", spawnBlockTop);
-    
-    // Start test position well above the spawn block top
-    const testPos = new THREE.Vector3(spawnX, spawnBlockTop + 10, spawnZ);
-    const groundY = app.collisionSystem.checkGroundCollision(testPos);
-    console.log("[Bootstrap] Test position:", testPos, "checkGroundCollision result:", groundY);
-    
-    // Spawn above ground with proper clearance
-    // position.y is player feet, capsuleBottom is position.y + radius (0.25)
-    // So spawn at groundY + radius + small margin to ensure capsule is fully above floor
-    const spawnY = groundY !== null ? groundY + 0.5 : spawnBlockTop + 1.6;
-    
-    console.log("[Bootstrap] Target spawn position:", { x: spawnX, y: spawnY, z: spawnZ });
-    console.log("[Bootstrap] Ground Y:", groundY, "Player will spawn at Y:", spawnY);
-    console.log("[Bootstrap] Expected capsule bottom Y:", spawnY + 0.25, "(should be >", groundY, ")");
-    
-    app.controls.teleportTo(spawnX, spawnY, spawnZ, 0);
-    console.log("[Bootstrap] After teleport - yawObject:", app.controls.object.position);
-    
-    // CRITICAL: Push player out of any colliders they might be inside
-    const pushedPos = app.collisionSystem.pushOutOfColliders(app.controls.object.position, false);
-    if (!pushedPos.equals(app.controls.object.position)) {
-      console.warn("[Bootstrap] ⚠️ Player was inside a collider after spawn, pushing out!");
-      console.log("[Bootstrap] Original pos:", app.controls.object.position);
-      console.log("[Bootstrap] Corrected pos:", pushedPos);
-      app.controls.object.position.copy(pushedPos);
-    } else {
-      console.log("[Bootstrap] ✅ Player position is clear of colliders");
-    }
+    // Wait for physics to be ready before spawning
+    app.collisionSystem.waitForInit().then(() => {
+      console.log("[Bootstrap] ========== SPAWN POINT TELEPORT ==========");
+      console.log("[Bootstrap] Found spawn point at:", spawnBlock.transform.position);
+      console.log("[Bootstrap] Spawn block scale:", spawnBlock.transform.scale);
+      console.log("[Bootstrap] Colliders count:", app.collisionSystem.getColliders().length);
+      
+      const spawnX = spawnBlock.transform.position.x;
+      const spawnZ = spawnBlock.transform.position.z;
+      
+      // Calculate the TOP of the spawn block (position is center, so add half height)
+      const spawnBlockTop = spawnBlock.transform.position.y + (spawnBlock.transform.scale.y / 2);
+      console.log("[Bootstrap] Spawn block center Y:", spawnBlock.transform.position.y, "top Y:", spawnBlockTop);
+      
+      // Start test position well above the spawn block top
+      const testPos = new THREE.Vector3(spawnX, spawnBlockTop + 10, spawnZ);
+      const groundY = app.collisionSystem.checkGroundCollision(testPos);
+      console.log("[Bootstrap] Test position:", testPos, "checkGroundCollision result:", groundY);
+      
+      // Spawn above ground with proper clearance - use spawnBlockTop directly for more reliable positioning
+      const spawnY = spawnBlockTop + 1.8; // Spawn player height above the platform
+      
+      console.log("[Bootstrap] Target spawn position:", { x: spawnX, y: spawnY, z: spawnZ });
+      console.log("[Bootstrap] Ground Y:", groundY, "Player will spawn at Y:", spawnY);
+      
+      app.controls.teleportTo(spawnX, spawnY, spawnZ, 0);
+      console.log("[Bootstrap] After teleport - yawObject:", app.controls.object.position);
+      
+      // CRITICAL: Push player out of any colliders they might be inside
+      const pushedPos = app.collisionSystem.pushOutOfColliders(app.controls.object.position, false);
+      if (!pushedPos.equals(app.controls.object.position)) {
+        console.warn("[Bootstrap] ⚠️ Player was inside a collider after spawn, pushing out!");
+        console.log("[Bootstrap] Original pos:", app.controls.object.position);
+        console.log("[Bootstrap] Corrected pos:", pushedPos);
+        app.controls.object.position.copy(pushedPos);
+      } else {
+        console.log("[Bootstrap] ✅ Player position is clear of colliders");
+      }
+    });
   }
   
   scene.add(customGroup);
@@ -314,7 +293,7 @@ export async function bootstrapGameInEditor(
         pending.forEach((fn) => fn());
         pending = [];
       },
-      autoStartScenario: scenario.name,
+      autoStartScenario: scenario.name, // Auto-start when Play button is clicked
       isEditorPreview: true, // Hide timer and pause menu in editor preview
     })
   );

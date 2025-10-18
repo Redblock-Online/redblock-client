@@ -4,6 +4,8 @@ import ControlsWithMovement from "@/systems/ControlsWithMovement";
 import Pistol from "@/objects/Pistol";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import MainScene from "@/scenes/MainScene";
+import { PhysicsSystem } from "@/systems/PhysicsSystem";
+
 export default class Loop {
   renderer: EffectComposer;
   scene: MainScene;
@@ -13,18 +15,22 @@ export default class Loop {
   public lastTime: number;
   controls: ControlsWithMovement;
   pistol: Pistol;
+  physicsSystem: PhysicsSystem;
+  
   constructor(
     renderer: EffectComposer,
     scene: MainScene,
     camera: THREE.Camera,
     controls: ControlsWithMovement,
-    pistol: Pistol
+    pistol: Pistol,
+    physicsSystem: PhysicsSystem
   ) {
     this.renderer = renderer;
     this.scene = scene;
     this.camera = camera;
     this.controls = controls;
     this.pistol = pistol;
+    this.physicsSystem = physicsSystem;
     this.active = false;
 
     this.deltaTime = 0;
@@ -44,6 +50,10 @@ export default class Loop {
     this.deltaTime = (now - this.lastTime) / 1000;
 
     this.lastTime = now;
+    
+    // Step physics world BEFORE controls update so character controller has fresh data
+    this.physicsSystem.step(this.deltaTime);
+    
     this.controls.update(this.deltaTime);
     this.pistol.update(this.deltaTime, this.camera);
     this.scene.update();

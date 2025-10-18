@@ -5,6 +5,7 @@ import Light from "@/objects/Light";
 import Target from "@/objects/Target";
 import type { PlayerCore } from "@/utils/ws/WSManager";
 import WSManager from "@/utils/ws/WSManager";
+import type { PhysicsSystem } from "@/systems/PhysicsSystem";
 export type TargetInfo = {
   x: number;
   y: number;
@@ -76,6 +77,8 @@ export default class MainScene extends THREE.Scene {
   public neighborTargetsRendered: Map<string, Target[]> = new Map();
   private clock = new THREE.Clock();
   private neighborStates = new Map<string, NeighborState>();
+  private physicsSystem?: PhysicsSystem;
+  private isEditorMode: boolean = false;
 
   private static edgeMaterial = new THREE.MeshBasicMaterial({ 
     color: 0xd0d0d0,
@@ -109,13 +112,15 @@ export default class MainScene extends THREE.Scene {
     return group;
   })();
 
-  constructor(targets: Target[], me: PlayerCore, wsManager: WSManager) {
+  constructor(targets: Target[], me: PlayerCore, wsManager: WSManager, physicsSystem?: PhysicsSystem, isEditorMode: boolean = false) {
     super();
     const white = new THREE.Color(0xffffff);
     this.background = white;
     this.targets = targets;
     this.me = me;
     this.wsManager = wsManager;
+    this.physicsSystem = physicsSystem;
+    this.isEditorMode = isEditorMode;
     const light = new Light();
     this.add(light);
   }
@@ -126,10 +131,49 @@ export default class MainScene extends THREE.Scene {
   }
 
   private generateRoom(x: number, z: number) {
+    // Skip room generation in editor mode
+    if (this.isEditorMode) {
+      console.log("[MainScene] Skipping generateRoom in editor mode");
+      return;
+    }
+    console.log("[MainScene] Generating room at:", x, z);
+    
     const room = MainScene.roomPrototype.clone();
     room.position.set(x, -0.5, z);
     room.scale.set(20, 1, 20);
     this.add(room);
+    
+    // Add physics collider for the ground (matches visual mesh position)
+    if (this.physicsSystem) {
+      // Visual mesh is at Y:-0.5 with scale 1, so it goes from Y:-1 to Y:0
+      const floorY = 0; // Top of the ground plane (matches visual ground surface)
+      const floorThickness = 1; // Matches visual mesh thickness
+      const floorSize = 20; // 20x20 room
+      
+      const groundCollider = {
+        min: new THREE.Vector3(x - floorSize / 2, floorY - floorThickness, z - floorSize / 2),
+        max: new THREE.Vector3(x + floorSize / 2, floorY, z + floorSize / 2),
+      };
+      
+      this.physicsSystem.addCollider(groundCollider);
+      console.log("[MainScene] ✅ Ground physics added at (X:", x, "Z:", z, ") - top Y:", floorY);
+      
+      // Add visual debug box for the collider (wireframe) - OPTIONAL
+      if (false) { // Set to true to see collider bounds
+        const colliderSize = new THREE.Vector3().subVectors(groundCollider.max, groundCollider.min);
+        const colliderCenter = new THREE.Vector3().addVectors(groundCollider.min, groundCollider.max).multiplyScalar(0.5);
+        const debugBox = new THREE.BoxGeometry(colliderSize.x, colliderSize.y, colliderSize.z);
+        const debugMaterial = new THREE.MeshBasicMaterial({ 
+          color: 0x00ff00, 
+          wireframe: true,
+          transparent: true,
+          opacity: 0.5
+        });
+        const debugMesh = new THREE.Mesh(debugBox, debugMaterial);
+        debugMesh.position.copy(colliderCenter);
+        this.add(debugMesh);
+      }
+    }
   }
 
   public loadScenario(targetCount: number, halfSize: boolean = false) {
@@ -193,6 +237,11 @@ export default class MainScene extends THREE.Scene {
   }
 
   private checkNeighborRoomChange(neighborId: string, roomX: number, roomZ: number): boolean {
+    // Skip room generation in editor mode
+    if (this.isEditorMode) {
+      return false;
+    }
+    
     const stored = this.neighborRooms.get(neighborId);
     const roomChanged = !stored || stored.x !== roomX || stored.z !== roomZ;
     

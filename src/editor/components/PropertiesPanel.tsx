@@ -37,15 +37,15 @@ export function PropertiesPanel({
   onDeleteSelection,
 }: PropertiesPanelProps): ReactElement {
   const actionButtonClass =
-    "h-10 rounded-lg border border-black/10 bg-black text-xs font-display uppercase tracking-[0.26em] text-white transition hover:-translate-y-[2px] hover:shadow-[0_12px_28px_rgba(15,23,42,0.18)]";
+    "h-7 rounded border border-[#1a1a1a] bg-[#4772b3] text-[11px] text-white transition hover:bg-[#5a8fd6]";
   const subtleButtonClass =
-    "h-10 rounded-lg border border-black/10 bg-white/80 text-xs font-display uppercase tracking-[0.26em] text-black/70 transition hover:-translate-y-[2px] hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)] hover:bg-white";
+    "h-7 rounded border border-[#1a1a1a] bg-[#2b2b2b] text-[11px] text-[#cccccc] transition hover:bg-[#404040]";
 
   if (!selection) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-black/10 bg-white/40 p-8 text-center text-xs text-black/40">
-        <span className="font-display text-sm uppercase tracking-[0.3em] text-black/60">Inspector</span>
-        <p className="max-w-[220px] text-[11px] leading-relaxed tracking-[0.02em]">
+      <div className="flex h-full flex-col items-center justify-center gap-2 rounded border border-dashed border-[#1a1a1a] bg-[#2b2b2b] p-4 text-center text-[11px] text-[#666666]">
+        <span className="text-[12px] text-[#999999]">Inspector</span>
+        <p className="max-w-[220px] text-[11px] leading-relaxed">
           Select an existing block or place a new one to adjust its properties.
         </p>
       </div>
@@ -55,10 +55,10 @@ export function PropertiesPanel({
   // Multi selection UI
   if (Array.isArray(selection)) {
     return (
-      <div className="flex h-full flex-col gap-6 text-xs text-black/70">
+      <div className="flex h-full flex-col gap-3 text-[11px] text-[#cccccc]">
         <div>
-          <div className="font-display text-[11px] uppercase tracking-[0.3em] text-black/30">Selection</div>
-          <div className="mt-1 font-display text-base uppercase tracking-[0.18em] text-black">
+          <div className="text-[10px] text-[#999999]">Selection</div>
+          <div className="mt-0.5 text-[13px] font-medium text-[#cccccc]">
             Multiple Objects
           </div>
         </div>
@@ -92,10 +92,10 @@ export function PropertiesPanel({
 
   // Single selection UI
   return (
-    <div className="flex h-full flex-col gap-6 text-xs text-black/70">
+    <div className="flex h-full flex-col gap-3 text-[11px] text-[#cccccc]">
       <div>
-        <div className="font-display text-[11px] uppercase tracking-[0.3em] text-black/30">Selection</div>
-        <div className="mt-1 font-display text-base uppercase tracking-[0.2em] text-black">
+        <div className="text-[10px] text-[#999999]">Selection</div>
+        <div className="mt-0.5 text-[13px] font-medium text-[#cccccc]">
           {selection.id}
         </div>
       </div>
@@ -144,8 +144,8 @@ export function PropertiesPanel({
       )}
 
       <section>
-        <h3 className="font-display text-[11px] uppercase tracking-[0.3em] text-black/40">Position</h3>
-        <div className="mt-2 grid grid-cols-3 gap-2">
+        <h3 className="text-[11px] text-[#999999] mb-1.5">Position</h3>
+        <div className="grid grid-cols-3 gap-1.5">
           {(["x", "y", "z"] as const).map((axis) => (
             <AxisInput
               key={axis}
@@ -160,8 +160,8 @@ export function PropertiesPanel({
       </section>
 
       <section>
-        <h3 className="font-display text-[11px] uppercase tracking-[0.3em] text-black/40">Scale</h3>
-        <div className="mt-2 grid grid-cols-3 gap-2">
+        <h3 className="text-[11px] text-[#999999] mb-1.5">Scale</h3>
+        <div className="grid grid-cols-3 gap-1.5">
           {(["x", "y", "z"] as const).map((axis) => (
             <AxisInput
               key={axis}
@@ -177,8 +177,8 @@ export function PropertiesPanel({
       </section>
 
       <section>
-        <h3 className="font-display text-[11px] uppercase tracking-[0.3em] text-black/40">Rotation (°)</h3>
-        <div className="mt-2 grid grid-cols-3 gap-2">
+        <h3 className="text-[11px] text-[#999999] mb-1.5">Rotation (°)</h3>
+        <div className="grid grid-cols-3 gap-1.5">
           {(["x", "y", "z"] as const).map((axis) => (
             <AxisInput
               key={axis}

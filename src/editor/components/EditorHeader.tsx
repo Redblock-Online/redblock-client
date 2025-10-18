@@ -29,7 +29,7 @@ export function EditorHeader({
   closeMenus,
 }: EditorHeaderProps): ReactElement {
   return (
-    <header className="relative z-50 flex h-16 items-center justify-between border-b border-white/60 bg-white/80 px-8 shadow-[0_12px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl pointer-events-auto">
+    <header className="relative z-50 flex h-12 items-center justify-between border-b border-[#1a1a1a] bg-[#323232] px-4 pointer-events-auto">
       <div className="flex items-center gap-6">
         <Image
           src="/logo.png"
@@ -38,7 +38,7 @@ export function EditorHeader({
           height={410}
           className="h-8 w-auto"
         />
-        <nav className="flex items-center gap-1 text-[11px] font-display uppercase tracking-[0.3em] text-black/40">
+        <nav className="flex items-center gap-0.5 text-[11px] text-[#cccccc]">
           {menuGroups.map((menu) => (
             <div key={menu.id} className="relative">
               <button
@@ -46,10 +46,10 @@ export function EditorHeader({
                   menuAnchors.current[menu.id] = node;
                 }}
                 type="button"
-                className={`rounded-lg px-4 py-2 transition ${
+                className={`rounded px-3 py-1.5 text-[11px] transition ${
                   openMenuId === menu.id
-                    ? "bg-black text-white shadow-[0_8px_20px_rgba(15,23,42,0.2)]"
-                    : "text-black/50 hover:text-black hover:bg-black/5"
+                    ? "bg-[#4772b3] text-white"
+                    : "text-[#cccccc] hover:bg-[#404040]"
                 }`}
                 onClick={() => {
                   if (openMenuId === menu.id) {
@@ -66,14 +66,14 @@ export function EditorHeader({
         </nav>
       </div>
       <div className="flex flex-col items-end text-right">
-        <div className="text-[11px] uppercase tracking-[0.24em] text-black/40">
+        <div className="text-[11px] text-[#999999]">
           Scenario:{" "}
-          <span className="font-display text-sm uppercase tracking-[0.3em] text-black/80">
+          <span className="text-[11px] text-[#cccccc]">
             {activeScenarioName}
           </span>
-          {hasUnsavedChanges ? <span className="ml-1 text-black">*</span> : null}
+          {hasUnsavedChanges ? <span className="ml-1 text-[#cccccc]">*</span> : null}
         </div>
-        <div className="font-display text-base uppercase tracking-[0.22em] text-black">
+        <div className="text-[12px] font-medium text-[#cccccc]">
           {title}
         </div>
       </div>

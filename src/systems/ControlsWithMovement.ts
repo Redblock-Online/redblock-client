@@ -2,7 +2,7 @@
 import * as THREE from "three";
 import type WSManager from "@/utils/ws/WSManager";
 import type Target from "@/objects/Target";
-import type { CollisionSystem } from "./CollisionSystem";
+import type { PhysicsSystem } from "./PhysicsSystem";
 import { buildTargetsInfo } from "@/utils/targetsInfo";
 export default class Controls {
   private camera: THREE.Camera;
@@ -18,9 +18,9 @@ export default class Controls {
   private acceleration = 0.07;
   private damping = 0.9;
   private isCrouching = false;
-  private standHeight = 0;
-  private crouchHeight = -0.4;
-  private heightLerp = 10;
+  private standHeight = .8;  // Camera at eye level (lower for better ground feel)
+  private crouchHeight = 0.4;  // Crouch camera height
+  private heightLerp = 3;  // Very slow interpolation to prevent jitter
   private crouchSpeedFactor = 0.6;
 
   private velocityY = 0;
@@ -40,7 +40,7 @@ export default class Controls {
   private keysPressed: Record<string, boolean> = {};
   private wsManager: WSManager;
   private getAmmountOfTargetsSelected: () => number;
-  private collisionSystem?: CollisionSystem;
+  private collisionSystem?: PhysicsSystem;
   private lastYawPos = new THREE.Vector3();
   private lastYawRot = new THREE.Euler();
   private lastPitchRot = new THREE.Euler();
@@ -49,6 +49,7 @@ export default class Controls {
   private roomCoordX = 0;
   private roomCoordZ = 0;
   private roomSize = 20; // default room size (width/depth)
+  private isEditorMode = false; // If true, disable movement limits
 
   private changeCheckAccumulator = 0;
   private changeCheckInterval = 1 / 24; // 24 times per second (~0.04166s)
@@ -70,7 +71,8 @@ export default class Controls {
     domElement: HTMLCanvasElement,
     wsManager: WSManager,
     getAmmountOfTargetsSelected: () => number,
-    collisionSystem?: CollisionSystem
+    collisionSystem?: PhysicsSystem,
+    isEditorMode: boolean = false
   ) {
     this.targets = targets;
     this.camera = camera;
@@ -78,6 +80,7 @@ export default class Controls {
     this.wsManager = wsManager;
     this.getAmmountOfTargetsSelected = getAmmountOfTargetsSelected;
     this.collisionSystem = collisionSystem;
+    this.isEditorMode = isEditorMode;
 
     const VALORANT_M_YAW = 0.07; 
     const DEG_TO_RAD = Math.PI / 180;
@@ -105,6 +108,7 @@ export default class Controls {
     
     this.camera.position.set(0, 0, 0);
     this.camera.rotation.set(0, 0, 0);
+    this.pitchObject.position.y = this.standHeight;  // Start camera at eye level
     this.pitchObject.add(this.camera);
     this.yawObject.add(this.pitchObject);
     this.lastYawPos.copy(this.yawObject.position);
@@ -248,12 +252,37 @@ export default class Controls {
     this.roomCoordZ = z;
     this.roomSize = size;
   }
+
+  /**
+   * Set paused state
+   */
+  public setPaused(paused: boolean) {
+    this.paused = paused;
+  }
+
+  /**
+   * Reset player physics state (velocity)
+   * Call when level starts/ends
+   */
+  public resetPhysicsState() {
+    this.velocityY = 0;
+    this.velocity.set(0, 0, 0);
+    this.onGround = false;
+  }
+
   // Safe teleport (moves the parent, not the camera)
   public teleportTo(x: number, y: number, z: number, yawRad: number = 0) {
     this.initPlayerRoom(x, z, this.roomSize);
     this.yawObject.position.set(x, y, z);
     this.yawObject.rotation.set(0, yawRad, 0);
     this.pitchObject.rotation.set(0, 0, 0); // resetea pitch
+    
+    // CRITICAL: Sync physics body position after teleport
+    if (this.collisionSystem) {
+      this.collisionSystem.setPlayerPosition(this.yawObject.position);
+      console.log("[Controls] Teleported to:", this.yawObject.position, "- physics body synced");
+    }
+    
     // resetea últimos estados para evitar falso positivo
     this.lastYawPos.copy(this.yawObject.position);
     this.lastYawRot.copy(this.yawObject.rotation);
@@ -273,17 +302,20 @@ export default class Controls {
     if (this.keysPressed["s"]) targetDirection.x -= 1;
     if (this.keysPressed["w"]) targetDirection.x += 1;
 
-    const halfRoom = this.roomSize / 2;
-    this.yawObject.position.x = THREE.MathUtils.clamp(
-      this.yawObject.position.x,
-      this.roomCoordX - halfRoom,
-      this.roomCoordX + halfRoom
-    );
-    this.yawObject.position.z = THREE.MathUtils.clamp(
-      this.yawObject.position.z,
-      this.roomCoordZ - halfRoom,
-      this.roomCoordZ + halfRoom
-    );
+    // Only clamp position in normal game mode, not in editor
+    if (!this.isEditorMode) {
+      const halfRoom = this.roomSize / 2;
+      this.yawObject.position.x = THREE.MathUtils.clamp(
+        this.yawObject.position.x,
+        this.roomCoordX - halfRoom,
+        this.roomCoordX + halfRoom
+      );
+      this.yawObject.position.z = THREE.MathUtils.clamp(
+        this.yawObject.position.z,
+        this.roomCoordZ - halfRoom,
+        this.roomCoordZ + halfRoom
+      );
+    }
     const effectiveSpeed =
       this.moveSpeed *
       (this.isCrouching ? this.crouchSpeedFactor : 1) *
@@ -303,19 +335,6 @@ export default class Controls {
     }
    
     this.velocity.multiplyScalar(Math.pow(this.damping, deltaTime));
-    
-    // Apply collision detection and resolution
-    if (this.collisionSystem) {
-      const desiredMovement = this.velocity.clone().multiplyScalar(deltaTime);
-      const newPos = this.collisionSystem.slidePlayerAlongWalls(
-        this.yawObject.position,
-        desiredMovement
-      );
-      this.yawObject.position.copy(newPos);
-    } else {
-      // No collision system, move freely
-      this.yawObject.position.addScaledVector(this.velocity, deltaTime);
-    }
 
     const now = performance.now() / 1000;
     const canUseBufferedJump =
@@ -333,71 +352,58 @@ export default class Controls {
       this.lastJumpPressedTime = -Infinity;
     }
 
-    // Apply gravity (but not when firmly on ground to prevent vibration)
-    if (!this.onGround) {
-      this.velocityY += this.gravity * deltaTime;
-      if (this.velocityY < this.terminalVelocity) {
-        this.velocityY = this.terminalVelocity;
+    // Apply gravity ONLY if physics is enabled (i.e., game has started)
+    if (this.collisionSystem && this.collisionSystem.isPhysicsEnabled()) {
+      if (!this.onGround) {
+        this.velocityY += this.gravity * deltaTime;
+        if (this.velocityY < this.terminalVelocity) {
+          this.velocityY = this.terminalVelocity;
+        }
       }
     }
     
-    if (this.collisionSystem) {
-      // Apply vertical velocity
-      const desiredY = this.yawObject.position.y + this.velocityY * deltaTime;
-      this.yawObject.position.y = desiredY;
+    if (this.collisionSystem && this.collisionSystem.isPhysicsEnabled()) {
+      // Include vertical movement in the movement vector for character controller
+      const verticalMovement = new THREE.Vector3(0, this.velocityY * deltaTime, 0);
+      const horizontalMovement = this.velocity.clone().multiplyScalar(deltaTime);
+      const totalMovement = horizontalMovement.add(verticalMovement);
       
-      // Use MTV-based depenetration to push player out of any colliders
-      const correctedPos = this.collisionSystem.pushOutOfColliders(
+      // Let Rapier's character controller handle all physics
+      const newPos = this.collisionSystem.slidePlayerAlongWalls(
         this.yawObject.position,
-        false // Never use onGround flag to prevent special-case behavior
+        totalMovement
       );
       
-      // Check if position was corrected (meaning there was a collision)
-      const positionCorrected = !correctedPos.equals(this.yawObject.position);
+      // Check if we're grounded using Rapier's character controller
+      const wasOnGround = this.onGround;
+      this.onGround = this.collisionSystem.isGrounded();
       
-      if (positionCorrected) {
-        // Collision detected
-        const correctionY = correctedPos.y - this.yawObject.position.y;
-        this.yawObject.position.copy(correctedPos);
-        
-        // If we were pushed up while falling, we hit the ground
-        if (correctionY > 0 && this.velocityY <= 0) {
-          this.onGround = true;
-          this.lastGroundedTime = now;
-          this.velocityY = 0;
-        }
-        // If we were pushed down while jumping, we hit a ceiling
-        else if (correctionY < 0 && this.velocityY > 0) {
-          this.velocityY = 0;
-          this.onGround = false;
-        }
-        // Horizontal correction only - stay in current ground state
-        else {
-          // Keep current onGround state
-        }
-      } else {
-        // No collision - check if we're near ground for ground detection
-        const groundCheckPos = this.yawObject.position.clone();
-        groundCheckPos.y -= this.groundCheckDistance;
-        
-        const groundCheckBottom = groundCheckPos.clone();
-        groundCheckBottom.y += this.collisionSystem.playerRadius;
-        const groundCheckTop = groundCheckPos.clone();
-        groundCheckTop.y += this.collisionSystem.playerHeight - this.collisionSystem.playerRadius;
-        
-        const nearGround = this.collisionSystem.checkCapsuleCollision(
-          groundCheckBottom,
-          groundCheckTop,
-          this.collisionSystem.playerRadius
-        );
-        
-        if (nearGround && this.velocityY <= 0) {
-          this.onGround = true;
-          this.lastGroundedTime = now;
-          this.velocityY = 0;
-        } else if (!nearGround) {
-          this.onGround = false;
-        }
+      console.log("[Controls] Before update - yawObject Y:", this.yawObject.position.y.toFixed(3));
+      console.log("[Controls] After physics - newPos Y:", newPos.y.toFixed(3));
+      console.log("[Controls] Grounded:", this.onGround, "wasOnGround:", wasOnGround);
+      
+      // Character controller handles ground position, no manual snap needed
+      // Removed manual ground snap to prevent vertical jitter
+      
+      // Update position
+      const verticalChange = newPos.y - this.yawObject.position.y;
+      this.yawObject.position.copy(newPos);
+      
+      console.log("[Controls] After copy - yawObject Y:", this.yawObject.position.y.toFixed(3));
+      console.log("[Controls] Vertical change:", verticalChange.toFixed(3));
+      
+      // If we landed on ground
+      if (this.onGround && !wasOnGround) {
+        this.lastGroundedTime = now;
+        this.velocityY = 0;
+      }
+      // If we hit something above while jumping
+      else if (verticalChange < 0 && this.velocityY > 0) {
+        this.velocityY = 0;
+      }
+      // If we're on ground, reset velocity
+      else if (this.onGround) {
+        this.velocityY = 0;
       }
     } else {
       // No collision system, just apply movement
@@ -406,26 +412,20 @@ export default class Controls {
     }
 
     const targetY = this.isCrouching ? this.crouchHeight : this.standHeight;
-    this.pitchObject.position.y +=
-      (targetY - this.pitchObject.position.y) * this.heightLerp * deltaTime;
+    const heightDiff = targetY - this.pitchObject.position.y;
+    
+    // Only adjust if difference is significant (prevents micro-jitter)
+    if (Math.abs(heightDiff) > 0.005) {
+      this.pitchObject.position.y += heightDiff * this.heightLerp * deltaTime;
+    } else {
+      this.pitchObject.position.y = targetY; // Snap to target if very close
+    }
 
     // Periodic check (you already had it)
     this.changeCheckAccumulator += deltaTime;
     if (this.changeCheckAccumulator >= this.changeCheckInterval) {
       this.checkChanges(); // <- optimized below
       this.changeCheckAccumulator = 0;
-    }
-  }
-
-  public setPaused(paused: boolean) {
-    this.paused = paused;
-    if (paused) {
-      // Clear active inputs and motion to avoid continued movement
-      this.keysPressed = {};
-      this.isCrouching = false;
-      this.velocity.set(0, 0, 0);
-      this.velocityY = 0;
-      this.lastJumpPressedTime = -Infinity;
     }
   }
 }

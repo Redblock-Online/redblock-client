@@ -3,7 +3,7 @@ import Camera from "./Camera";
 import MainScene from "@/scenes/MainScene";
 import Loop from "./Loop";
 import ControlsWithMovement from "@/systems/ControlsWithMovement";
-import { CollisionSystem } from "@/systems/CollisionSystem";
+import { PhysicsSystem } from "@/systems/PhysicsSystem";
 import Crosshair from "@/objects/Crosshair";
 import { Raycaster, Vector2, Vector3, BufferGeometry, Line, LineBasicMaterial, BufferAttribute, Mesh, SphereGeometry, MeshBasicMaterial } from "three";
 import Pistol from "@/objects/Pistol";
@@ -51,7 +51,7 @@ export default class App {
   scene: MainScene;
   loop: Loop;
   controls: ControlsWithMovement;
-  collisionSystem: CollisionSystem;
+  collisionSystem: PhysicsSystem;
   pistol: Pistol;
   private ui?: UIController;
   targets: Target[] = [];
@@ -76,30 +76,41 @@ export default class App {
   private impactPool: Mesh[] = [];
   private tracerGeom?: BufferGeometry;
   private impactGeom?: SphereGeometry;
+  private isEditorMode: boolean = false;
 
 
   constructor(ui?: UIController, options?: { disableServer?: boolean }) {
     this.ui = ui;
     this.canvas = document.querySelector("canvas") as HTMLCanvasElement;
     this.gameRunning = false;
+    this.isEditorMode = options?.disableServer ?? false;
+    
+    console.log("[App] Constructor - options:", options);
+    console.log("[App] Constructor - isEditorMode:", this.isEditorMode);
 
     // Core systems
     this.camera = new Camera();
     this.wsManager = new WSManager(options?.disableServer ? { disabled: true } : undefined);
+    
+    // Initialize physics system first (before scene)
+    this.collisionSystem = new PhysicsSystem();
+    this.collisionSystem.waitForInit().then(() => {
+      console.log("[App] Physics system ready");
+      this.collisionSystem.setPlayerDimensions(0.25, 1.8); // radius (smaller for smoother movement), height
+      this.collisionSystem.setStepHeight(0.5); // max step height
+    });
+    
     this.scene = new MainScene(
       this.targets,
       this.wsManager.getMe()!,
-      this.wsManager
+      this.wsManager,
+      this.collisionSystem,
+      this.isEditorMode  // Pass editor mode flag to prevent room generation
     );
     this.tracerGeom = new BufferGeometry();
     const positions = new Float32Array(6);
     this.tracerGeom.setAttribute('position', new BufferAttribute(positions, 3));
     this.impactGeom = new SphereGeometry(0.06, 8, 8);
-
-    // Initialize collision system
-    this.collisionSystem = new CollisionSystem();
-    this.collisionSystem.setPlayerDimensions(0.25, 1.8); // radius (smaller for smoother movement), height
-    this.collisionSystem.setStepHeight(0.5); // max step height
 
     this.renderer = new Renderer(this.scene, this.camera.instance, this.canvas);
     this.controls = new ControlsWithMovement(
@@ -108,7 +119,8 @@ export default class App {
       this.canvas,
       this.wsManager,
       () => this.getAmmountOfTargetsSelected,
-      this.collisionSystem // Pass collision system to controls
+      this.collisionSystem, // Pass collision system to controls
+      this.isEditorMode // Pass editor mode flag to disable movement limits
     );
     this.scene.add(this.controls.object);
     this.camera.instance.rotation.set(0, (Math.PI / 2) * 3, 0);
@@ -116,33 +128,99 @@ export default class App {
     this.pistol = new Pistol(this.camera.instance, (loadedPistol) => {
       this.camera.instance.add(loadedPistol);
       this.pistol = loadedPistol;});
-    this.loop = new Loop(this.renderer.instance,this.scene,this.camera.instance,this.controls,this.pistol);
+    this.loop = new Loop(this.renderer.instance,this.scene,this.camera.instance,this.controls,this.pistol,this.collisionSystem);
     // Bind events
     this.canvas.addEventListener("mousedown", this.onMouseDown);
     this.canvas.addEventListener("click", this.onClickForPointerLock);
 
     // Networking: position/room once server assigns me (controls ready now)
-    this.wsManager.onMeReady((me: PlayerCore) => {
-      this.controls.initPlayerRoom(me.room_coord_x, me.room_coord_z);
-      this.controls.teleportTo(
-        me.room_coord_x,
-        0,
-        me.room_coord_z,
-        me.player_rotation_y ?? 0
-      );
-      this.scene.initPlayerRoom(me);
+    this.wsManager.onMeReady(async (me: PlayerCore) => {
+      console.log("[App] ⚠️ onMeReady called! isEditorMode:", this.isEditorMode);
+      // CRITICAL: Wait for physics to be ready before spawning player
+      await this.collisionSystem.waitForInit();
+      console.log("[App] Physics ready, initializing player room and position");
+      
+      // Skip default level generation in editor mode
+      if (!this.isEditorMode) {
+        this.controls.initPlayerRoom(me.room_coord_x, me.room_coord_z);
+        this.scene.initPlayerRoom(me);
+        
+        // Wait a frame to ensure ground collider is added
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        console.log("[App] Total colliders in physics:", this.collisionSystem.getColliders().length);
+        
+        // Spawn player at floor surface (floor at Y=0)
+        this.controls.teleportTo(
+          me.room_coord_x,
+          0,
+          me.room_coord_z,
+          me.player_rotation_y ?? 0
+        );
+        
+        console.log("[App] Player spawned at position:", this.controls.object.position);
+        console.log("[App] Testing ground collision from spawn point...");
+        const groundTest = this.collisionSystem.checkGroundCollision(this.controls.object.position, 50);
+        console.log("[App] Ground detected at Y:", groundTest);
+      } else {
+        console.log("[App] Editor mode - skipping default level generation");
+      }
     });
   }
+  /**
+   * Initialize level physics and gameplay
+   * Call this when a level/scenario starts
+   */
+  private initializeLevelPhysics() {
+    console.log("[App] 🎮 Initializing level physics...");
+    
+    // Enable physics simulation (gravity, collisions)
+    this.collisionSystem.enablePhysics();
+    
+    // Reset player physics state
+    this.controls.resetPhysicsState();
+    
+    console.log("[App] ✅ Level physics initialized - game ready");
+  }
+
+  /**
+   * Cleanup level physics
+   * Call this when a level ends or resets
+   */
+  private cleanupLevelPhysics() {
+    console.log("[App] 🧹 Cleaning up level physics...");
+    
+    // Disable physics simulation
+    this.collisionSystem.disablePhysics();
+    
+    // Reset player state
+    this.controls.resetPhysicsState();
+    
+    console.log("[App] ✅ Level physics cleaned up");
+  }
+
   startTimer() {
-    this.ui?.timer.reset();
-    this.ui?.timer.start();
+    // In editor mode, skip timer UI but still enable physics
+    if (!this.isEditorMode) {
+      this.ui?.timer.reset();
+      this.ui?.timer.start();
+    }
+    
+    // Enable physics when timer starts (game begins)
+    this.initializeLevelPhysics();
   }
 
   stopTimer() {
-    const elapsedSeconds = this.ui ? this.ui.timer.getElapsedSeconds() : null;
-    const summary = this.buildRoundSummary(elapsedSeconds);
-    this.ui?.timer.stop(summary);
+    // In editor mode, skip timer and stats UI
+    if (!this.isEditorMode) {
+      const elapsedSeconds = this.ui ? this.ui.timer.getElapsedSeconds() : null;
+      const summary = this.buildRoundSummary(elapsedSeconds);
+      this.ui?.timer.stop(summary);
+    }
     this.gameRunning = false;
+    
+    // Disable physics when level ends
+    this.cleanupLevelPhysics();
   }
 
   start() {
@@ -151,6 +229,7 @@ export default class App {
 
   update(deltaTime: number) {
     if (!this.gameRunning || this.paused) return;
+    this.collisionSystem.step(deltaTime); // Step physics simulation
     this.controls.update(deltaTime);
   }
 
@@ -699,10 +778,14 @@ export default class App {
     }
 
     this.resetTargets();
-    const useHalfSize = scenario.targetScale === 0.2;
-    this.scene.loadScenario(scenario.targetCount, useHalfSize);
-    this.applyScenarioTargetScale();
-    this.setupScenarioPortals();
+    
+    // In editor mode, don't generate default targets - custom scenario will be loaded separately
+    if (!this.isEditorMode) {
+      const useHalfSize = scenario.targetScale === 0.2;
+      this.scene.loadScenario(scenario.targetCount, useHalfSize);
+      this.applyScenarioTargetScale();
+      this.setupScenarioPortals();
+    }
 
     this.loop.start();
     this.startTimer();
@@ -725,5 +808,12 @@ export default class App {
   public setPaused(paused: boolean) {
     this.paused = paused;
     this.controls.setPaused(paused);
+    
+    // Pause/resume physics with game
+    if (paused) {
+      this.collisionSystem.disablePhysics();
+    } else if (this.gameRunning) {
+      this.collisionSystem.enablePhysics();
+    }
   }
 }

@@ -7,5 +7,5 @@ COPY . .
 RUN  npm run build:prod
 
 # Serve
-EXPOSE 3000
+EXPOSE 3001
 CMD ["npm", "run", "start:prod"]
