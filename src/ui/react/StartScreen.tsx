@@ -1,27 +1,15 @@
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import React from "react";
 import Button from "@/ui/react/components/Button";
 import type { ScenarioConfig } from "@/config/scenarios";
 
 type Props = {
   scenarios: ScenarioConfig[];
   onStart: (scenarioId: string) => void;
+  onSettings: () => void;
 };
 
-export default function StartScreen({ scenarios, onStart }: Props) {
-  const [sensitivity, setSensitivity] = useState<string>(() => {
-    const saved = localStorage.getItem("mouseSensitivity");
-    return saved ?? "1";
-  });
-
-  useEffect(() => {
-    localStorage.setItem("mouseSensitivity", sensitivity);
-  }, [sensitivity]);
-
-  const onInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSensitivity(e.target.value);
-    // ControlsWithMovement listens to #sensitivityRange input event
-  };
+export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
 
   const requestPointerLockOnCanvas = () => {
     const canvas = document.getElementById("canvas") as HTMLCanvasElement | null;
@@ -122,25 +110,9 @@ export default function StartScreen({ scenarios, onStart }: Props) {
               </Button>
             ))}
           </div>
-          {/* Sensitivity slider */}
-          <div className=" p-6 border-[3px] border-black bg-white/90 min-w-[250px]">
-            <div className="font-mono text-base font-bold  text-center tracking-wider">MOUSE SENSITIVITY</div>
-            <div className="relative w-full h-5 my-4">
-              <input
-                type="range"
-                min="0.01"
-                max="2.0"
-                step="0.01"
-                value={sensitivity}
-                onChange={onInput}
-                className="sensitivity-slider"
-                id="sensitivityRange"
-              />
-            </div>
-            <div className="text-center font-mono font-bold text-sm" id="sensitivityValue">
-              {parseFloat(sensitivity || '0').toFixed(2)}
-            </div>
-          </div>
+          <Button size="lg" variant="outline" onClick={onSettings}>
+            SETTINGS
+          </Button>
 
           <Button size="lg" variant="outline" onClick={onExitClick}>
             EXIT

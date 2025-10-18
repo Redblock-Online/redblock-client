@@ -42,6 +42,7 @@ export default class Renderer {
         outlineColor: 0x000000,
       }
     );
+    this.outlinePass.renderToScreen = true;
     this.composer.addPass(this.outlinePass);
     
     // Handle resize

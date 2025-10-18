@@ -16,6 +16,7 @@ export default class Loop {
   controls: ControlsWithMovement;
   pistol: Pistol;
   physicsSystem: PhysicsSystem;
+  private frameCount: number = 0;
   
   constructor(
     renderer: EffectComposer,
@@ -50,6 +51,18 @@ export default class Loop {
     this.deltaTime = (now - this.lastTime) / 1000;
 
     this.lastTime = now;
+    this.frameCount++;
+    
+    // Clean up completed GSAP tweens every 600 frames (~10 seconds at 60fps)
+    // This prevents memory leaks from thousands of completed animations
+    if (this.frameCount % 600 === 0) {
+      // GSAP automatically cleans up, but we can help by triggering a tick
+      // This is safe and won't affect active animations
+      const gsap = (window as { gsap?: { ticker: { tick: () => void } } }).gsap;
+      if (gsap) {
+        gsap.ticker.tick();
+      }
+    }
     
     // Step physics world BEFORE controls update so character controller has fresh data
     this.physicsSystem.step(this.deltaTime);

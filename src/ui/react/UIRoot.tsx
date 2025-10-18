@@ -8,6 +8,9 @@ import Navbar from "./navbar";
 import { fetchMe } from "./api/me";
 import { useMeStore } from "./state/me";
 import PauseMenu from "./PauseMenu";
+import SettingsMenu from "./SettingsMenu";
+import Crosshair from "./components/Crosshair";
+import StatsDisplay from "./components/StatsDisplay";
 
 type Props = {
   onStart: (scenarioId: string) => void;
@@ -22,6 +25,10 @@ function isTouchDevice() {
 export default function UIRoot({ onStart, onPauseChange, bindTimerController }: Props) {
   const [started, setStarted] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [_hudScale, setHudScale] = useState(100);
+  const [showTimer, setShowTimer] = useState(true);
+  const [showHints, setShowHints] = useState(true);
   const { setUser, setHydrated } = useMeStore();
   const touch = useMemo(() => isTouchDevice(), []);
   const timerRef = useRef<TimerController | null>(null);
@@ -32,6 +39,37 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
   useEffect(() => {
     pausedRef.current = paused;
   }, [paused]);
+
+  // Load and listen to game settings
+  useEffect(() => {
+    const loadSettings = () => {
+      const saved = localStorage.getItem("gameSettings");
+      if (saved) {
+        try {
+          const settings = JSON.parse(saved);
+          setHudScale(settings.hudScale || 100);
+          setShowTimer(settings.showTimer !== undefined ? settings.showTimer : true);
+          setShowHints(settings.showHints !== undefined ? settings.showHints : true);
+        } catch {
+          // Use defaults
+        }
+      }
+    };
+
+    loadSettings();
+
+    const handleSettingsChange = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail) {
+        if (customEvent.detail.hudScale !== undefined) setHudScale(customEvent.detail.hudScale);
+        if (customEvent.detail.showTimer !== undefined) setShowTimer(customEvent.detail.showTimer);
+        if (customEvent.detail.showHints !== undefined) setShowHints(customEvent.detail.showHints);
+      }
+    };
+
+    window.addEventListener("gameSettingsChanged", handleSettingsChange);
+    return () => window.removeEventListener("gameSettingsChanged", handleSettingsChange);
+  }, []);
 
   const requestPointerLockOnCanvas = useCallback(() => {
     const canvas = document.getElementById("canvas") as HTMLCanvasElement | null;
@@ -152,7 +190,7 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
         <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_49%,#000_49%,#000_51%,transparent_51%),linear-gradient(0deg,transparent_49%,#000_49%,#000_51%,transparent_51%)] [background-size:80px_80px] opacity-10" />
         <div className="relative z-10 flex flex-col p-5 text-center max-w-md">
           <h1 className="text-2xl font-bold mb-2">This game is designed for PC</h1>
-        <IGBadge started={false} />
+          <IGBadge started={false} />
           <p>Please switch to a desktop or laptop for the best experience.</p>
         </div>
       </div>
@@ -161,9 +199,12 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
 
   return (
     <>
-      {!started && <StartScreen scenarios={SCENARIOS} onStart={handleStart} />}
-      {started && (
+      {!started && (
+        <StartScreen scenarios={SCENARIOS} onStart={handleStart} onSettings={() => setSettingsOpen(true)} />
+      )}
+      {started && showTimer && (
         <TimerDisplay
+          hudScale={_hudScale}
           bindController={(ctrl) => {
             // Wrap the controller to track running state locally
             const wrapped: TimerController = {
@@ -197,10 +238,14 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
         />
       )}
       {!started && <Navbar />}
-      <ControlsHint started={started} />
-      <IGBadge started={started} />
+      {showHints && <ControlsHint started={started} hudScale={_hudScale} />}
+      {/* <IGBadge started={started} /> */}
+      {started && <StatsDisplay hudScale={_hudScale} />}
+      {started && !paused && <Crosshair />}
       <PauseMenu
         visible={started && paused}
+        hideContent={settingsOpen}
+        hudScale={_hudScale}
         onContinue={() => {
           // Only resume timer if it was running before pausing
           if (hadRunningBeforePauseRef.current) timerRef.current?.resume();
@@ -214,6 +259,12 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
           setPaused(false);
           setStarted(false);
         }}
+        onSettings={() => setSettingsOpen(true)}
+      />
+      <SettingsMenu
+        visible={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        hudScale={_hudScale}
       />
     </>
   );

@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 describe('StartScreen', () => {
   const mockOnStart = vi.fn();
+  const mockOnSettings = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -23,7 +24,7 @@ describe('StartScreen', () => {
   });
 
   it('displays all scenario buttons', () => {
-    render(<StartScreen scenarios={SCENARIOS} onStart={mockOnStart} />);
+    render(<StartScreen scenarios={SCENARIOS} onStart={mockOnStart} onSettings={mockOnSettings} />);
 
     // Should show all scenario buttons
     SCENARIOS.forEach((scenario) => {
@@ -33,7 +34,7 @@ describe('StartScreen', () => {
 
   it('calls onStart with correct scenario ID when button clicked', async () => {
     const user = userEvent.setup();
-    render(<StartScreen scenarios={SCENARIOS} onStart={mockOnStart} />);
+    render(<StartScreen scenarios={SCENARIOS} onStart={mockOnStart} onSettings={mockOnSettings} />);
 
     const firstButton = screen.getByRole('button', { name: SCENARIOS[0].label });
     await user.click(firstButton);
@@ -42,7 +43,7 @@ describe('StartScreen', () => {
   });
 
   it('displays and updates sensitivity slider', async () => {
-    render(<StartScreen scenarios={SCENARIOS} onStart={mockOnStart} />);
+    render(<StartScreen scenarios={SCENARIOS} onStart={mockOnStart} onSettings={mockOnSettings} />);
 
     // Check initial value display
     const sensitivityValue = screen.getByText('1.50');

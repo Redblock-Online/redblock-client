@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState, type ReactElement } from "react";
+import { createPortal } from "react-dom";
 import type { SerializedScenario } from "../scenarioStore";
+import SettingsMenu from "@/ui/react/SettingsMenu";
+import FPSCounter from "@/ui/react/FPSCounter";
+import PingDisplay from "@/ui/react/PingDisplay";
 
 interface GameTabProps {
   scenario: SerializedScenario | null;
@@ -9,10 +13,11 @@ interface GameTabProps {
 
 export function GameTab({ scenario, isActive, onStop }: GameTabProps): ReactElement {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const gameInstanceRef = useRef<{ dispose: () => void } | null>(null);
+  const gameInstanceRef = useRef<{ dispose: () => void; setPaused?: (paused: boolean) => void } | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const isInitializingRef = useRef(false);
   const [showExitHint, setShowExitHint] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Separate effect for cleanup when isActive becomes false
   useEffect(() => {
@@ -142,6 +147,29 @@ export function GameTab({ scenario, isActive, onStop }: GameTabProps): ReactElem
     <div className="absolute inset-0 flex bg-[#2b2b2b] pointer-events-auto">
       {/* Game Canvas Container - Takes full area */}
       <div ref={containerRef} className="relative flex-1 pointer-events-auto" />
+      {/* Control buttons - Top right (always visible) */}
+      <div className="fixed top-4 right-4 z-50 flex gap-3 pointer-events-auto">
+        <button
+          onClick={() => setSettingsOpen(true)}
+          className="font-mono text-sm font-bold border-[3px] border-black bg-white text-black px-3 py-1 hover:bg-black hover:text-white transition-all duration-200"
+        >
+          SETTINGS
+        </button>
+        <button
+          onClick={onStop}
+          className="font-mono text-sm font-bold border-[3px] border-black bg-[#ef4444] text-white px-3 py-1 hover:bg-[#dc2626] transition-all duration-200"
+        >
+          STOP
+        </button>
+      </div>
+      
+      {/* Stats Display (FPS/Ping) - Below buttons (optional) */}
+      <div className="fixed top-[4.5rem] right-4 z-50 flex gap-3 pointer-events-auto">
+        <PingDisplay />
+        <FPSCounter />
+      </div>
+      
+     
       
       {/* Exit hint when pointer lock is released */}
       {showExitHint && (
@@ -150,6 +178,25 @@ export function GameTab({ scenario, isActive, onStop }: GameTabProps): ReactElem
           <div className="text-[13px] mb-2">Press <span className="font-medium text-[#4772b3]">ESC</span> again to exit preview</div>
           <div className="text-[11px] text-[#999999]">or click the screen to continue playing</div>
         </div>
+      )}
+      
+      {/* Settings Menu Background */}
+      {settingsOpen && (
+        <div className="fixed inset-0 z-20 flex items-center justify-center text-black" onClick={() => setSettingsOpen(false)}>
+          {/* background grid overlay */}
+          <div className="absolute inset-0 bg-white/90" />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_49%,#000_49%,#000_51%,transparent_51%),linear-gradient(0deg,transparent_49%,#000_49%,#000_51%,transparent_51%)] [background-size:80px_80px] opacity-10" />
+        </div>
+      )}
+      
+      {/* Settings Menu Content - Rendered via Portal to be on top */}
+      {typeof document !== "undefined" && createPortal(
+        <SettingsMenu
+          visible={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          hideBackground={true}
+        />,
+        document.body
       )}
     </div>
   );

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import TimerDisplay, { type TimerController, type TimerHint } from "@/ui/react/TimerDisplay";
 import ControlsHint from "@/ui/react/controls/ControlsHint";
 import PauseMenu from "@/ui/react/PauseMenu";
+import Crosshair from "@/ui/react/components/Crosshair";
 
 type Props = {
   onStart: (scenarioId: string) => void;
@@ -113,6 +114,8 @@ export default function GameUIRoot({ onStart, onPauseChange, bindTimerController
       )}
       {/* Hide controls hint in editor preview */}
       {!isEditorPreview && <ControlsHint started={started} />}
+      {/* Crosshair - always visible when started and not paused */}
+      {started && !paused && <Crosshair />}
       {/* Hide pause menu in editor preview */}
       {!isEditorPreview && (
         <PauseMenu
@@ -129,6 +132,9 @@ export default function GameUIRoot({ onStart, onPauseChange, bindTimerController
             onPauseChange(false);
             setPaused(false);
             setStarted(false);
+          }}
+          onSettings={() => {
+            // Settings not available in editor preview
           }}
         />
       )}

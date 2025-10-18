@@ -125,6 +125,13 @@ function loadCustomScenario(app: App, scenario: SerializedScenario) {
     );
     
     console.log(`[Bootstrap] Created cube at pos: (${cube.position.x.toFixed(2)}, ${cube.position.y.toFixed(2)}, ${cube.position.z.toFixed(2)}) scale: (${cube.scale.x.toFixed(2)}, ${cube.scale.y.toFixed(2)}, ${cube.scale.z.toFixed(2)})`);
+    
+    // Make sure only the cubeMesh is raycastable, not the outline
+    cube.cubeMesh.name = "EditorCube";
+    cube.outlineMesh.visible = true;
+    // Disable raycast on outline mesh
+    (cube.outlineMesh as THREE.Mesh & { raycast?: () => void }).raycast = () => {};
+    
     customGroup.add(cube);
     
     // CRITICAL: Use Box3.setFromObject to get ACTUAL visual bounds
@@ -197,6 +204,9 @@ function loadCustomScenario(app: App, scenario: SerializedScenario) {
   }
   
   scene.add(customGroup);
+  
+  // Store reference to custom group for raycast detection
+  (app as typeof app & { editorCubesGroup?: THREE.Group }).editorCubesGroup = customGroup;
   
   // Keep the original white background (like the game)
   scene.background = new THREE.Color(0xffffff);

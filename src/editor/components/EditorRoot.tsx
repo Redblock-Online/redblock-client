@@ -887,8 +887,9 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   return (
     <>
       <div className="absolute inset-0 flex flex-col text-[#cccccc]">
-        {/* Header - Always visible */}
-        <header className="relative z-50 flex h-12 items-center justify-between border-b border-[#1a1a1a] bg-[#323232] px-4 pointer-events-auto">
+        {/* Header - Hidden during play mode */}
+        {!isGameActive && (
+          <header className="relative z-50 flex h-12 items-center justify-between border-b border-[#1a1a1a] bg-[#323232] px-4 pointer-events-auto">
         <div className="flex items-center gap-6">
           <Image
             src="/logo.png"
@@ -967,6 +968,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
           </div>
         </div>
         </header>
+        )}
         
         {openMenuId && activeMenu && menuPosition ? (
           <Portal>
@@ -1136,8 +1138,8 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         </aside>
         </div>
 
-        {/* Game Overlay - Positioned below header */}
-        <div className={`absolute left-0 right-0 top-16 bottom-0 z-40 pointer-events-auto ${!isGameActive ? 'hidden' : ''}`}>
+        {/* Game Overlay - Full screen */}
+        <div className={`absolute inset-0 z-40 pointer-events-auto ${!isGameActive ? 'hidden' : ''}`}>
           <GameTab 
             scenario={gameScenario} 
             isActive={isGameActive} 

@@ -281,21 +281,21 @@ export class PhysicsSystem {
     }
     
     if (desiredMovement.lengthSq() === 0) {
-      console.log("[PhysicsSystem] slidePlayerAlongWalls: Zero movement, skipping");
+      // console.log("[PhysicsSystem] slidePlayerAlongWalls: Zero movement, skipping");
       return position.clone();
     }
 
-    console.log("[PhysicsSystem] 🎮 slidePlayerAlongWalls");
-    console.log("  Input pos Y:", position.y.toFixed(3));
-    console.log("  Desired movement:", desiredMovement.toArray().map(v => v.toFixed(3)));
-    console.log("  Player height:", this.playerHeight, "radius:", this.playerRadius);
+    // console.log("[PhysicsSystem] 🎮 slidePlayerAlongWalls");
+    // console.log("  Input pos Y:", position.y.toFixed(3));
+    // console.log("  Desired movement:", desiredMovement.toArray().map(v => v.toFixed(3)));
+    // console.log("  Player height:", this.playerHeight, "radius:", this.playerRadius);
 
     // CRITICAL: Ensure body position matches game position
     const currentPos = this.playerBody.translation();
-    console.log("  Player body pos Y:", currentPos.y.toFixed(3));
+    // console.log("  Player body pos Y:", currentPos.y.toFixed(3));
     const posDiff = Math.abs(currentPos.y - position.y);
     if (posDiff > 0.1) {
-      console.warn("[PhysicsSystem] Position mismatch - body:", currentPos.y.toFixed(2), "game:", position.y.toFixed(2));
+      // console.warn("[PhysicsSystem] Position mismatch - body:", currentPos.y.toFixed(2), "game:", position.y.toFixed(2));
       this.playerBody.setTranslation(
         new RAPIER.Vector3(position.x, position.y, position.z),
         true
@@ -322,13 +322,13 @@ export class PhysicsSystem {
       position.z + correctedMovement.z
     );
     
-    const isGrounded = this.characterController.computedGrounded();
+    const _isGrounded = this.characterController.computedGrounded();
     
-    console.log("  Corrected movement Y:", correctedMovement.y.toFixed(3));
-    console.log("  New pos Y:", newPos.y.toFixed(3));
-    console.log("  Grounded:", isGrounded);
-    console.log("  Num collisions:", this.characterController.numComputedCollisions());
-    console.log("  Character controller offset: 0.0, snap: 0.02");
+    // console.log("  Corrected movement Y:", correctedMovement.y.toFixed(3));
+    // console.log("  New pos Y:", newPos.y.toFixed(3));
+    // console.log("  Grounded:", isGrounded);
+    // console.log("  Num collisions:", this.characterController.numComputedCollisions());
+    // console.log("  Character controller offset: 0.0, snap: 0.02");
     
     // Update rigid body position for next frame
     this.playerBody.setTranslation(

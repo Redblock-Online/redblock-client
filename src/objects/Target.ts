@@ -14,6 +14,7 @@ export default class Target extends THREE.Group {
   public shootableActivatedAt: number | null;
   public baseScale: number;
   public scenarioPortal: "next" | "prev" | null;
+  public activeTweens: gsap.core.Tween[] = [];
   
   private static cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
   private static edgeMaterial = new THREE.MeshBasicMaterial({ 
@@ -129,31 +130,35 @@ export default class Target extends THREE.Group {
     this.shootable = false;
     this.shootableActivatedAt = null;
 
+    // Kill any existing tweens
+    this.activeTweens.forEach(t => t.kill());
+    this.activeTweens = [];
+
     const cubeMaterial = this.cubeMesh.material as THREE.Material;
-    gsap.to(cubeMaterial, {
+    this.activeTweens.push(gsap.to(cubeMaterial, {
       opacity: 0,
       duration,
       ease: "power3.in",
-    });
+    }));
 
     // Fade out edges
     this.edgesGroup.children.forEach((edge) => {
       const edgeMaterial = (edge as THREE.Mesh).material as THREE.Material;
-      gsap.to(edgeMaterial, {
+      this.activeTweens.push(gsap.to(edgeMaterial, {
         opacity: 0,
         duration,
         ease: "power3.in",
-      });
+      }));
     });
 
-    gsap.to(this.rotation, {
+    this.activeTweens.push(gsap.to(this.rotation, {
       x: Math.PI * 4,
       y: Math.PI * 8,
       duration,
       ease: "power3.in",
-    });
+    }));
 
-    gsap.to(this.scale, {
+    this.activeTweens.push(gsap.to(this.scale, {
       x: 0,
       y: 0,
       z: 0,
@@ -164,7 +169,7 @@ export default class Target extends THREE.Group {
         this.animating = false;
         if (callback) callback();
       },
-    });
+    }));
   }
 
   /**

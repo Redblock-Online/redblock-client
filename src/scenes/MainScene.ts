@@ -20,12 +20,15 @@ type NeighborState = {
   lastPacketTs: number;
 };
 // Helpers fuera de la clase
+// Reusable objects for quatFromPitchYaw to avoid allocations
+const _helperEuler = new THREE.Euler();
+const _helperQuat = new THREE.Quaternion();
+
 function quatFromPitchYaw(pitchRad: number, yawRad: number): THREE.Quaternion {
   // YXZ: primero yaw (Y), después pitch (X)
-  const e = new THREE.Euler(0, yawRad, pitchRad, "YXZ");
-  const q = new THREE.Quaternion();
-  q.setFromEuler(e);
-  return q.normalize();
+  _helperEuler.set(0, yawRad, pitchRad, "YXZ");
+  _helperQuat.setFromEuler(_helperEuler);
+  return _helperQuat.normalize();
 }
 
 type NetRotationPayload = Pick<Partial<PlayerCore>, "player_rotation_x" | "player_rotation_y">;
@@ -79,6 +82,13 @@ export default class MainScene extends THREE.Scene {
   private neighborStates = new Map<string, NeighborState>();
   private physicsSystem?: PhysicsSystem;
   private isEditorMode: boolean = false;
+  private currentGroundCollider: { min: THREE.Vector3; max: THREE.Vector3 } | null = null;
+  private currentRoomMesh: THREE.Group | null = null;
+  
+  // Reusable objects for neighbor updates to avoid allocations
+  private _tempTargetPos = new THREE.Vector3();
+  private _tempEuler = new THREE.Euler();
+  private _tempQuat = new THREE.Quaternion();
 
   private static edgeMaterial = new THREE.MeshBasicMaterial({ 
     color: 0xd0d0d0,
@@ -138,13 +148,26 @@ export default class MainScene extends THREE.Scene {
     }
     console.log("[MainScene] Generating room at:", x, z);
     
+    // Remove old room mesh if it exists
+    if (this.currentRoomMesh) {
+      console.log("[MainScene] 🗑️ Removing old room mesh");
+      this.remove(this.currentRoomMesh);
+    }
+    
     const room = MainScene.roomPrototype.clone();
     room.position.set(x, -0.5, z);
     room.scale.set(20, 1, 20);
     this.add(room);
+    this.currentRoomMesh = room;
     
     // Add physics collider for the ground (matches visual mesh position)
     if (this.physicsSystem) {
+      // Remove old ground collider if it exists
+      if (this.currentGroundCollider) {
+        console.log("[MainScene] 🗑️ Removing old ground collider");
+        this.physicsSystem.removeCollider(this.currentGroundCollider);
+      }
+      
       // Visual mesh is at Y:-0.5 with scale 1, so it goes from Y:-1 to Y:0
       const floorY = 0; // Top of the ground plane (matches visual ground surface)
       const floorThickness = 1; // Matches visual mesh thickness
@@ -156,6 +179,7 @@ export default class MainScene extends THREE.Scene {
       };
       
       this.physicsSystem.addCollider(groundCollider);
+      this.currentGroundCollider = groundCollider;
       console.log("[MainScene] ✅ Ground physics added at (X:", x, "Z:", z, ") - top Y:", floorY);
       
       // Add visual debug box for the collider (wireframe) - OPTIONAL
@@ -315,31 +339,42 @@ export default class MainScene extends THREE.Scene {
   }
 
   public update() {
-    const dt = this.clock.getDelta();
     const neighbors = this.wsManager.getNeighbors();
+    
+    // Early exit if no neighbors (common in offline mode)
+    if (neighbors.length === 0) {
+      // Still cleanup if we had neighbors before
+      if (this.neighborMeshes.size > 0) {
+        this.cleanupDisconnectedNeighbors(new Set());
+      }
+      return;
+    }
+    
+    const dt = this.clock.getDelta();
     const currentIds = new Set<string>();
 
-    neighbors.forEach((n) => {
+    for (const n of neighbors) {
       currentIds.add(n.id);
 
       this.updateNeighborTargets(n.id, n.targetsInfo);
       const roomChanged = this.checkNeighborRoomChange(n.id, n.room_coord_x, n.room_coord_z);
       const mesh = this.getOrCreateNeighborMesh(n.id);
 
-      const targetPos = new THREE.Vector3(
+      // Reuse vector instead of creating new one
+      this._tempTargetPos.set(
         n.local_player_position_x,
         n.local_player_position_y ?? 0,
         n.local_player_position_z
       );
       const targetQuat = getTargetQuatFromNet(n);
 
-      this.updateNeighborState(n.id, targetPos, targetQuat);
+      this.updateNeighborState(n.id, this._tempTargetPos, targetQuat);
 
       if (roomChanged) {
-        mesh.position.copy(targetPos);
+        mesh.position.copy(this._tempTargetPos);
         mesh.quaternion.copy(targetQuat);
       }
-    });
+    }
 
     this.interpolateNeighborMeshes(dt);
     this.cleanupDisconnectedNeighbors(currentIds);

@@ -4,7 +4,6 @@ import MainScene from "@/scenes/MainScene";
 import Loop from "./Loop";
 import ControlsWithMovement from "@/systems/ControlsWithMovement";
 import { PhysicsSystem } from "@/systems/PhysicsSystem";
-import Crosshair from "@/objects/Crosshair";
 import { Raycaster, Vector2, Vector3, BufferGeometry, Line, LineBasicMaterial, BufferAttribute, Mesh, SphereGeometry, MeshBasicMaterial } from "three";
 import Pistol from "@/objects/Pistol";
 import Target from "@/objects/Target";
@@ -62,7 +61,6 @@ export default class App {
   private scenarioPortals: Target[] = [];
   private currentScenarioTargetCount = 3;
   private currentScenarioTargetScale = 0.4;
-  private crosshair?: Crosshair;
   private paused = false;
   private cameraWorldPos = new Vector3();
   private cameraViewDir = new Vector3();
@@ -127,7 +125,9 @@ export default class App {
 
     this.pistol = new Pistol(this.camera.instance, (loadedPistol) => {
       this.camera.instance.add(loadedPistol);
-      this.pistol = loadedPistol;});
+      this.pistol = loadedPistol;
+      this.pistol.setScene(this.scene);
+    });
     this.loop = new Loop(this.renderer.instance,this.scene,this.camera.instance,this.controls,this.pistol,this.collisionSystem);
     // Bind events
     this.canvas.addEventListener("mousedown", this.onMouseDown);
@@ -219,8 +219,7 @@ export default class App {
     }
     this.gameRunning = false;
     
-    // Disable physics when level ends
-    this.cleanupLevelPhysics();
+    // Don't disable physics - keep them running so player can still move
   }
 
   start() {
@@ -235,6 +234,12 @@ export default class App {
 
   private raycaster = new Raycaster();
   private mouse = new Vector2(0, 0);
+  
+  // Reusable vectors to avoid allocations in hot paths
+  private _tempCamPos = new Vector3();
+  private _tempCamDir = new Vector3();
+  private _tempMuzzlePos = new Vector3();
+  
   public checkCrosshairIntersections(): "regular" | "portal" | null {
     const objects = [...this.targets, ...this.scenarioPortals] as unknown as import("three").Object3D[];
     if (objects.length === 0) return null;
@@ -316,6 +321,21 @@ export default class App {
     );
     if (!remaining) {
       this.stopTimer();
+      // Clean up excess invisible targets (keep some for reuse) - single iteration
+      const visible: Target[] = [];
+      const invisible: Target[] = [];
+      
+      for (const t of this.targets) {
+        if (t.visible || t.animating) {
+          visible.push(t);
+        } else if (invisible.length < 50) {
+          invisible.push(t);
+        }
+      }
+      
+      if (invisible.length >= 50) {
+        this.targets = [...visible, ...invisible];
+      }
     }
 
     return "regular";
@@ -343,7 +363,7 @@ export default class App {
       const pos = new Float32Array([from.x, from.y, from.z, to.x, to.y, to.z]);
       const geom = new BufferGeometry();
       geom.setAttribute("position", new BufferAttribute(pos, 3));
-      const mat = new LineBasicMaterial({ color, transparent: true, opacity: 1 });
+      const mat = new LineBasicMaterial({ color, transparent: true, opacity: 1, linewidth: 5 });
       line = new (Line)(geom, mat) as Line;
     }
 
@@ -356,13 +376,17 @@ export default class App {
         ease: "power2.out",
         onComplete: () => {
           this.scene.remove(line!);
-          this.tracerPool.push(line!);
+          if (this.tracerPool.length < 10) {
+            this.tracerPool.push(line!);
+          }
         },
       });
     } catch {
       setTimeout(() => {
         this.scene.remove(line!);
-        this.tracerPool.push(line!);
+        if (this.tracerPool.length < 10) {
+          this.tracerPool.push(line!);
+        }
       }, 200);
     }
   }
@@ -388,13 +412,17 @@ export default class App {
         .to((sphere.material as MeshBasicMaterial), {
           opacity: 0, duration: 0.18, onComplete: () => {
             this.scene.remove(sphere!);
-            this.impactPool.push(sphere!);
+            if (this.impactPool.length < 10) {
+              this.impactPool.push(sphere!);
+            }
           }
         });
     } catch {
       setTimeout(() => {
         this.scene.remove(sphere!);
-        this.impactPool.push(sphere!);
+        if (this.impactPool.length < 10) {
+          this.impactPool.push(sphere!);
+        }
       }, 250);
     }
   }
@@ -415,38 +443,44 @@ export default class App {
       this.pistol.shoot();
 
       const objects = [...this.targets, ...this.scenarioPortals] as unknown as import("three").Object3D[];
-      const camPos = new Vector3();
-      this.camera.instance.getWorldPosition(camPos);
+      // Add editor cubes if they exist (only the cubeMesh, not the outline or edges)
+      const editorCubesGroup = (this as { editorCubesGroup?: import("three").Group }).editorCubesGroup;
+      if (editorCubesGroup) {
+        editorCubesGroup.children.forEach((cube: import("three").Object3D & { cubeMesh?: import("three").Mesh }) => {
+          if (cube.cubeMesh) {
+            objects.push(cube.cubeMesh);
+          }
+        });
+      }
+      
+      // Reuse vectors instead of creating new ones
+      this.camera.instance.getWorldPosition(this._tempCamPos);
+      this.camera.instance.getWorldDirection(this._tempCamDir);
 
-      const camDir = new Vector3();
-      this.camera.instance.getWorldDirection(camDir);
-
-      const muzzleWorld = new Vector3();
       try {
         if (this.pistol) {
-          (this.pistol).getMuzzleWorldPosition(muzzleWorld);
+          (this.pistol).getMuzzleWorldPosition(this._tempMuzzlePos);
         } else {
-          muzzleWorld.copy(camPos).add(camDir.clone().multiplyScalar(0.18));
+          this._tempMuzzlePos.copy(this._tempCamPos).addScaledVector(this._tempCamDir, 0.18);
         }
       } catch {
-        muzzleWorld.copy(camPos).add(camDir.clone().multiplyScalar(0.18));
+        this._tempMuzzlePos.copy(this._tempCamPos).addScaledVector(this._tempCamDir, 0.18);
       }
 
       this.raycaster.setFromCamera(this.mouse, this.camera.instance);
 
       const intersects = this.raycaster.intersectObjects(objects, true);
-
+      
       if (intersects.length > 0) {
         const hit = intersects[0];
         const hitPoint = hit.point.clone();
 
-        this.spawnTracer(muzzleWorld, hitPoint);
+        // this.spawnTracer(muzzleWorld, hitPoint);
         this.spawnImpactAt(hitPoint);
 
       } else {
-        const farPoint = camPos.clone().add(camDir.multiplyScalar(50));
-
-        this.spawnTracer(muzzleWorld, farPoint, 0x9999ff);
+        // const farPoint = camPos.clone().add(camDir.multiplyScalar(50));
+        // this.spawnTracer(muzzleWorld, farPoint, 0x9999ff);
       }
       const result = this.checkCrosshairIntersections();
       if (result === "portal") {
@@ -705,8 +739,19 @@ export default class App {
   }
 
   private resetTargets() {
-    this.targets.forEach((t) => this.scene.remove(t));
-    this.targets.length = 0;
+    // Don't remove or clear targets - just hide them for reuse
+    this.targets.forEach((t) => {
+      // Kill any active animations
+      const activeTweens = (t as { activeTweens?: Array<{ kill: () => void }> }).activeTweens;
+      if (activeTweens && Array.isArray(activeTweens)) {
+        activeTweens.forEach((tween) => tween.kill());
+        activeTweens.length = 0;
+      }
+      
+      t.visible = false;
+      t.shootable = false;
+      t.animating = false;
+    });
     this.clearScenarioPortals();
   }
 
@@ -772,11 +817,6 @@ export default class App {
     this.resetRoundStats();
     this.ui?.timer.reset();
 
-    if (!this.crosshair) {
-      this.crosshair = new Crosshair();
-      this.camera.instance.add(this.crosshair);
-    }
-
     this.resetTargets();
     
     // In editor mode, don't generate default targets - custom scenario will be loaded separately
@@ -809,10 +849,11 @@ export default class App {
     this.paused = paused;
     this.controls.setPaused(paused);
     
-    // Pause/resume physics with game
+    // Pause/resume physics
     if (paused) {
       this.collisionSystem.disablePhysics();
-    } else if (this.gameRunning) {
+    } else {
+      // Always enable physics when unpausing (even if game is complete)
       this.collisionSystem.enablePhysics();
     }
   }

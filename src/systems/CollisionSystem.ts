@@ -281,9 +281,9 @@ export class CollisionSystem {
       }
     }
     
-    if (bestMTV && maxPenetration > 0.01) {
-      console.log(`[MTV Calc] ${debugInfo}`);
-    }
+    // if (bestMTV && maxPenetration > 0.01) {
+    //   console.log(`[MTV Calc] ${debugInfo}`);
+    // }
     
     return bestMTV;
   }
@@ -298,7 +298,7 @@ export class CollisionSystem {
     const capsuleTop = position.clone();
     capsuleTop.y += this.playerHeight - this.playerRadius;
     
-    console.log(`[PushOut] Player pos: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}), capsuleBottom: (${capsuleBottom.x.toFixed(2)}, ${capsuleBottom.y.toFixed(2)}, ${capsuleBottom.z.toFixed(2)}), capsuleTop: (${capsuleTop.x.toFixed(2)}, ${capsuleTop.y.toFixed(2)}, ${capsuleTop.z.toFixed(2)}), radius: ${this.playerRadius}`);
+    // console.log(`[PushOut] Player pos: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}), capsuleBottom: (${capsuleBottom.x.toFixed(2)}, ${capsuleBottom.y.toFixed(2)}, ${capsuleBottom.z.toFixed(2)}), capsuleTop: (${capsuleTop.x.toFixed(2)}, ${capsuleTop.y.toFixed(2)}, ${capsuleTop.z.toFixed(2)}), radius: ${this.playerRadius}`);
     
     const mtv = this.calculateMTV(capsuleBottom, capsuleTop, this.playerRadius);
     
@@ -306,13 +306,13 @@ export class CollisionSystem {
       return position; // No collision
     }
     
-    console.log(`[Collision] MTV: (${mtv.x.toFixed(3)}, ${mtv.y.toFixed(3)}, ${mtv.z.toFixed(3)}), onGround: ${onGround}`);
+    // console.log(`[Collision] MTV: (${mtv.x.toFixed(3)}, ${mtv.y.toFixed(3)}, ${mtv.z.toFixed(3)}), onGround: ${onGround}`);
     
     const correctedPosition = position.clone();
     
     // Always apply full MTV - don't special-case "onGround" to prevent vibration
     correctedPosition.add(mtv.multiplyScalar(1.01));
-    console.log(`[Collision] Corrected: (${correctedPosition.x.toFixed(2)}, ${correctedPosition.y.toFixed(2)}, ${correctedPosition.z.toFixed(2)})`);
+    // console.log(`[Collision] Corrected: (${correctedPosition.x.toFixed(2)}, ${correctedPosition.y.toFixed(2)}, ${correctedPosition.z.toFixed(2)})`);
     
     return correctedPosition;
   }

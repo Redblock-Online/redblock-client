@@ -1,4 +1,4 @@
-import { Group, Mesh, MeshToonMaterial, MeshBasicMaterial, Camera, Euler, Vector3, BoxGeometry, CylinderGeometry, Object3D } from "three";
+import { Group, Mesh, MeshToonMaterial, MeshBasicMaterial, Camera, Euler, Vector3, BoxGeometry, CylinderGeometry, Object3D, SphereGeometry, Scene } from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import gsap from "gsap";
 
@@ -33,6 +33,13 @@ export default class Pistol extends Group {
   private velocity = new Vector3();
   private swayTween?: gsap.core.Tween;
   private muzzle: Object3D | null = null;
+  private scene: Scene | null = null;
+  private sparkPool: Mesh[] = [];
+  
+  // Reusable vectors for muzzle flash to avoid allocations
+  private _tempMuzzlePos = new Vector3();
+  private _tempCameraDir = new Vector3();
+  private _tempTargetPos = new Vector3();
 
   constructor(camera: Camera, callback?: (pistol: Pistol) => void) {
     super();
@@ -144,12 +151,100 @@ export default class Pistol extends Group {
     addEdgesToBox(this, 0.8, 1.5, 0.3, 0.8, 0.5, 0);
   }
 
+  public setScene(scene: Scene) {
+    this.scene = scene;
+  }
+
+  private spawnMuzzleFlash() {
+    if (!this.scene || !this.muzzle) return;
+
+    // Reuse vectors instead of creating new ones
+    this.muzzle.getWorldPosition(this._tempMuzzlePos);
+    this.camera.getWorldDirection(this._tempCameraDir);
+    
+    const forwardOffset = 0.5;
+    this._tempMuzzlePos.addScaledVector(this._tempCameraDir, forwardOffset);
+    
+    // Create 3-6 sparks
+    const sparkCount = Math.floor(Math.random() * 4) + 3;
+    
+    for (let i = 0; i < sparkCount; i++) {
+      let spark: Mesh;
+      
+      if (this.sparkPool.length > 0) {
+        spark = this.sparkPool.pop()!;
+        spark.position.copy(this._tempMuzzlePos);
+        (spark.material as MeshBasicMaterial).opacity = 1;
+        spark.scale.set(1, 1, 1);
+      } else {
+        const geometry = new SphereGeometry(0.02, 4, 4);
+        const material = new MeshBasicMaterial({ 
+          color: Math.random() > 0.5 ? 0xffaa00 : 0xffff66,
+          transparent: true,
+          opacity: 1
+        });
+        spark = new Mesh(geometry, material);
+        spark.position.copy(this._tempMuzzlePos);
+      }
+
+      this.scene.add(spark);
+
+      // Direction: mainly forward with slight random spread
+      const forwardDistance = 0.7 + Math.random() * 0.3;
+      const spreadAmount = 0.2;
+      
+      // Reuse vector for target position
+      this._tempTargetPos.set(
+        this._tempMuzzlePos.x + this._tempCameraDir.x * forwardDistance + (Math.random() - 0.5) * spreadAmount,
+        this._tempMuzzlePos.y + this._tempCameraDir.y * forwardDistance + (Math.random() - 0.5) * spreadAmount,
+        this._tempMuzzlePos.z + this._tempCameraDir.z * forwardDistance + (Math.random() - 0.5) * spreadAmount
+      );
+
+      // Animate spark
+      gsap.to(spark.position, {
+        x: this._tempTargetPos.x,
+        y: this._tempTargetPos.y,
+        z: this._tempTargetPos.z,
+        duration: 0.1 + Math.random() * 0.1,
+        ease: "power2.out"
+      });
+
+      gsap.to(spark.scale, {
+        x: 0,
+        y: 0,
+        z: 0,
+        duration: 0.15,
+        ease: "power2.in"
+      });
+
+      gsap.to((spark.material as MeshBasicMaterial), {
+        opacity: 0,
+        duration: 0.12,
+        ease: "power2.out",
+        onComplete: () => {
+          this.scene?.remove(spark);
+          // Limit pool size to prevent infinite growth
+          if (this.sparkPool.length < 20) {
+            this.sparkPool.push(spark);
+          } else {
+            // Dispose geometry and material if pool is full
+            spark.geometry.dispose();
+            (spark.material as MeshBasicMaterial).dispose();
+          }
+        }
+      });
+    }
+  }
+
   public shoot() {
     if (this.firing) return;
 
     // lock by fire rate
     this.firing = true;
     const cooldown = 1 / this.fireRate;
+    
+    // Spawn muzzle flash
+    this.spawnMuzzleFlash();
 
     this.tl?.kill();
 

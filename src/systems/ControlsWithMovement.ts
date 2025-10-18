@@ -44,6 +44,23 @@ export default class Controls {
   private lastYawPos = new THREE.Vector3();
   private lastYawRot = new THREE.Euler();
   private lastPitchRot = new THREE.Euler();
+  
+  // Reusable vectors for update loop to avoid allocations
+  private _tempTargetDir = new THREE.Vector3();
+  private _tempDesiredVel = new THREE.Vector3();
+  private _tempVerticalMovement = new THREE.Vector3();
+  private _tempHorizontalMovement = new THREE.Vector3();
+  private _tempTotalMovement = new THREE.Vector3();
+
+  // Keybindings
+  private keybindings = {
+    forward: "w",
+    backward: "s",
+    left: "a",
+    right: "d",
+    jump: "space",
+    crouch: "c",
+  };
 
   // Room tracking
   private roomCoordX = 0;
@@ -105,6 +122,25 @@ export default class Controls {
       }
     };
     document.addEventListener("input", onSensitivityInput, true);
+
+    // Initialize keybindings from localStorage
+    const savedKeybindings = localStorage.getItem("keybindings");
+    if (savedKeybindings) {
+      try {
+        this.keybindings = { ...this.keybindings, ...JSON.parse(savedKeybindings) };
+      } catch {
+        // Keep defaults
+      }
+    }
+
+    // Listen for keybinding changes
+    const onKeybindingsChanged = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail) {
+        this.keybindings = { ...this.keybindings, ...customEvent.detail };
+      }
+    };
+    window.addEventListener("keybindingsChanged", onKeybindingsChanged);
     
     this.camera.position.set(0, 0, 0);
     this.camera.rotation.set(0, 0, 0);
@@ -204,13 +240,17 @@ export default class Controls {
       if (this.paused) return;
 
       const key = e.key.toLowerCase();
+      const code = e.code.toLowerCase();
       this.keysPressed[key] = true;
+      this.keysPressed[code] = true;
 
-      if (key === "c") {
+      // Check for crouch
+      if (key === this.keybindings.crouch) {
         this.isCrouching = true;
       }
 
-      if (e.code === "Space") {
+      // Check for jump
+      if (key === this.keybindings.jump || code === this.keybindings.jump) {
         this.lastJumpPressedTime = performance.now() / 1000;
       }
     });
@@ -219,9 +259,12 @@ export default class Controls {
       if (this.paused) return;
 
       const key = e.key.toLowerCase();
+      const code = e.code.toLowerCase();
       this.keysPressed[key] = false;
+      this.keysPressed[code] = false;
 
-      if (key === "c") {
+      // Check for crouch release
+      if (key === this.keybindings.crouch) {
         this.isCrouching = false;
       }
     });
@@ -295,12 +338,13 @@ export default class Controls {
       this.velocityY = 0;
       return;
     }
-    const targetDirection = new THREE.Vector3();
+    // Reuse vector instead of creating new one
+    this._tempTargetDir.set(0, 0, 0);
 
-    if (this.keysPressed["a"]) targetDirection.z -= 1;
-    if (this.keysPressed["d"]) targetDirection.z += 1;
-    if (this.keysPressed["s"]) targetDirection.x -= 1;
-    if (this.keysPressed["w"]) targetDirection.x += 1;
+    if (this.keysPressed[this.keybindings.left]) this._tempTargetDir.z -= 1;
+    if (this.keysPressed[this.keybindings.right]) this._tempTargetDir.z += 1;
+    if (this.keysPressed[this.keybindings.backward]) this._tempTargetDir.x -= 1;
+    if (this.keysPressed[this.keybindings.forward]) this._tempTargetDir.x += 1;
 
     // Only clamp position in normal game mode, not in editor
     if (!this.isEditorMode) {
@@ -321,17 +365,18 @@ export default class Controls {
       (this.isCrouching ? this.crouchSpeedFactor : 1) *
       (this.onGround ? 1 : this.airControlFactor);
 
-    targetDirection.normalize();
-    targetDirection.applyQuaternion(this.yawObject.quaternion);
-    targetDirection.y = 0;
+    this._tempTargetDir.normalize();
+    this._tempTargetDir.applyQuaternion(this.yawObject.quaternion);
+    this._tempTargetDir.y = 0;
 
-    const desiredVel = targetDirection.clone().multiplyScalar(effectiveSpeed);
-    const bothLateralPressed = !!this.keysPressed["a"] && !!this.keysPressed["d"];
+    // Reuse vector instead of cloning
+    this._tempDesiredVel.copy(this._tempTargetDir).multiplyScalar(effectiveSpeed);
+    const bothLateralPressed = !!this.keysPressed[this.keybindings.left] && !!this.keysPressed[this.keybindings.right];
 
     if (bothLateralPressed) {
       this.velocity.set(0, 0, 0)
     } else {
-      this.velocity.lerp(desiredVel, this.acceleration);
+      this.velocity.lerp(this._tempDesiredVel, this.acceleration);
     }
    
     this.velocity.multiplyScalar(Math.pow(this.damping, deltaTime));
@@ -364,23 +409,24 @@ export default class Controls {
     
     if (this.collisionSystem && this.collisionSystem.isPhysicsEnabled()) {
       // Include vertical movement in the movement vector for character controller
-      const verticalMovement = new THREE.Vector3(0, this.velocityY * deltaTime, 0);
-      const horizontalMovement = this.velocity.clone().multiplyScalar(deltaTime);
-      const totalMovement = horizontalMovement.add(verticalMovement);
+      // Reuse vectors instead of creating new ones
+      this._tempVerticalMovement.set(0, this.velocityY * deltaTime, 0);
+      this._tempHorizontalMovement.copy(this.velocity).multiplyScalar(deltaTime);
+      this._tempTotalMovement.copy(this._tempHorizontalMovement).add(this._tempVerticalMovement);
       
       // Let Rapier's character controller handle all physics
       const newPos = this.collisionSystem.slidePlayerAlongWalls(
         this.yawObject.position,
-        totalMovement
+        this._tempTotalMovement
       );
       
       // Check if we're grounded using Rapier's character controller
       const wasOnGround = this.onGround;
       this.onGround = this.collisionSystem.isGrounded();
       
-      console.log("[Controls] Before update - yawObject Y:", this.yawObject.position.y.toFixed(3));
-      console.log("[Controls] After physics - newPos Y:", newPos.y.toFixed(3));
-      console.log("[Controls] Grounded:", this.onGround, "wasOnGround:", wasOnGround);
+      // console.log("[Controls] Before update - yawObject Y:", this.yawObject.position.y.toFixed(3));
+      // console.log("[Controls] After physics - newPos Y:", newPos.y.toFixed(3));
+      // console.log("[Controls] Grounded:", this.onGround, "wasOnGround:", wasOnGround);
       
       // Character controller handles ground position, no manual snap needed
       // Removed manual ground snap to prevent vertical jitter
@@ -389,8 +435,8 @@ export default class Controls {
       const verticalChange = newPos.y - this.yawObject.position.y;
       this.yawObject.position.copy(newPos);
       
-      console.log("[Controls] After copy - yawObject Y:", this.yawObject.position.y.toFixed(3));
-      console.log("[Controls] Vertical change:", verticalChange.toFixed(3));
+      // console.log("[Controls] After copy - yawObject Y:", this.yawObject.position.y.toFixed(3));
+      // console.log("[Controls] Vertical change:", verticalChange.toFixed(3));
       
       // If we landed on ground
       if (this.onGround && !wasOnGround) {
