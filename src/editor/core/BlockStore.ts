@@ -16,22 +16,21 @@ export class BlockStore {
   private idSeed = 0;
   
   /**
-   * Rename a block (change its ID)
-   * Returns true if successful, false if newId already exists or block not found
+   * Set a custom display name for a block
+   * The ID remains unchanged, only the display name is updated
    */
-  public renameBlock(oldId: string, newId: string): boolean {
-    if (oldId === newId) return true;
-    if (this.blocks.has(newId)) return false; // New ID already exists
+  public renameBlock(id: string, newName: string): boolean {
+    console.log("[BlockStore] renameBlock called - id:", id, "newName:", newName);
+    const block = this.blocks.get(id);
+    if (!block) {
+      console.log("[BlockStore] Block not found!");
+      return false;
+    }
     
-    const block = this.blocks.get(oldId);
-    if (!block) return false;
-    
-    // Update the block's ID
-    block.id = newId;
-    
-    // Update the map
-    this.blocks.delete(oldId);
-    this.blocks.set(newId, block);
+    console.log("[BlockStore] Block before rename:", { id: block.id, name: block.name });
+    // Update the block's display name
+    block.name = newName;
+    console.log("[BlockStore] Block after rename:", { id: block.id, name: block.name });
     
     return true;
   }

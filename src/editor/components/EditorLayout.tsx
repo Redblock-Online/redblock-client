@@ -51,7 +51,7 @@ interface EditorLayoutProps {
   handleCreateComponent: () => void;
   handleModifyComponent: (id: string) => void;
   deleteSelection: () => void;
-  renameSelection?: (oldId: string, newId: string) => void;
+  renameSelection?: (id: string, newName: string) => void;
   setTyping?: (typing: boolean) => void;
 }
 

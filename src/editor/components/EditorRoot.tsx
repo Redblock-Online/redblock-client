@@ -625,15 +625,15 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     }
   }, [autoSaveScenario, editor]);
 
-  const renameSelection = useCallback((oldId: string, newId: string) => {
-    if (!editor || oldId === newId) return;
+  const renameSelection = useCallback((id: string, newName: string) => {
+    if (!editor) return;
     
-    const success = editor.renameBlock(oldId, newId);
+    const success = editor.renameBlock(id, newName);
     if (success) {
-      // Update selection with new id
-      const block = editor.getBlock(newId);
+      // Force re-render to show new name
+      const block = editor.getBlock(id);
       if (block) {
-        setSelection(block);
+        setSelection({ ...block });
       }
       markUnsaved();
     }

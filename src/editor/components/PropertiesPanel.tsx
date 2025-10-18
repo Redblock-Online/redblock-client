@@ -20,7 +20,7 @@ type PropertiesPanelProps = {
   onModifyComponent?: () => void;
   componentEditing?: boolean;
   onDeleteSelection?: () => void;
-  onRenameSelection?: (oldId: string, newId: string) => void;
+  onRenameSelection?: (id: string, newName: string) => void;
   setTyping?: (typing: boolean) => void;
 };
 
@@ -43,6 +43,9 @@ export function PropertiesPanel({
 }: PropertiesPanelProps): ReactElement {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editedName, setEditedName] = useState("");
+  
+  // Display name is the custom name if set, otherwise the ID
+  const displayName = selection && !Array.isArray(selection) ? (selection.name || selection.id) : "";
   const actionButtonClass =
     "h-7 rounded border border-[#1a1a1a] bg-[#4772b3] text-[11px] text-white transition hover:bg-[#5a8fd6]";
   const subtleButtonClass =
@@ -135,7 +138,7 @@ export function PropertiesPanel({
                 // Re-enable keyboard shortcuts
                 setTyping?.(false);
                 
-                if (editedName.trim() && editedName !== selection.id && onRenameSelection) {
+                if (editedName.trim() && editedName !== displayName && onRenameSelection) {
                   onRenameSelection(selection.id, editedName.trim());
                 }
                 setIsEditingName(false);
@@ -154,11 +157,11 @@ export function PropertiesPanel({
           ) : (
             <div className="group flex flex-1 items-center gap-1 cursor-pointer hover:text-white transition" onClick={() => {
               if (onRenameSelection) {
-                setEditedName(selection.id);
+                setEditedName(displayName);
                 setIsEditingName(true);
               }
             }}>
-              <span className="flex-1 truncate">{selection.id}</span>
+              <span className="flex-1 truncate">{displayName}</span>
               {onRenameSelection && (
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition text-[#999999]">
                   <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>

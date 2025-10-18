@@ -6,7 +6,8 @@ export type EditorItem = {
 };
 
 export type EditorBlock = {
-  id: string;
+  id: string; // Internal unique identifier
+  name?: string; // Optional custom display name
   mesh: Object3D;
   outline?: LineSegments;
 };
@@ -39,5 +40,5 @@ export type SerializedNode = {
   componentId?: string;
   children?: SerializedNode[];
   isSpawnPoint?: boolean;
-  id?: string; // Custom ID/name for the block
+  name?: string; // Custom display name for the block
 };

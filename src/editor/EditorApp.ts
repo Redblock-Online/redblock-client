@@ -670,14 +670,18 @@ export default class EditorApp {
   }
 
   public exportScenario(name: string): SerializedScenario {
+    console.log("[EditorApp] exportScenario called - name:", name);
     const usedComponentIds = new Set<string>();
     const serializedBlocks: SerializedNode[] = [];
-    for (const block of this.blocks.getAllBlocks()) {
+    const allBlocks = this.blocks.getAllBlocks();
+    console.log("[EditorApp] Total blocks to serialize:", allBlocks.length);
+    for (const block of allBlocks) {
       const node = this.serializeEditorBlock(block, usedComponentIds);
       if (node) {
         serializedBlocks.push(node);
       }
     }
+    console.log("[EditorApp] Serialized blocks:", serializedBlocks.length);
 
     const definitions = loadComponents().filter((component) => usedComponentIds.has(component.id));
 
@@ -714,6 +718,7 @@ export default class EditorApp {
         type: "component",
         componentId,
         transform: this.toSerializedTransform(block.mesh, "world"),
+        ...(block.name && { name: block.name }),
       };
     }
 
@@ -729,6 +734,7 @@ export default class EditorApp {
         type: "group",
         transform: this.toSerializedTransform(block.mesh, "world"),
         children,
+        ...(block.name && { name: block.name }),
       };
     }
 
@@ -738,6 +744,7 @@ export default class EditorApp {
         type: "block",
         transform: this.toSerializedTransform(block.mesh, "world"),
         isSpawnPoint: isSpawnPoint || undefined,
+        ...(block.name && { name: block.name }),
       };
     }
 
@@ -812,24 +819,25 @@ export default class EditorApp {
   }
 
   private instantiateRootNode(node: SerializedNode, componentMap: Map<string, SavedComponent>): EditorBlock | null {
-    console.log("[EditorApp] instantiateRootNode - type:", node.type, "id:", node.id);
+    let block: EditorBlock | null = null;
+    
     switch (node.type) {
       case "block": {
         const transform = this.transformFromSerialized(node.transform);
         if (node.isSpawnPoint) {
-          return this.blocks.createSpawnPoint({
+          block = this.blocks.createSpawnPoint({
             position: transform.position,
             rotation: transform.rotation,
             scale: transform.scale,
-            id: node.id,
+          });
+        } else {
+          block = this.createBlock({
+            position: transform.position,
+            rotation: transform.rotation,
+            scale: transform.scale,
           });
         }
-        return this.createBlock({
-          position: transform.position,
-          rotation: transform.rotation,
-          scale: transform.scale,
-          id: node.id,
-        });
+        break;
       }
       case "component": {
         if (!node.componentId) {
@@ -840,17 +848,24 @@ export default class EditorApp {
           return null;
         }
         const transform = this.transformFromSerialized(node.transform);
-        return this.components.instantiateComponent(definition, transform, node.id);
+        block = this.components.instantiateComponent(definition, transform);
+        break;
       }
       case "group": {
         const group = this.buildGroupFromNode(node, componentMap);
         if (group) {
-          return this.blocks.registerGroup(group, node.id);
+          block = this.blocks.registerGroup(group);
         }
-        return null;
+        break;
       }
     }
-    return null;
+    
+    // Assign custom name if present
+    if (block && node.name) {
+      block.name = node.name;
+    }
+    
+    return block;
   }
 
   private buildGroupFromNode(node: SerializedNode, componentMap: Map<string, SavedComponent>): Group | null {

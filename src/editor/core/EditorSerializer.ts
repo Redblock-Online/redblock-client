@@ -25,16 +25,18 @@ export class EditorSerializer {
   }
 
   public serializeEditorBlock(block: EditorBlock, usedComponents: Set<string>): SerializedNode | null {
-    console.log("[EditorSerializer] Serializing block:", block.id);
+    console.log("[EditorSerializer] Serializing block - id:", block.id, "name:", block.name);
     const componentId = this.components.getComponentIdForBlock(block);
     if (componentId) {
       usedComponents.add(componentId);
-      return {
-        type: "component",
+      const node = {
+        type: "component" as const,
         componentId,
         transform: this.toSerializedTransform(block.mesh, "world"),
-        id: block.id,
+        ...(block.name && { name: block.name }),
       };
+      console.log("[EditorSerializer] Component node:", node);
+      return node;
     }
 
     if (block.mesh instanceof Group) {
@@ -43,20 +45,24 @@ export class EditorSerializer {
         const serializedChild = this.serializeObject(child, usedComponents, "local");
         if (serializedChild) children.push(serializedChild);
       }
-      return {
-        type: "group",
+      const node = {
+        type: "group" as const,
         transform: this.toSerializedTransform(block.mesh, "world"),
         children,
-        id: block.id,
+        ...(block.name && { name: block.name }),
       };
+      console.log("[EditorSerializer] Group node:", node);
+      return node;
     }
 
     if (block.mesh instanceof Mesh) {
-      return {
-        type: "block",
+      const node = {
+        type: "block" as const,
         transform: this.toSerializedTransform(block.mesh, "world"),
-        id: block.id,
+        ...(block.name && { name: block.name }),
       };
+      console.log("[EditorSerializer] Block node:", node);
+      return node;
     }
 
     return null;
