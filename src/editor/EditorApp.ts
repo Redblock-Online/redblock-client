@@ -319,8 +319,8 @@ export default class EditorApp {
    */
   public disableControls(): void {
     this.controls.enabled = false;
-    this.movement.clearState();
-    console.log("[EditorApp] Controls disabled");
+    this.movement.disable();
+    console.log("[EditorApp] Controls and movement disabled");
   }
   
   /**
@@ -328,7 +328,8 @@ export default class EditorApp {
    */
   public enableControls(): void {
     this.controls.enabled = true;
-    console.log("[EditorApp] Controls enabled");
+    this.movement.enable();
+    console.log("[EditorApp] Controls and movement enabled");
   }
 
   public placeBlockAt(clientX: number, clientY: number): EditorBlock | null {

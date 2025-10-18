@@ -2,6 +2,7 @@ import { PerspectiveCamera, Vector3 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 export class MovementController {
+  private enabled = true;
   private readonly state = {
     forward: false,
     back: false,
@@ -20,6 +21,11 @@ export class MovementController {
   ) {}
 
   public handleKeyChange(event: KeyboardEvent): boolean {
+    // Ignore all key events when disabled (e.g., during game preview)
+    if (!this.enabled) {
+      return false;
+    }
+    
     const target = event.target as HTMLElement | null;
     if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
       return false;
@@ -71,9 +77,19 @@ export class MovementController {
     this.state.left = false;
     this.state.right = false;
   }
+  
+  public disable(): void {
+    this.enabled = false;
+    this.clearState();
+  }
+  
+  public enable(): void {
+    this.enabled = true;
+  }
 
   public update(deltaSeconds: number): void {
-    if (deltaSeconds <= 0) {
+    // Don't update when disabled
+    if (!this.enabled || deltaSeconds <= 0) {
       return;
     }
 
