@@ -51,6 +51,8 @@ interface EditorLayoutProps {
   handleCreateComponent: () => void;
   handleModifyComponent: (id: string) => void;
   deleteSelection: () => void;
+  renameSelection?: (oldId: string, newId: string) => void;
+  setTyping?: (typing: boolean) => void;
 }
 
 export function EditorLayout(props: EditorLayoutProps): ReactElement {
@@ -98,6 +100,8 @@ export function EditorLayout(props: EditorLayoutProps): ReactElement {
             onModifyComponent={props.selectedComponentId ? () => props.handleModifyComponent(props.selectedComponentId!) : undefined}
             componentEditing={props.isEditingComponent}
             onDeleteSelection={props.deleteSelection}
+            onRenameSelection={props.renameSelection}
+            setTyping={props.setTyping}
           />
         </aside>
       </div>

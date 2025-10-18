@@ -1,4 +1,4 @@
-import { Euler, Group, Matrix4, Object3D, Quaternion, Vector3 } from "three";
+import { Euler, Group, LineSegments, Matrix4, Mesh, Object3D, Quaternion, Vector3 } from "three";
 import { addComponent, type ComponentMemberTransform, type SavedComponent } from "../componentsStore";
 import type { BlockStore } from "./BlockStore";
 import type { SelectionManager } from "./SelectionManager";
@@ -247,18 +247,49 @@ export class ComponentManager {
       return null;
     }
 
-    const group = selection.mesh as Group;
-    const transforms: ComponentMemberTransform[] = [];
-    for (const child of group.children) {
-      const mesh = child as Object3D & { position: Vector3; rotation: Euler; scale: Vector3 };
-      transforms.push({
-        position: { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z },
-        rotation: { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z },
-        scale: { x: mesh.scale.x, y: mesh.scale.y, z: mesh.scale.z },
-      });
-    }
+    const extractMemberTransforms = (selection: EditorBlock): ComponentMemberTransform[] => {
+      const group = selection.mesh as Group;
+      const transforms: ComponentMemberTransform[] = [];
 
-    return transforms;
+      const extractRecursive = (parent: Object3D) => {
+        for (const child of parent.children) {
+          if (child instanceof LineSegments) {
+            continue;
+          }
+
+          if (child instanceof Group) {
+            extractRecursive(child);
+          } else if (child instanceof Mesh) {
+            child.updateWorldMatrix(true, false);
+            const worldPos = new Vector3();
+            const worldQuat = new Quaternion();
+            const worldScale = new Vector3();
+            child.matrixWorld.decompose(worldPos, worldQuat, worldScale);
+
+            group.updateWorldMatrix(true, false);
+            const groupInverse = new Matrix4().copy(group.matrixWorld).invert();
+            const localMatrix = new Matrix4().multiplyMatrices(groupInverse, child.matrixWorld);
+
+            const localPos = new Vector3();
+            const localQuat = new Quaternion();
+            const localScale = new Vector3();
+            localMatrix.decompose(localPos, localQuat, localScale);
+            const localRot = new Euler().setFromQuaternion(localQuat);
+
+            transforms.push({
+              position: { x: localPos.x, y: localPos.y, z: localPos.z },
+              rotation: { x: localRot.x, y: localRot.y, z: localRot.z },
+              scale: { x: localScale.x, y: localScale.y, z: localScale.z },
+            });
+          }
+        }
+      };
+
+      extractRecursive(group);
+      return transforms;
+    };
+
+    return extractMemberTransforms(selection);
   }
 
   public syncActiveComponentEdits(): void {

@@ -625,6 +625,26 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     }
   }, [autoSaveScenario, editor]);
 
+  const renameSelection = useCallback((oldId: string, newId: string) => {
+    if (!editor || oldId === newId) return;
+    
+    const success = editor.renameBlock(oldId, newId);
+    if (success) {
+      // Update selection with new id
+      const block = editor.getBlock(newId);
+      if (block) {
+        setSelection(block);
+      }
+      markUnsaved();
+    }
+  }, [editor, markUnsaved]);
+  
+  const setTyping = useCallback((typing: boolean) => {
+    if (editor) {
+      editor.setTyping(typing);
+    }
+  }, [editor]);
+
   const deleteSelection = useCallback(() => {
     const currentSelection = selection
       ? Array.isArray(selection)
@@ -1142,6 +1162,8 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             } : undefined}
             componentEditing={isEditingComponent}
             onDeleteSelection={deleteSelection}
+            onRenameSelection={renameSelection}
+            setTyping={setTyping}
           />
         </aside>
         </div>

@@ -2,6 +2,7 @@ import type { EditorModeManager } from "./EditorModeManager";
 import type { DragHandler } from "../core/handlers/DragHandler";
 import type { TransformHandler } from "../core/handlers/TransformHandler";
 import type { SelectionHandler } from "../core/handlers/SelectionHandler";
+import type EditorApp from "../EditorApp";
 
 export class InputRouter {
   constructor(
@@ -9,6 +10,7 @@ export class InputRouter {
     private dragHandler: DragHandler,
     private transformHandler: TransformHandler,
     private selectionHandler: SelectionHandler,
+    private editor: EditorApp,
   ) {}
 
   public handlePointerDown(event: PointerEvent): void {
@@ -80,6 +82,11 @@ export class InputRouter {
   }
 
   public handleKeyDown(event: KeyboardEvent): void {
+    // Ignore all shortcuts when user is typing in an input
+    if (this.editor.isUserTyping()) {
+      return;
+    }
+    
     const mode = this.modeManager.getMode();
 
     // Escape always cancels

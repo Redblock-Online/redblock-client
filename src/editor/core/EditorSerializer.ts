@@ -25,6 +25,7 @@ export class EditorSerializer {
   }
 
   public serializeEditorBlock(block: EditorBlock, usedComponents: Set<string>): SerializedNode | null {
+    console.log("[EditorSerializer] Serializing block:", block.id);
     const componentId = this.components.getComponentIdForBlock(block);
     if (componentId) {
       usedComponents.add(componentId);
@@ -32,6 +33,7 @@ export class EditorSerializer {
         type: "component",
         componentId,
         transform: this.toSerializedTransform(block.mesh, "world"),
+        id: block.id,
       };
     }
 
@@ -45,6 +47,7 @@ export class EditorSerializer {
         type: "group",
         transform: this.toSerializedTransform(block.mesh, "world"),
         children,
+        id: block.id,
       };
     }
 
@@ -52,6 +55,7 @@ export class EditorSerializer {
       return {
         type: "block",
         transform: this.toSerializedTransform(block.mesh, "world"),
+        id: block.id,
       };
     }
 

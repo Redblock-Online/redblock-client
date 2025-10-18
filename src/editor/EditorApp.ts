@@ -70,6 +70,9 @@ export default class EditorApp {
   private readonly canvas: HTMLCanvasElement;
   private readonly renderer: WebGLRenderer;
   private readonly scene: Scene;
+  
+  // Flag to disable keyboard shortcuts when user is typing in an input
+  private isTyping = false;
   private readonly camera: PerspectiveCamera;
   private readonly controls: OrbitControls;
   private readonly raycaster = new Raycaster();
@@ -158,6 +161,7 @@ export default class EditorApp {
       this.dragHandler,
       this.transformHandler,
       this.selectionHandler,
+      this,
     );
 
     // Setup callbacks
@@ -331,6 +335,20 @@ export default class EditorApp {
     this.movement.enable();
     console.log("[EditorApp] Controls and movement enabled");
   }
+  
+  /**
+   * Set typing state - disables keyboard shortcuts when user is typing in inputs
+   */
+  public setTyping(typing: boolean): void {
+    this.isTyping = typing;
+  }
+  
+  /**
+   * Check if user is currently typing
+   */
+  public isUserTyping(): boolean {
+    return this.isTyping;
+  }
 
   public placeBlockAt(clientX: number, clientY: number): EditorBlock | null {
     const point = this.intersectGround(clientX, clientY);
@@ -389,6 +407,10 @@ export default class EditorApp {
 
   public getBlock(id: string): EditorBlock | undefined {
     return this.blocks.getBlock(id);
+  }
+  
+  public renameBlock(oldId: string, newId: string): boolean {
+    return this.blocks.renameBlock(oldId, newId);
   }
 
   public applyTransform(id: string, transform: SelectionTransform): boolean {
@@ -790,6 +812,7 @@ export default class EditorApp {
   }
 
   private instantiateRootNode(node: SerializedNode, componentMap: Map<string, SavedComponent>): EditorBlock | null {
+    console.log("[EditorApp] instantiateRootNode - type:", node.type, "id:", node.id);
     switch (node.type) {
       case "block": {
         const transform = this.transformFromSerialized(node.transform);
@@ -798,12 +821,14 @@ export default class EditorApp {
             position: transform.position,
             rotation: transform.rotation,
             scale: transform.scale,
+            id: node.id,
           });
         }
         return this.createBlock({
           position: transform.position,
           rotation: transform.rotation,
           scale: transform.scale,
+          id: node.id,
         });
       }
       case "component": {
@@ -815,12 +840,12 @@ export default class EditorApp {
           return null;
         }
         const transform = this.transformFromSerialized(node.transform);
-        return this.components.instantiateComponent(definition, transform);
+        return this.components.instantiateComponent(definition, transform, node.id);
       }
       case "group": {
         const group = this.buildGroupFromNode(node, componentMap);
         if (group) {
-          return this.blocks.registerGroup(group);
+          return this.blocks.registerGroup(group, node.id);
         }
         return null;
       }

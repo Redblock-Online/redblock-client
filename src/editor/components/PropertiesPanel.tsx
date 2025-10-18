@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction, ReactElement } from "react";
+import { useState } from "react";
 import type { EditorSelection } from "../types";
 import { Group } from "three";
 import { AxisInput } from "./AxisInput";
@@ -19,6 +20,8 @@ type PropertiesPanelProps = {
   onModifyComponent?: () => void;
   componentEditing?: boolean;
   onDeleteSelection?: () => void;
+  onRenameSelection?: (oldId: string, newId: string) => void;
+  setTyping?: (typing: boolean) => void;
 };
 
 export function PropertiesPanel({
@@ -35,7 +38,11 @@ export function PropertiesPanel({
   onModifyComponent,
   componentEditing,
   onDeleteSelection,
+  onRenameSelection,
+  setTyping,
 }: PropertiesPanelProps): ReactElement {
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState("");
   const actionButtonClass =
     "h-7 rounded border border-[#1a1a1a] bg-[#4772b3] text-[11px] text-white transition hover:bg-[#5a8fd6]";
   const subtleButtonClass =
@@ -91,44 +98,124 @@ export function PropertiesPanel({
   }
 
   // Single selection UI
+  // Determine if selection is a component or group
+  const isComponent = selection.mesh instanceof Group && selection.mesh.userData?.componentId;
+  const isGroup = selection.mesh instanceof Group && !selection.mesh.userData?.componentId;
+
   return (
     <div className="flex h-full flex-col gap-3 text-[11px] text-[#cccccc]">
       <div>
         <div className="text-[10px] text-[#999999]">Selection</div>
-        <div className="mt-0.5 text-[13px] font-medium text-[#cccccc]">
-          {selection.id}
+        <div className="mt-0.5 flex items-center gap-1.5 text-[13px] font-medium text-[#cccccc]">
+          {/* Icon for component or group */}
+          {isComponent && (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#4772b3] flex-shrink-0">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+          )}
+          {isGroup && (
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#999999] flex-shrink-0">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+          )}
+          
+          {/* Editable name */}
+          {isEditingName ? (
+            <input
+              type="text"
+              value={editedName}
+              onChange={(e) => setEditedName(e.target.value)}
+              onFocus={() => {
+                // Disable keyboard shortcuts when typing
+                setTyping?.(true);
+              }}
+              onBlur={() => {
+                // Re-enable keyboard shortcuts
+                setTyping?.(false);
+                
+                if (editedName.trim() && editedName !== selection.id && onRenameSelection) {
+                  onRenameSelection(selection.id, editedName.trim());
+                }
+                setIsEditingName(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.currentTarget.blur();
+                } else if (e.key === "Escape") {
+                  setTyping?.(false);
+                  setIsEditingName(false);
+                }
+              }}
+              autoFocus
+              className="flex-1 rounded border border-[#4772b3] bg-[#2b2b2b] px-1.5 py-0.5 text-[11px] text-white outline-none"
+            />
+          ) : (
+            <div className="group flex flex-1 items-center gap-1 cursor-pointer hover:text-white transition" onClick={() => {
+              if (onRenameSelection) {
+                setEditedName(selection.id);
+                setIsEditingName(true);
+              }
+            }}>
+              <span className="flex-1 truncate">{selection.id}</span>
+              {onRenameSelection && (
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition text-[#999999]">
+                  <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+                </svg>
+              )}
+            </div>
+          )}
         </div>
       </div>
       {selection.mesh instanceof Group ? (
         <div className="flex flex-col gap-2">
-          <button
-            className={subtleButtonClass}
-            onClick={onUngroupSelection}
-          >
-            Ungroup
-          </button>
-          <button
-            className={actionButtonClass}
-            onClick={onCreateComponent}
-          >
-            Create Component
-          </button>
-          {onModifyComponent ? (
-            <button
-              className={componentEditing ? actionButtonClass : subtleButtonClass}
-              onClick={onModifyComponent}
-            >
-              {componentEditing ? "Finish Editing" : "Modify Component"}
-            </button>
-          ) : null}
-          {onDeleteSelection ? (
-            <button
-              className={subtleButtonClass}
-              onClick={onDeleteSelection}
-            >
-              Delete
-            </button>
-          ) : null}
+          {/* Check if this is a component instance */}
+          {selection.mesh.userData?.componentId ? (
+            // Component instance - show only component-specific actions
+            <>
+              {onModifyComponent ? (
+                <button
+                  className={componentEditing ? actionButtonClass : subtleButtonClass}
+                  onClick={onModifyComponent}
+                >
+                  {componentEditing ? "Finish Editing" : "Edit Component"}
+                </button>
+              ) : null}
+              {onDeleteSelection ? (
+                <button
+                  className={subtleButtonClass}
+                  onClick={onDeleteSelection}
+                >
+                  Delete
+                </button>
+              ) : null}
+            </>
+          ) : (
+            // Regular group - show group actions
+            <>
+              <button
+                className={subtleButtonClass}
+                onClick={onUngroupSelection}
+              >
+                Ungroup
+              </button>
+              <button
+                className={actionButtonClass}
+                onClick={onCreateComponent}
+              >
+                Create Component
+              </button>
+              {onDeleteSelection ? (
+                <button
+                  className={subtleButtonClass}
+                  onClick={onDeleteSelection}
+                >
+                  Delete
+                </button>
+              ) : null}
+            </>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-2">

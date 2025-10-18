@@ -14,6 +14,27 @@ const BLOCK_ID_PATTERN = /^(?:block|group|spawn)-(\d+)$/;
 export class BlockStore {
   private readonly blocks = new Map<string, EditorBlock>();
   private idSeed = 0;
+  
+  /**
+   * Rename a block (change its ID)
+   * Returns true if successful, false if newId already exists or block not found
+   */
+  public renameBlock(oldId: string, newId: string): boolean {
+    if (oldId === newId) return true;
+    if (this.blocks.has(newId)) return false; // New ID already exists
+    
+    const block = this.blocks.get(oldId);
+    if (!block) return false;
+    
+    // Update the block's ID
+    block.id = newId;
+    
+    // Update the map
+    this.blocks.delete(oldId);
+    this.blocks.set(newId, block);
+    
+    return true;
+  }
 
   constructor(private readonly scene: Scene) {}
 

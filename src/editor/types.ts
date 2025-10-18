@@ -39,4 +39,5 @@ export type SerializedNode = {
   componentId?: string;
   children?: SerializedNode[];
   isSpawnPoint?: boolean;
+  id?: string; // Custom ID/name for the block
 };
