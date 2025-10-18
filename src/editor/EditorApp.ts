@@ -430,6 +430,53 @@ export default class EditorApp {
     return true;
   }
 
+  /**
+   * Select all blocks whose screen projection falls within the given rectangle
+   */
+  public selectBlocksInRect(bounds: { left: number; top: number; right: number; bottom: number }, additive: boolean): void {
+    const blocksInRect: EditorBlock[] = [];
+    
+    // Project each block's position to screen space
+    for (const block of this.blocks.getAllBlocks()) {
+      const worldPos = new Vector3();
+      block.mesh.getWorldPosition(worldPos);
+      
+      // Project to screen space
+      const screenPos = worldPos.clone().project(this.camera);
+      
+      // Convert from NDC (-1 to 1) to screen coordinates
+      const canvas = this.canvas;
+      const rect = canvas.getBoundingClientRect();
+      const x = (screenPos.x * 0.5 + 0.5) * rect.width + rect.left;
+      const y = (-(screenPos.y) * 0.5 + 0.5) * rect.height + rect.top;
+      
+      // Check if within selection bounds
+      if (x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom) {
+        // Also check if in front of camera
+        if (screenPos.z < 1) {
+          blocksInRect.push(block);
+        }
+      }
+    }
+    
+    if (blocksInRect.length > 0) {
+      if (additive) {
+        // Add to existing selection
+        const currentArray = this.selection.getSelectionArray();
+        const combined = [...currentArray, ...blocksInRect];
+        // Remove duplicates
+        const unique = Array.from(new Map(combined.map(b => [b.id, b])).values());
+        this.selection.setSelectionByIds(unique.map(b => b.id));
+      } else {
+        // Replace selection
+        this.selection.setSelectionByIds(blocksInRect.map(b => b.id));
+      }
+    } else if (!additive) {
+      // Clear selection if nothing found and not additive
+      this.selection.clearSelection();
+    }
+  }
+
   public pickBlock(clientX: number, clientY: number, additive: boolean = false): EditorBlock | null {
     const rect = this.canvas.getBoundingClientRect();
     this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
@@ -670,18 +717,14 @@ export default class EditorApp {
   }
 
   public exportScenario(name: string): SerializedScenario {
-    console.log("[EditorApp] exportScenario called - name:", name);
     const usedComponentIds = new Set<string>();
     const serializedBlocks: SerializedNode[] = [];
-    const allBlocks = this.blocks.getAllBlocks();
-    console.log("[EditorApp] Total blocks to serialize:", allBlocks.length);
-    for (const block of allBlocks) {
+    for (const block of this.blocks.getAllBlocks()) {
       const node = this.serializeEditorBlock(block, usedComponentIds);
       if (node) {
         serializedBlocks.push(node);
       }
     }
-    console.log("[EditorApp] Serialized blocks:", serializedBlocks.length);
 
     const definitions = loadComponents().filter((component) => usedComponentIds.has(component.id));
 

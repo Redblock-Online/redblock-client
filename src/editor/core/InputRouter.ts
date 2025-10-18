@@ -55,6 +55,12 @@ export class InputRouter {
         event.preventDefault();
         this.transformHandler.handlePointerMove(event);
         break;
+      
+      case "idle":
+      case "selecting":
+        // Handle drag selection box
+        this.selectionHandler.handlePointerMove(event);
+        break;
     }
   }
 
@@ -76,7 +82,8 @@ export class InputRouter {
 
       case "idle":
       case "selecting":
-        // Quick click without drag
+        // Handle drag selection box end
+        this.selectionHandler.handlePointerUp(event);
         break;
     }
   }

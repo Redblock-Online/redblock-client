@@ -20,18 +20,10 @@ export class BlockStore {
    * The ID remains unchanged, only the display name is updated
    */
   public renameBlock(id: string, newName: string): boolean {
-    console.log("[BlockStore] renameBlock called - id:", id, "newName:", newName);
     const block = this.blocks.get(id);
-    if (!block) {
-      console.log("[BlockStore] Block not found!");
-      return false;
-    }
+    if (!block) return false;
     
-    console.log("[BlockStore] Block before rename:", { id: block.id, name: block.name });
-    // Update the block's display name
     block.name = newName;
-    console.log("[BlockStore] Block after rename:", { id: block.id, name: block.name });
-    
     return true;
   }
 
