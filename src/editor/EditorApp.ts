@@ -313,6 +313,23 @@ export default class EditorApp {
   public clearMovementState(): void {
     this.movement.clearState();
   }
+  
+  /**
+   * Disable editor controls (for when game preview is active)
+   */
+  public disableControls(): void {
+    this.controls.enabled = false;
+    this.movement.clearState();
+    console.log("[EditorApp] Controls disabled");
+  }
+  
+  /**
+   * Enable editor controls (for when returning from game preview)
+   */
+  public enableControls(): void {
+    this.controls.enabled = true;
+    console.log("[EditorApp] Controls enabled");
+  }
 
   public placeBlockAt(clientX: number, clientY: number): EditorBlock | null {
     const point = this.intersectGround(clientX, clientY);

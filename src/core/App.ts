@@ -446,9 +446,11 @@ export default class App {
       // Add editor cubes if they exist (only the cubeMesh, not the outline or edges)
       const editorCubesGroup = (this as { editorCubesGroup?: import("three").Group }).editorCubesGroup;
       if (editorCubesGroup) {
-        editorCubesGroup.children.forEach((cube: import("three").Object3D & { cubeMesh?: import("three").Mesh }) => {
-          if (cube.cubeMesh) {
-            objects.push(cube.cubeMesh);
+        // Recursively find all cubeMesh objects in the hierarchy (including nested groups/components)
+        editorCubesGroup.traverse((obj: import("three").Object3D) => {
+          const objWithCubeMesh = obj as import("three").Object3D & { cubeMesh?: import("three").Mesh };
+          if (objWithCubeMesh.cubeMesh) {
+            objects.push(objWithCubeMesh.cubeMesh);
           }
         });
       }

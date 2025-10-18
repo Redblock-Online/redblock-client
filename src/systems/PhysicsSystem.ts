@@ -23,9 +23,9 @@ export class PhysicsSystem {
   private physicsEnabled = false; // Physics paused by default
   private colliders: Map<CollisionBox, RAPIER.Collider> = new Map();
   
-  public playerRadius = 0.3;
-  public playerHeight = 1.8;
-  private stepHeight = 0.5;
+  public playerRadius = 0.25; // Reduced from 0.3 to 0.25 to avoid getting stuck on edges
+  public playerHeight = 1.5;
+  private stepHeight = 0.2; // Reduced from 0.5 to 0.2 - only small steps can be climbed
   
   // Temporary vectors to avoid allocations
   private _tempVec = new THREE.Vector3();
@@ -42,15 +42,16 @@ export class PhysicsSystem {
     const gravity = new RAPIER.Vector3(0.0, -24.0, 0.0);
     this.world = new RAPIER.World(gravity);
     
-    // Create character controller with NO offset to keep player at ground level
-    this.characterController = this.world.createCharacterController(0.0);
-    this.characterController.enableAutostep(this.stepHeight, 0.5, true);
+    // Create character controller with small offset to smooth out collisions
+    this.characterController = this.world.createCharacterController(0.01);
+    // min_width reduced to 0.1 to avoid getting stuck on edges
+    this.characterController.enableAutostep(this.stepHeight, 0.1, true);
     // Disable snap-to-ground completely to prevent vertical jitter
     // this.characterController.enableSnapToGround(0.02);
     this.characterController.setSlideEnabled(true);
     // Ensure character controller doesn't apply any filtering by default
     this.characterController.setApplyImpulsesToDynamicBodies(false);
-    console.log("[PhysicsSystem] Character controller configured with offset: 0.0, snap-to-ground: DISABLED");
+    console.log("[PhysicsSystem] Character controller configured with offset: 0.01, autostep: 0.2/0.1, snap-to-ground: DISABLED");
     
     // Create player rigid body (kinematic position-based)
     // Position represents the BASE of the player (feet level)
@@ -421,13 +422,14 @@ export class PhysicsSystem {
   }
 
   /**
-   * Set step height
+   * Set step height (currently disabled - autostep is off)
    */
   public setStepHeight(height: number): void {
     this.stepHeight = height;
-    if (this.initialized && this.characterController) {
-      this.characterController.enableAutostep(height, 0.1, true);
-    }
+    // Autostep is disabled to prevent climbing blocks without jumping
+    // if (this.initialized && this.characterController) {
+    //   this.characterController.enableAutostep(height, 0.1, true);
+    // }
   }
 
   /**

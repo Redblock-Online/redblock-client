@@ -877,12 +877,20 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       if (isGameActive) {
         editorCanvas.style.display = "none";
         editorCanvas.style.pointerEvents = "none";
+        // Disable editor controls to prevent camera movement
+        if (editor) {
+          editor.disableControls();
+        }
       } else {
         editorCanvas.style.display = "block";
         editorCanvas.style.pointerEvents = "auto";
+        // Re-enable editor controls when returning from game
+        if (editor) {
+          editor.enableControls();
+        }
       }
     }
-  }, [isGameActive]);
+  }, [isGameActive, editor]);
 
   return (
     <>

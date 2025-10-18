@@ -1,4 +1,6 @@
 import type { SerializedScenario } from "../scenarioStore";
+import type { SerializedNode } from "../types";
+import type { SavedComponent } from "../componentsStore";
 import type App from "@/core/App";
 import type { UIController } from "@/ui/react/mountUI";
 import type { TimerController, TimerHint } from "@/ui/react/TimerDisplay";
@@ -9,6 +11,182 @@ export interface GameInstance {
   dispose: () => void;
   pause: () => void;
   resume: () => void;
+}
+
+// Helper function to recursively process blocks (including nested children in groups)
+function processBlockRecursively(
+  block: SerializedNode,
+  parentGroup: THREE.Group,
+  app: App,
+  isTopLevel: boolean = true,
+  componentDefinitions?: SavedComponent[]
+): void {
+  // Skip spawn points
+  if (block.isSpawnPoint) {
+    return;
+  }
+  
+  // Process based on type
+  if (block.type === "block") {
+    // Create a cube
+    console.log(`[Bootstrap] Creating block at position:`, block.transform.position, `isTopLevel: ${isTopLevel}`);
+    const cube = new Cube(false, false, false, true);
+    
+    // Apply transform
+    cube.position.set(
+      block.transform.position.x,
+      block.transform.position.y,
+      block.transform.position.z
+    );
+    cube.rotation.set(
+      block.transform.rotation.x,
+      block.transform.rotation.y,
+      block.transform.rotation.z
+    );
+    cube.scale.set(
+      block.transform.scale.x,
+      block.transform.scale.y,
+      block.transform.scale.z
+    );
+    
+    cube.cubeMesh.name = "EditorCube";
+    cube.outlineMesh.visible = true;
+    (cube.outlineMesh as THREE.Mesh & { raycast?: () => void }).raycast = () => {};
+    
+    parentGroup.add(cube);
+    
+    // Add collider using world coordinates
+    cube.updateWorldMatrix(true, true);
+    const boundingBox = new THREE.Box3().setFromObject(cube);
+    const collider = {
+      min: boundingBox.min.clone(),
+      max: boundingBox.max.clone(),
+      object: cube
+    };
+    
+    app.collisionSystem.waitForInit().then(() => {
+      app.collisionSystem.addCollider(collider);
+    });
+  } else if (block.type === "group" && block.children) {
+    // Groups have world transform, children have local transform
+    console.log(`[Bootstrap] Processing group with ${block.children.length} children at position:`, block.transform.position);
+    
+    // If this is a top-level group, create a container with world transform
+    if (isTopLevel) {
+      const groupContainer = new THREE.Group();
+      
+      // Apply group's world transform
+      groupContainer.position.set(
+        block.transform.position.x,
+        block.transform.position.y,
+        block.transform.position.z
+      );
+      groupContainer.rotation.set(
+        block.transform.rotation.x,
+        block.transform.rotation.y,
+        block.transform.rotation.z
+      );
+      groupContainer.scale.set(
+        block.transform.scale.x,
+        block.transform.scale.y,
+        block.transform.scale.z
+      );
+      
+      parentGroup.add(groupContainer);
+      
+      // Process children with local coordinates relative to this group
+      block.children.forEach((child: SerializedNode) => {
+        processBlockRecursively(child, groupContainer, app, false, componentDefinitions);
+      });
+    } else {
+      // Nested group - just process children
+      block.children.forEach((child: SerializedNode) => {
+        processBlockRecursively(child, parentGroup, app, false, componentDefinitions);
+      });
+    }
+  } else if (block.type === "component") {
+    // Components reference a definition by componentId - expand them
+    if (componentDefinitions) {
+      expandComponentInstance(block, componentDefinitions, parentGroup, app);
+    } else {
+      console.warn(`[Bootstrap] Component instance found but no componentDefinitions provided`);
+    }
+  }
+}
+
+// Helper to expand component instances using component definitions
+function expandComponentInstance(
+  componentNode: SerializedNode,
+  componentDefinitions: SavedComponent[],
+  parentGroup: THREE.Group,
+  app: App
+): void {
+  if (!componentNode.componentId) {
+    console.error("[Bootstrap] Component node missing componentId");
+    return;
+  }
+  
+  // Find the component definition
+  const definition = componentDefinitions.find(def => def.id === componentNode.componentId);
+  if (!definition) {
+    console.error(`[Bootstrap] Component definition not found for id: ${componentNode.componentId}`);
+    return;
+  }
+  
+  console.log(`[Bootstrap] Expanding component "${definition.label}" with ${definition.members.length} members`);
+  
+  // Create a container for this component instance
+  const componentContainer = new THREE.Group();
+  
+  // Apply the component instance's transform
+  componentContainer.position.set(
+    componentNode.transform.position.x,
+    componentNode.transform.position.y,
+    componentNode.transform.position.z
+  );
+  componentContainer.rotation.set(
+    componentNode.transform.rotation.x,
+    componentNode.transform.rotation.y,
+    componentNode.transform.rotation.z
+  );
+  componentContainer.scale.set(
+    componentNode.transform.scale.x,
+    componentNode.transform.scale.y,
+    componentNode.transform.scale.z
+  );
+  
+  parentGroup.add(componentContainer);
+  
+  // Process each member from the component definition
+  // Members have local transforms relative to the component
+  definition.members.forEach((member) => {
+    // Create a block for each member
+    const cube = new Cube(false, false, false, true);
+    
+    // Apply member's local transform
+    cube.position.set(member.position.x, member.position.y, member.position.z);
+    cube.rotation.set(member.rotation.x, member.rotation.y, member.rotation.z);
+    cube.scale.set(member.scale.x, member.scale.y, member.scale.z);
+    
+    cube.cubeMesh.name = "EditorCube";
+    cube.outlineMesh.visible = true;
+    (cube.outlineMesh as THREE.Mesh & { raycast?: () => void }).raycast = () => {};
+    
+    componentContainer.add(cube);
+    
+    // Add collider using world coordinates
+    cube.updateWorldMatrix(true, true);
+    const boundingBox = new THREE.Box3().setFromObject(cube);
+    const collider = {
+      min: boundingBox.min.clone(),
+      max: boundingBox.max.clone(),
+      object: cube
+    };
+    
+    app.collisionSystem.waitForInit().then(() => {
+      app.collisionSystem.addCollider(collider);
+    });
+  });
 }
 
 function loadCustomScenario(app: App, scenario: SerializedScenario) {
@@ -76,88 +254,12 @@ function loadCustomScenario(app: App, scenario: SerializedScenario) {
   app.controls.initPlayerRoom(centerX, centerZ, roomSize);
   console.log("[Bootstrap] Player room updated");
   
-  // Add each block from the scenario
-  let blockCount = 0;
-  let spawnCount = 0;
-  
-  scenario.blocks.forEach((block, index) => {
-    console.log(`[Bootstrap] Processing block ${index}:`, block);
-    
-    if (block.isSpawnPoint) {
-      // Spawn point already processed above, skip
-      spawnCount++;
-      console.log("[Bootstrap] Skipping spawn point (already processed)");
-      return;
-    }
-    
-    // Create a cube using the game's Cube class (with cylindrical edges)
-    blockCount++;
-    const cube = new Cube(false, false, false, true); // randomColor, isTarget, shootable, isRoom
-    
-    // Keep default white color (don't make it shootable, so it stays white)
-    
-    // Set position
-    cube.position.set(
-      block.transform.position.x,
-      block.transform.position.y,
-      block.transform.position.z
-    );
-    
-    // Set rotation
-    cube.rotation.set(
-      block.transform.rotation.x,
-      block.transform.rotation.y,
-      block.transform.rotation.z
-    );
-    
-    // Set scale: Editor cubes are 1:1 scale, but Cube class has baseScale=0.4 applied in constructor
-    // The Cube constructor sets this.scale = (0.4, 0.4, 0.4)
-    // So when we set cube.scale, we're overriding that
-    // To match editor size: if editor has scale 1.0, we want final size 1.0
-    // Cube has: geometry(1.0) * scale(what we set)
-    // So we should set scale directly to match editor scale
-
-    
-    cube.scale.set(
-      block.transform.scale.x,
-      block.transform.scale.y,
-      block.transform.scale.z
-    );
-    
-    console.log(`[Bootstrap] Created cube at pos: (${cube.position.x.toFixed(2)}, ${cube.position.y.toFixed(2)}, ${cube.position.z.toFixed(2)}) scale: (${cube.scale.x.toFixed(2)}, ${cube.scale.y.toFixed(2)}, ${cube.scale.z.toFixed(2)})`);
-    
-    // Make sure only the cubeMesh is raycastable, not the outline
-    cube.cubeMesh.name = "EditorCube";
-    cube.outlineMesh.visible = true;
-    // Disable raycast on outline mesh
-    (cube.outlineMesh as THREE.Mesh & { raycast?: () => void }).raycast = () => {};
-    
-    customGroup.add(cube);
-    
-    // CRITICAL: Use Box3.setFromObject to get ACTUAL visual bounds
-    // Cube is a Group with outlineMesh scaled to 1.02, so we need the real bounding box
-    const boundingBox = new THREE.Box3().setFromObject(cube);
-    const boxCenter = new THREE.Vector3();
-    const boxSize = new THREE.Vector3();
-    
-    boundingBox.getCenter(boxCenter);
-    boundingBox.getSize(boxSize);
-    
-    console.log(`[Bootstrap] Actual bounding box center: (${boxCenter.x.toFixed(2)}, ${boxCenter.y.toFixed(2)}, ${boxCenter.z.toFixed(2)})`);
-    console.log(`[Bootstrap] Actual bounding box size: (${boxSize.x.toFixed(2)}, ${boxSize.y.toFixed(2)}, ${boxSize.z.toFixed(2)})`);
-    
-    // Create collider matching the VISUAL bounds exactly (including outline)
-    const collider = {
-      min: boundingBox.min.clone(),
-      max: boundingBox.max.clone(),
-      object: cube
-    };
-    
-    // Add collider to physics system (wait for initialization)
-    app.collisionSystem.waitForInit().then(() => {
-      app.collisionSystem.addCollider(collider);
-      console.log(`[Bootstrap] Collider added - min: (${collider.min.x.toFixed(2)}, ${collider.min.y.toFixed(2)}, ${collider.min.z.toFixed(2)}) max: (${collider.max.x.toFixed(2)}, ${collider.max.y.toFixed(2)}, ${collider.max.z.toFixed(2)})`);
-    });
+  // Process each block from the scenario recursively (handles nested groups/components)
+  console.log("[Bootstrap] Processing blocks recursively...");
+  console.log("[Bootstrap] Component definitions available:", scenario.componentDefinitions.length);
+  scenario.blocks.forEach((block: SerializedNode, index: number) => {
+    console.log(`[Bootstrap] Processing top-level block ${index}:`, block.type);
+    processBlockRecursively(block, customGroup, app, true, scenario.componentDefinitions);
   });
   
   // NOW process spawn point AFTER all colliders are added
@@ -213,9 +315,8 @@ function loadCustomScenario(app: App, scenario: SerializedScenario) {
   console.log("[Bootstrap] Scene background set to white");
   
   console.log("[Bootstrap] ========== SCENARIO LOADED ==========");
-  console.log("[Bootstrap] Blocks created:", blockCount);
-  console.log("[Bootstrap] Spawn points:", spawnCount);
-  console.log("[Bootstrap] Custom group children:", customGroup.children.length);
+  console.log("[Bootstrap] Top-level blocks:", scenario.blocks.length);
+  console.log("[Bootstrap] Total cubes created:", customGroup.children.length);
   console.log("[Bootstrap] Scene children after add:", scene.children.length);
   console.log("[Bootstrap] Ground plane added for reference");
   
