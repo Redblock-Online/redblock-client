@@ -82,17 +82,17 @@ export class MovementController {
       return;
     }
 
+    // Get camera's forward direction (includes vertical component for free-look movement)
     this.camera.getWorldDirection(this.forward);
-    this.forward.y = 0;
-    if (this.forward.lengthSq() === 0) {
-      return;
-    }
     this.forward.normalize();
 
+    // Calculate right vector perpendicular to camera forward and world up
     this.right.crossVectors(this.forward, this.worldUp);
-    this.right.y = 0;
     if (this.right.lengthSq() > 0) {
       this.right.normalize();
+    } else {
+      // Fallback when looking straight up/down
+      this.right.set(1, 0, 0);
     }
 
     this.offset.set(0, 0, 0);
