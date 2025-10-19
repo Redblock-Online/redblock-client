@@ -454,12 +454,28 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         ],
       },
       {
+        id: "view",
+        label: "View",
+        items: [
+          { 
+            id: "view-toggle-sidebar", 
+            label: showSidebar ? "Hide Components (B)" : "Show Components (B)", 
+            action: () => setShowSidebar(prev => !prev) 
+          },
+          { 
+            id: "view-toggle-inspector", 
+            label: showInspector ? "Hide Inspector (I)" : "Show Inspector (I)", 
+            action: () => setShowInspector(prev => !prev) 
+          },
+        ],
+      },
+      {
         id: "components",
         label: "Components",
         items: [{ id: "components-refresh", label: "Refresh list", action: handleRefreshComponentsMenu }],
       },
     ],
-    [handleLoadScenario, handleNewScenario, handleRefreshComponentsMenu, handleSaveCurrentScenario, handleSaveScenarioAs, hasUnsavedChanges],
+    [handleLoadScenario, handleNewScenario, handleRefreshComponentsMenu, handleSaveCurrentScenario, handleSaveScenarioAs, hasUnsavedChanges, showSidebar, showInspector],
   );
 
   const activeMenu = useMemo(() => {
