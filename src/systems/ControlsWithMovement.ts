@@ -37,6 +37,19 @@ export default class Controls {
   private jumpCooldown = 0.15;
   private groundCheckDistance = 0.15; // Distance to check for ground below player
 
+  // Head bobbing variables
+  private headBobbingTime = 0;
+  private headBobbingAmplitude = 0.065; // Amplitud del movimiento vertical (más notorio)
+  private headBobbingFrequency = 3.8; // Frecuencia del movimiento (más dinámico)
+  private headBobbingSideAmplitude = 0.038; // Amplitud del movimiento lateral (más notorio)
+  private isMoving = false;
+  private lastMovementTime = 0;
+  private headBobbingDamping = 7.5; // Velocidad de transición balanceada
+
+  // Audio variables
+  private stepsAudio: HTMLAudioElement | null = null;
+  private isStepsPlaying = false;
+
   private keysPressed: Record<string, boolean> = {};
   private wsManager: WSManager;
   private getAmmountOfTargetsSelected: () => number;
@@ -151,6 +164,7 @@ export default class Controls {
     this.lastYawRot.copy(this.yawObject.rotation);
     this.lastPitchRot.copy(this.pitchObject.rotation);
 
+    this.initStepsAudio();
     this.initPointerLock();
     this.initKeyboardListeners();
   }
@@ -300,13 +314,6 @@ export default class Controls {
   }
 
   /**
-   * Set paused state
-   */
-  public setPaused(paused: boolean) {
-    this.paused = paused;
-  }
-
-  /**
    * Reset player physics state (velocity)
    * Call when level starts/ends
    */
@@ -376,13 +383,16 @@ export default class Controls {
     this._tempDesiredVel.copy(this._tempTargetDir).multiplyScalar(effectiveSpeed);
     const bothLateralPressed = !!this.keysPressed[this.keybindings.left] && !!this.keysPressed[this.keybindings.right];
 
-    if (bothLateralPressed) {
-      this.velocity.set(0, 0, 0)
+    // Si no hay teclas presionadas, detener inmediatamente
+    if (this._tempTargetDir.length() === 0) {
+      this.velocity.set(0, 0, 0);
+    } else if (bothLateralPressed) {
+      this.velocity.set(0, 0, 0);
     } else {
       this.velocity.lerp(this._tempDesiredVel, this.acceleration);
+      this.velocity.multiplyScalar(Math.pow(this.damping, deltaTime));
     }
-   
-    this.velocity.multiplyScalar(Math.pow(this.damping, deltaTime));
+    this.yawObject.position.addScaledVector(this.velocity, deltaTime);
 
     const now = performance.now() / 1000;
     const canUseBufferedJump =
@@ -470,11 +480,158 @@ export default class Controls {
       this.pitchObject.position.y = targetY; // Snap to target if very close
     }
 
+    // Head bobbing logic
+    this.updateHeadBobbing(deltaTime);
+
     // Periodic check (you already had it)
     this.changeCheckAccumulator += deltaTime;
     if (this.changeCheckAccumulator >= this.changeCheckInterval) {
       this.checkChanges(); // <- optimized below
       this.changeCheckAccumulator = 0;
+    }
+  }
+
+  private updateHeadBobbing(deltaTime: number) {
+    // Detectar si el jugador está presionando teclas de movimiento
+    const isKeyPressed = this.keysPressed["w"] || this.keysPressed["a"] || this.keysPressed["s"] || this.keysPressed["d"];
+    const isCurrentlyMoving = isKeyPressed && this.onGround;
+    
+    // Debug: mostrar estado del movimiento
+    if (isCurrentlyMoving && !this.isMoving) {
+      console.log('Movimiento detectado - teclas presionadas');
+    }
+    
+    if (isCurrentlyMoving) {
+      this.isMoving = true;
+      this.lastMovementTime = performance.now();
+      this.headBobbingTime += deltaTime * this.headBobbingFrequency;
+      // Reproducir audio de pasos cuando se está moviendo
+      this.playStepsAudio();
+    } else {
+      // Si no se está moviendo, detener inmediatamente el head bobbing
+      if (this.isMoving) {
+        this.isMoving = false;
+        this.headBobbingTime = 0;
+        // Detener audio de pasos cuando se deja de mover
+        this.stopStepsAudio();
+      }
+    }
+
+    if (this.isMoving && this.onGround && !this.isCrouching) {
+      // Detectar dirección del movimiento
+      const forwardMovement = this.keysPressed["w"];
+      const backwardMovement = this.keysPressed["s"];
+      const leftMovement = this.keysPressed["a"];
+      const rightMovement = this.keysPressed["d"];
+      
+      // Calcular amplitud basada en la dirección
+      let verticalAmplitude = this.headBobbingAmplitude;
+      let sideAmplitude = this.headBobbingSideAmplitude;
+      
+      // Aumentar movimiento para direcciones laterales y hacia atrás
+      if (leftMovement || rightMovement || backwardMovement) {
+        verticalAmplitude *= 1.4; // 40% más para laterales y atrás
+        sideAmplitude *= 1.6; // 60% más para laterales y atrás
+      }
+      
+      // Calcular el movimiento de head bobbing
+      const verticalBob = Math.sin(this.headBobbingTime * Math.PI * 2) * verticalAmplitude;
+      const sideBob = Math.sin(this.headBobbingTime * Math.PI * 2 * 0.5) * sideAmplitude;
+      
+      // Aplicar el movimiento a la cámara de forma más suave
+      this.camera.position.y += (verticalBob - this.camera.position.y) * 5 * deltaTime;
+      this.camera.position.x += (sideBob - this.camera.position.x) * 5 * deltaTime;
+    } else {
+      // Suavemente regresar a la posición original
+      this.camera.position.y += (0 - this.camera.position.y) * this.headBobbingDamping * deltaTime;
+      this.camera.position.x += (0 - this.camera.position.x) * this.headBobbingDamping * deltaTime;
+    }
+  }
+
+  public setPaused(paused: boolean) {
+    this.paused = paused;
+    if (paused) {
+      // Clear active inputs and motion to avoid continued movement
+      this.keysPressed = {};
+      this.isCrouching = false;
+      this.velocity.set(0, 0, 0);
+      this.velocityY = 0;
+      this.lastJumpPressedTime = -Infinity;
+      this.stopStepsAudio();
+    }
+  }
+
+  private initStepsAudio() {
+    // Intentar diferentes rutas para el archivo de audio
+    const audioPaths = [
+      '/music/steps.mp3',
+      './music/steps.mp3',
+      '/public/music/steps.mp3'
+    ];
+    
+    this.stepsAudio = new Audio(audioPaths[0]);
+    this.stepsAudio.loop = true;
+    this.stepsAudio.volume = 0.5; // Aumentar volumen para mejor audibilidad
+    this.stepsAudio.preload = 'auto';
+    
+    // Agregar listeners para debug
+    this.stepsAudio.addEventListener('loadstart', () => {
+      console.log('Audio de pasos: Iniciando carga...');
+    });
+    
+    this.stepsAudio.addEventListener('canplaythrough', () => {
+      console.log('Audio de pasos: Listo para reproducir');
+    });
+    
+    this.stepsAudio.addEventListener('error', (e) => {
+      console.error('Error cargando audio de pasos:', e);
+      // Intentar con rutas alternativas
+      this.tryAlternativeAudioPaths(audioPaths.slice(1));
+    });
+  }
+  
+  private tryAlternativeAudioPaths(paths: string[]) {
+    if (paths.length === 0) {
+      console.error('No se pudo cargar el audio de pasos con ninguna ruta');
+      return;
+    }
+    
+    console.log('Intentando ruta alternativa:', paths[0]);
+    this.stepsAudio = new Audio(paths[0]);
+    this.stepsAudio.loop = true;
+    this.stepsAudio.volume = 0.5;
+    this.stepsAudio.preload = 'auto';
+    
+    this.stepsAudio.addEventListener('error', (e) => {
+      console.error('Error con ruta alternativa:', paths[0], e);
+      this.tryAlternativeAudioPaths(paths.slice(1));
+    });
+    
+    this.stepsAudio.addEventListener('canplaythrough', () => {
+      console.log('Audio de pasos cargado exitosamente con ruta:', paths[0]);
+    });
+  }
+
+  private playStepsAudio() {
+    if (this.stepsAudio && !this.isStepsPlaying && !this.paused) {
+      console.log('Intentando reproducir audio de pasos...');
+      this.stepsAudio.play().then(() => {
+        console.log('Audio de pasos reproducido exitosamente');
+        this.isStepsPlaying = true;
+      }).catch((error) => {
+        console.error('No se pudo reproducir el audio de pasos:', error);
+        // Intentar cargar el audio nuevamente si hay error
+        this.stepsAudio?.load();
+      });
+    }
+  }
+
+  private stopStepsAudio() {
+    if (this.stepsAudio && this.isStepsPlaying) {
+      console.log('Deteniendo audio de pasos...');
+      this.stepsAudio.pause();
+      this.stepsAudio.currentTime = 0;
+      this.isStepsPlaying = false;
     }
   }
 }
