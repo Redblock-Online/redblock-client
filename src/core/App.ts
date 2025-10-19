@@ -863,6 +863,11 @@ export default class App {
   }
 
   public startGame(scenarioId: string) {
+    // In editor/offline mode, there is no WS 'me'; start immediately
+    if (this.isEditorMode) {
+      this.startScenarioById(scenarioId);
+      return;
+    }
     if (!this.wsManager.getMe()) {
       this.wsManager.onMeReady(() => this.startGame(scenarioId));
       return;

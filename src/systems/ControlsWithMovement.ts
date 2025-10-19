@@ -394,7 +394,12 @@ export default class Controls {
       this.velocity.lerp(this._tempDesiredVel, this.acceleration);
       this.velocity.multiplyScalar(Math.pow(this.damping, deltaTime));
     }
-    this.yawObject.position.addScaledVector(this.velocity, deltaTime);
+    // Only pre-apply horizontal movement when physics are disabled.
+    // When physics are enabled, the character controller will compute and return the corrected position.
+    const physicsActive = !!this.collisionSystem && this.collisionSystem.isPhysicsEnabled();
+    if (!physicsActive) {
+      this.yawObject.position.addScaledVector(this.velocity, deltaTime);
+    }
 
     const now = performance.now() / 1000;
     const canUseBufferedJump =
@@ -413,7 +418,7 @@ export default class Controls {
     }
 
     // Apply gravity ONLY if physics is enabled (i.e., game has started)
-    if (this.collisionSystem && this.collisionSystem.isPhysicsEnabled()) {
+    if (physicsActive) {
       if (!this.onGround) {
         this.velocityY += this.gravity * deltaTime;
         if (this.velocityY < this.terminalVelocity) {
@@ -470,6 +475,7 @@ export default class Controls {
       // No collision system, just apply movement
       const desiredY = this.yawObject.position.y + this.velocityY * deltaTime;
       this.yawObject.position.y = desiredY;
+      // And also apply horizontal movement if it wasn't already applied above (covered by !physicsActive)
     }
 
     const targetY = this.isCrouching ? this.crouchHeight : this.standHeight;
