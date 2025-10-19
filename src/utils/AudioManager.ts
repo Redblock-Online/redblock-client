@@ -39,19 +39,33 @@ interface AudioOptions {
   loop?: boolean;         // Loop the sound, defaults to false
   channel?: AudioChannel; // Override channel from loaded sound
   pitch?: number;         // Playback rate (0.5 = half speed, 2.0 = double), defaults to 1.0
+  startAtMs?: number;     // Optional: start playback offset in milliseconds
 }
 
 interface LoadedSound {
   url: string;
   channel: AudioChannel;
-  buffer: HTMLAudioElement; // Master audio element
+  buffer: HTMLAudioElement; // Preloaded HTML element (fallback)
+  audioBuf?: AudioBuffer;   // Decoded Web Audio buffer (low-latency path)
 }
 
-interface ActiveSound {
+type ActiveSound = ActiveHtmlSound | ActiveWebSound;
+
+interface ActiveHtmlSound {
   id: string;
   name: string;
   audio: HTMLAudioElement;
   channel: AudioChannel;
+  kind: 'html';
+}
+
+interface ActiveWebSound {
+  id: string;
+  name: string;
+  node: AudioBufferSourceNode;
+  gain: GainNode;
+  channel: AudioChannel;
+  kind: 'web';
 }
 
 export class AudioManager {
@@ -59,6 +73,8 @@ export class AudioManager {
   
   // Loaded sound library
   private sounds = new Map<string, LoadedSound>();
+  private knownSounds = new Map<string, { url: string; channel: AudioChannel }>();
+  private loadingSounds = new Set<string>();
   
   // Active playing sounds
   private activeSounds = new Map<string, ActiveSound>();
@@ -70,10 +86,17 @@ export class AudioManager {
   // Volume controls
   private masterVolume = 1.0;
   private channelVolumes = new Map<AudioChannel, number>();
+
+  // Web Audio graph
+  private ctx: AudioContext | null = null;
+  private masterGain: GainNode | null = null;
+  private channelGains = new Map<AudioChannel, GainNode>();
   
   // State
   private muted = false;
   private nextSoundId = 0;
+  private webAudioUsed = false; // Track if Web Audio has been used
+  private lastMissingWarn = new Map<string, number>();
   
   private constructor() {
     // Load volumes from localStorage with defaults
@@ -87,6 +110,59 @@ export class AudioManager {
     }
     
     console.log(`[AudioManager] Initialized with pool size: ${this.poolSize}`);
+
+    // Try to init Web Audio (will be resumed on first play() call after user gesture)
+    try {
+      type WindowWithWebAudio = Window & { AudioContext: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
+      const w = window as WindowWithWebAudio;
+      const Ctx = w.AudioContext || w.webkitAudioContext;
+      if (typeof Ctx === 'function') {
+        const ctx: AudioContext = new Ctx();
+        this.ctx = ctx;
+        const masterGain = ctx.createGain();
+        masterGain.gain.value = this.masterVolume;
+        masterGain.connect(ctx.destination);
+        this.masterGain = masterGain;
+        (['sfx','music','ambient','ui'] as AudioChannel[]).forEach(ch => {
+          const g = ctx.createGain();
+          g.gain.value = this.channelVolumes.get(ch) ?? 1.0;
+          g.connect(masterGain);
+          this.channelGains.set(ch, g);
+        });
+      }
+    } catch {
+      // Ignore - will fallback to HTMLAudio
+    }
+  }
+  
+  /**
+   * Ensure AudioContext and gain graph exist. Recreate them if the context was closed by device changes.
+   */
+  private initContextIfNeeded(): void {
+    try {
+      type WindowWithWebAudio = Window & { AudioContext: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
+      const w = window as WindowWithWebAudio;
+      const Ctx = w.AudioContext || w.webkitAudioContext;
+      if (!Ctx) return;
+      const needsNew = !this.ctx || this.ctx.state === 'closed';
+      if (needsNew) {
+        const ctx: AudioContext = new Ctx();
+        this.ctx = ctx;
+        const masterGain = ctx.createGain();
+        masterGain.gain.value = this.masterVolume;
+        masterGain.connect(ctx.destination);
+        this.masterGain = masterGain;
+        this.channelGains.clear();
+        (['sfx','music','ambient','ui'] as AudioChannel[]).forEach(ch => {
+          const g = ctx.createGain();
+          g.gain.value = this.channelVolumes.get(ch) ?? 1.0;
+          g.connect(masterGain);
+          this.channelGains.set(ch, g);
+        });
+      }
+    } catch {
+      /* ignore */
+    }
   }
   
   /**
@@ -143,6 +219,28 @@ export class AudioManager {
   }
 
   /**
+   * Ensure Web Audio context is running (must be called in a user gesture).
+   */
+  public async resume(): Promise<void> {
+    if (this.ctx && this.ctx.state !== 'running') {
+      try { await this.ctx.resume(); } catch { /* ignore */ }
+    }
+  }
+
+  /**
+   * Get AudioContext base latency (lower is better)
+   */
+  public getLatencyInfo(): { baseLatency: number; outputLatency: number; state: string } | null {
+    if (!this.ctx) return null;
+    const ctxWithLatency = this.ctx as AudioContext & { baseLatency?: number; outputLatency?: number };
+    return {
+      baseLatency: ctxWithLatency.baseLatency ?? 0,
+      outputLatency: ctxWithLatency.outputLatency ?? 0,
+      state: this.ctx.state
+    };
+  }
+
+  /**
    * Load a sound into memory
    * @param name - Unique identifier for this sound
    * @param url - Path to audio file
@@ -154,19 +252,40 @@ export class AudioManager {
     url: string, 
     channel: AudioChannel = 'sfx'
   ): Promise<void> {
+    // Track known mapping for on-demand loads
+    this.knownSounds.set(name, { url, channel });
     if (this.sounds.has(name)) {
       console.warn(`[AudioManager] Sound '${name}' already loaded`);
       return;
     }
 
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       const audio = new Audio(url);
       audio.preload = 'auto';
       
       audio.addEventListener('canplaythrough', () => {
-        this.sounds.set(name, { url, channel, buffer: audio });
-        console.log(`[AudioManager] ✓ Loaded '${name}' (${channel})`);
-        resolve();
+        const entry: LoadedSound = { url, channel, buffer: audio };
+        this.sounds.set(name, entry);
+        
+        // BLOCKING: Force Web Audio decode to complete before resolving
+        if (this.ctx) {
+          fetch(url)
+            .then(r => r.arrayBuffer())
+            .then(ab => this.ctx!.decodeAudioData(ab))
+            .then(decoded => {
+              const s = this.sounds.get(name);
+              if (s) s.audioBuf = decoded;
+              console.log(`[AudioManager] ✓ Loaded '${name}' (${channel}) [Web Audio ready]`);
+              resolve();
+            })
+            .catch((err) => {
+              console.warn(`[AudioManager] Web Audio decode failed for '${name}', using HTML fallback:`, err);
+              resolve();
+            });
+        } else {
+          console.log(`[AudioManager] ✓ Loaded '${name}' (${channel}) [HTML Audio only]`);
+          resolve();
+        }
       }, { once: true });
       
       audio.addEventListener('error', (e) => {
@@ -183,40 +302,136 @@ export class AudioManager {
    * @returns Unique ID for this sound instance (use to stop it)
    */
   public play(name: string, options: AudioOptions = {}): string | null {
+    // Recreate/resume context if needed (non-blocking)
+    this.initContextIfNeeded();
+    if (this.ctx && this.ctx.state !== 'running') {
+      this.ctx.resume().catch(() => {/* ignore */});
+    }
+
     const sound = this.sounds.get(name);
     if (!sound) {
-      console.warn(`[AudioManager] Sound '${name}' not loaded. Available:`, Array.from(this.sounds.keys()));
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      const last = this.lastMissingWarn.get(name) ?? 0;
+      if (now - last > 500) {
+        console.warn(`[AudioManager] Sound '${name}' not loaded. Available:`, Array.from(this.sounds.keys()));
+        this.lastMissingWarn.set(name, now);
+      }
+      // If we know about this sound (or it's a common default), lazy-load (but don't auto-replay loops)
+      let known = this.knownSounds.get(name);
+      if (!known) {
+        // Register sensible defaults for common names to survive HMR/device resets
+        if (name === 'steps') known = { url: '/audio/sfx/steps.wav', channel: 'sfx' } as const;
+        if (name === 'shoot') known = { url: '/audio/sfx/shoot.mp3', channel: 'sfx' } as const;
+        if (known) this.knownSounds.set(name, known);
+      }
+      if (known && !this.loadingSounds.has(name)) {
+        this.loadingSounds.add(name);
+        this.loadSound(name, known.url, known.channel)
+          .then(() => {
+            this.loadingSounds.delete(name);
+            // Don't auto-play looped sounds (like footsteps) - caller may have stopped moving
+            // Only auto-play one-shots (like shoot)
+            if (!options.loop) {
+              this.play(name, options);
+            }
+          })
+          .catch(() => {
+            this.loadingSounds.delete(name);
+          });
+      }
       return null;
     }
 
-    // Get audio element from pool or create new
-    let audio = this.audioPool.pop();
-    if (!audio) {
-      console.warn('[AudioManager] Pool exhausted, creating new audio element');
-      audio = new Audio();
+    // Try Web Audio first for minimal latency
+    if (this.ctx && sound.audioBuf) {
+      // One-time diagnostic log
+      if (!this.webAudioUsed) {
+        this.webAudioUsed = true;
+        console.log('[AudioManager] ✓ Using Web Audio API (low-latency path active)');
+      }
+      
+      const channel = options.channel ?? sound.channel;
+      const volume = options.volume ?? 1.0;
+      const loop = options.loop ?? false;
+      const pitch = options.pitch ?? 1.0;
+      const startAtMs = Math.max(0, Math.floor(options.startAtMs ?? 0));
+
+      const source = this.ctx.createBufferSource();
+      source.buffer = sound.audioBuf;
+      source.playbackRate.value = pitch;
+      source.loop = loop;
+
+      const instanceGain = this.ctx.createGain();
+      instanceGain.gain.value = this.calculateVolume(channel, volume);
+      source.connect(instanceGain);
+      const chGain = this.channelGains.get(channel) ?? null;
+      if (chGain) instanceGain.connect(chGain);
+      else instanceGain.connect(this.masterGain!);
+
+      const id = `${name}_${this.nextSoundId++}`;
+      this.activeSounds.set(id, {
+        id,
+        name,
+        node: source,
+        gain: instanceGain,
+        channel,
+        kind: 'web'
+      });
+
+      const offset = startAtMs / 1000;
+      // Use immediate scheduling for lowest latency (no scheduling overhead)
+      try {
+        source.start(0, offset);
+      } catch (e) {
+        // If start throws (e.g., offset too large), start at 0
+        try { source.start(0); } catch { /* ignore */ }
+      }
+
+      if (!loop) {
+        source.addEventListener('ended', () => {
+          this.stop(id);
+        }, { once: true });
+      }
+
+      return id;
     }
+
+    // Fallback: HTMLAudio element (higher latency)
+    if (!this.webAudioUsed) {
+      console.warn('[AudioManager] ⚠️ Using HTML Audio fallback (higher latency). Web Audio not available or buffer not decoded.');
+    }
+    const audio = sound.buffer.cloneNode(true) as HTMLAudioElement;
 
     // Configure audio
     const channel = options.channel ?? sound.channel;
     const volume = options.volume ?? 1.0;
     const loop = options.loop ?? false;
     const pitch = options.pitch ?? 1.0;
+    const startAtMs = Math.max(0, Math.floor(options.startAtMs ?? 0));
 
-    audio.src = sound.url;
     audio.loop = loop;
     audio.playbackRate = pitch;
     audio.volume = this.calculateVolume(channel, volume);
 
-    // Generate unique ID
-    const id = `${name}_${this.nextSoundId++}`;
+    // Seek a few milliseconds into the sound to reduce attack/latency if requested
+    if (startAtMs > 0) {
+      const startAtSec = startAtMs / 1000;
+      try {
+        // Clamp later once metadata is available; for now set directly.
+        audio.currentTime = startAtSec;
+      } catch {
+        // Some browsers require metadata; adjust once it's available
+        const onMeta = () => {
+          const dur = isFinite(audio.duration) ? audio.duration : startAtSec;
+          audio.currentTime = Math.min(startAtSec, Math.max(0, dur - 0.01));
+        };
+        audio.addEventListener('loadedmetadata', onMeta, { once: true });
+      }
+    }
 
-    // Store as active sound
-    this.activeSounds.set(id, {
-      id,
-      name,
-      audio,
-      channel
-    });
+    // Generate unique ID and store as active
+    const id = `${name}_${this.nextSoundId++}`;
+    this.activeSounds.set(id, { id, name, audio, channel, kind: 'html' });
 
     // Play
     audio.play().catch(error => {
@@ -242,11 +457,15 @@ export class AudioManager {
   public stop(id: string): void {
     const activeSound = this.activeSounds.get(id);
     if (!activeSound) return;
-
-    activeSound.audio.pause();
-    activeSound.audio.currentTime = 0;
-    
-    this.returnToPool(activeSound.audio);
+    if (activeSound.kind === 'html') {
+      activeSound.audio.pause();
+      activeSound.audio.currentTime = 0;
+      this.returnToPool(activeSound.audio);
+    } else {
+      try { activeSound.node.stop(); } catch { /* ignore */ }
+      try { activeSound.node.disconnect(); } catch { /* ignore */ }
+      try { activeSound.gain.disconnect(); } catch { /* ignore */ }
+    }
     this.activeSounds.delete(id);
   }
 
@@ -267,13 +486,26 @@ export class AudioManager {
   }
 
   /**
+   * Force-stop all instances of a specific sound by name (alias for stopAll with name)
+   * Useful for cleaning up orphaned loops
+   * @param name - Sound name
+   */
+  public stopAllByName(name: string): void {
+    this.stopAll(name);
+  }
+
+  /**
    * Check if a sound is currently playing
    * @param name - Sound name
    * @returns True if at least one instance is playing
    */
   public isPlaying(name: string): boolean {
     for (const activeSound of this.activeSounds.values()) {
-      if (activeSound.name === name && !activeSound.audio.paused) {
+      if (activeSound.name !== name) continue;
+      if (activeSound.kind === 'html') {
+        if (!activeSound.audio.paused) return true;
+      } else {
+        // WebAudio sources are one-shot; approximate by presence in active map
         return true;
       }
     }
@@ -288,6 +520,7 @@ export class AudioManager {
     this.masterVolume = Math.max(0, Math.min(1, volume));
     localStorage.setItem('audio_volume_master', this.masterVolume.toString());
     this.updateAllVolumes();
+    if (this.masterGain) this.masterGain.gain.value = this.masterVolume;
   }
 
   /**
@@ -300,6 +533,8 @@ export class AudioManager {
     this.channelVolumes.set(channel, clampedVolume);
     localStorage.setItem(`audio_volume_${channel}`, clampedVolume.toString());
     this.updateAllVolumes();
+    const g = this.channelGains.get(channel);
+    if (g) g.gain.value = clampedVolume;
   }
 
   /**
@@ -340,10 +575,16 @@ export class AudioManager {
     sounds: Array<[string, string, AudioChannel?]>
   ): Promise<void> {
     console.log(`[AudioManager] Preloading ${sounds.length} sounds...`);
-    const promises = sounds.map(([name, url, channel]) => 
-      this.loadSound(name, url, channel)
-    );
-    await Promise.all(promises);
+    const promises = sounds.map(([name, url, channel]) => {
+      // Register in known sounds for on-demand fallback
+      this.knownSounds.set(name, { url, channel: (channel ?? 'sfx') });
+      return this.loadSound(name, url, channel);
+    });
+    const results = await Promise.allSettled(promises);
+    const failed = results.filter(r => r.status === 'rejected');
+    if (failed.length > 0) {
+      console.warn(`[AudioManager] Some sounds failed to preload (${failed.length}/${sounds.length}). Others are ready.`);
+    }
     console.log('[AudioManager] ✓ All sounds preloaded');
   }
 
@@ -381,13 +622,14 @@ export class AudioManager {
 
   private updateAllVolumes(): void {
     this.activeSounds.forEach(activeSound => {
-      const sound = this.sounds.get(activeSound.name);
-      if (sound) {
-        // Recalculate volume based on current settings
-        activeSound.audio.volume = this.calculateVolume(
-          activeSound.channel,
-          1.0 // Base volume (we don't store original volume per instance)
-        );
+      if (activeSound.kind === 'html') {
+        const sound = this.sounds.get(activeSound.name);
+        if (sound) {
+          activeSound.audio.volume = this.calculateVolume(activeSound.channel, 1.0);
+        }
+      } else {
+        // For WebAudio, per-instance gain already includes final mix; keep as-is.
+        // Channel/master changes are handled by channel/master gain nodes.
       }
     });
   }

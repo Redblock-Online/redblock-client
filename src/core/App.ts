@@ -179,13 +179,18 @@ export default class App {
    */
   private async loadGameSounds() {
     try {
+      // Pre-warm Web Audio context
+      await this.audioManager.resume();
+      console.log('[App] Audio context pre-warmed');
+      
       await this.audioManager.preloadSounds([
-        ['impact', '/audio/sfx/impact.mp3', 'sfx'],
+        ['shoot', '/audio/sfx/shoot.mp3', 'sfx'],
         ['steps', '/audio/sfx/steps.wav', 'sfx'],
         // Add more sounds here as needed
-        // ['shoot', '/audio/sfx/shoot.mp3', 'sfx'],
         // ['ui_click', '/audio/sfx/ui_click.mp3', 'ui'],
       ]);
+      
+      console.log('[App] All sounds loaded and ready for low-latency playback');
     } catch (error) {
       console.warn('[App] Some sounds failed to load:', error);
       // Continue anyway - game can work without audio
@@ -457,6 +462,26 @@ export default class App {
     if (e.button === 0) {
       if (this.paused) return;
       this.recordShotFired();
+      
+      // Diagnostic: Log timing on first shot
+      if (this.shotsFired === 1) {
+        const latencyInfo = this.audioManager.getLatencyInfo();
+        console.log('[App] 🔍 Audio Diagnostics:', {
+          latencyInfo,
+          timestamp: performance.now(),
+          message: 'About to play shoot sound...'
+        });
+      }
+      
+      // Play shoot sound FIRST (before visual animation) for minimum latency
+      const playStart = performance.now();
+      this.audioManager.play('shoot', { volume: 0.35, startAtMs: 0 });
+      const playEnd = performance.now();
+      
+      if (this.shotsFired === 1) {
+        console.log('[App] 🔍 play() call took:', (playEnd - playStart).toFixed(2), 'ms');
+      }
+      
       this.pistol.shoot();
 
       const objects = [...this.targets, ...this.scenarioPortals] as unknown as import("three").Object3D[];
@@ -551,9 +576,6 @@ export default class App {
       const reactionSeconds = Math.max(0, (now - activatedAt) / 1000);
       this.reactionTimes.push(reactionSeconds);
     }
-    
-    // Play impact sound (can overlap with footsteps)
-    this.audioManager.play('impact', { volume: 0.3 });
   }
 
   private buildRoundSummary(roundDurationSeconds: number | null): TimerHint {

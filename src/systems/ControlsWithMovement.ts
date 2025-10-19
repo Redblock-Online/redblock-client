@@ -50,6 +50,7 @@ export default class Controls {
   // Audio variables (using AudioManager)
   private audioManager: AudioManager;
   private stepsAudioId: string | null = null;
+  private wasOnGroundLastFrame = false;
 
   private keysPressed: Record<string, boolean> = {};
   private wsManager: WSManager;
@@ -490,6 +491,9 @@ export default class Controls {
       this.checkChanges(); // <- optimized below
       this.changeCheckAccumulator = 0;
     }
+    
+    // Track ground state for next frame (to detect landing)
+    this.wasOnGroundLastFrame = this.onGround;
   }
 
   private updateHeadBobbing(deltaTime: number) {
@@ -509,7 +513,11 @@ export default class Controls {
       
       // Play footsteps audio when moving (only if not already playing)
       if (!this.stepsAudioId) {
-        this.stepsAudioId = this.audioManager.play('steps', { volume: 0.4, loop: true });
+        // Detect landing: just touched ground this frame while moving
+        const justLanded = this.onGround && !this.wasOnGroundLastFrame;
+        // Use startAtMs: 0 when landing for immediate sound, otherwise skip initial silence
+        const offset = justLanded ? 0 : 70;
+        this.stepsAudioId = this.audioManager.play('steps', { volume: 0.4, loop: true, startAtMs: offset });
       }
     } else {
       // Si no se está moviendo, detener inmediatamente el head bobbing
@@ -522,12 +530,14 @@ export default class Controls {
           this.audioManager.stop(this.stepsAudioId);
           this.stepsAudioId = null;
         }
+        // Safety: force-stop all 'steps' sounds in case ID was lost
+        this.audioManager.stopAllByName('steps');
       }
     }
 
     if (this.isMoving && this.onGround && !this.isCrouching) {
       // Detectar dirección del movimiento
-      const forwardMovement = this.keysPressed["w"];
+      const _forwardMovement = this.keysPressed["w"];
       const backwardMovement = this.keysPressed["s"];
       const leftMovement = this.keysPressed["a"];
       const rightMovement = this.keysPressed["d"];
@@ -571,6 +581,8 @@ export default class Controls {
         this.audioManager.stop(this.stepsAudioId);
         this.stepsAudioId = null;
       }
+      // Safety: force-stop all 'steps' sounds in case ID was lost
+      this.audioManager.stopAllByName('steps');
     }
   }
 }

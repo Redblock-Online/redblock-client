@@ -70,7 +70,7 @@ type AudioSettings = {
   uiVolume: number;
 };
 
-const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
+const _DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   masterVolume: 1.0,
   sfxVolume: 1.0,
   musicVolume: 0.7,
@@ -91,7 +91,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   const [activeTab, setActiveTab] = useState<Tab>("game");
   const [controlsHeight, setControlsHeight] = useState(0);
   const [gameHeight, setGameHeight] = useState(0);
-  const [audioHeight, setAudioHeight] = useState(0);
+  const [_audioHeight, setAudioHeight] = useState(0);
   const [otherTabsHeight, setOtherTabsHeight] = useState(198);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const controlsContentRef = useRef<HTMLDivElement>(null);
@@ -335,7 +335,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
             : activeTab === "game"
             ? `${Math.min(gameHeight || 400, 400)}px`
             : activeTab === "audio"
-            ? "295px"  // Fixed height for audio tab to show all 5 sliders
+            ? "280px"  // Fixed height for audio tab to show all 5 sliders
             : `${Math.min(otherTabsHeight || 198, 400)}px`,
           maxHeight: "400px",
           overflowY: (activeTab === "controls" ? controlsHeight : activeTab === "game" ? gameHeight : activeTab === "audio" ? 295 : otherTabsHeight) > 400 ? "auto" : "hidden"
