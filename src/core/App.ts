@@ -475,7 +475,7 @@ export default class App {
       
       // Play shoot sound FIRST (before visual animation) for minimum latency
       const playStart = performance.now();
-      this.audioManager.play('shoot', { volume: 0.35, startAtMs: 0 });
+      this.audioManager.play('shoot', { volume: 0.35, startAtMs: 0, randomizePitch: true, pitchJitter: 0.08 });
       const playEnd = performance.now();
       
       if (this.shotsFired === 1) {

@@ -40,6 +40,8 @@ interface AudioOptions {
   channel?: AudioChannel; // Override channel from loaded sound
   pitch?: number;         // Playback rate (0.5 = half speed, 2.0 = double), defaults to 1.0
   startAtMs?: number;     // Optional: start playback offset in milliseconds
+  randomizePitch?: boolean; // If true, jitter the pitch slightly each play
+  pitchJitter?: number;     // Max absolute jitter to apply around base pitch (e.g., 0.04 -> ±0.04)
 }
 
 interface LoadedSound {
@@ -353,12 +355,15 @@ export class AudioManager {
       const channel = options.channel ?? sound.channel;
       const volume = options.volume ?? 1.0;
       const loop = options.loop ?? false;
-      const pitch = options.pitch ?? 1.0;
+      const basePitch = options.pitch ?? 1.0;
+      const jitterAmount = options.randomizePitch ? (options.pitchJitter ?? 0.04) : 0;
+      const jitter = jitterAmount > 0 ? (Math.random() * 2 - 1) * jitterAmount : 0;
+      const effectivePitch = Math.max(0.5, Math.min(2.0, basePitch + jitter));
       const startAtMs = Math.max(0, Math.floor(options.startAtMs ?? 0));
 
       const source = this.ctx.createBufferSource();
       source.buffer = sound.audioBuf;
-      source.playbackRate.value = pitch;
+      source.playbackRate.value = effectivePitch;
       source.loop = loop;
 
       const instanceGain = this.ctx.createGain();
@@ -406,11 +411,14 @@ export class AudioManager {
     const channel = options.channel ?? sound.channel;
     const volume = options.volume ?? 1.0;
     const loop = options.loop ?? false;
-    const pitch = options.pitch ?? 1.0;
+    const basePitch = options.pitch ?? 1.0;
+    const jitterAmount = options.randomizePitch ? (options.pitchJitter ?? 0.04) : 0;
+    const jitter = jitterAmount > 0 ? (Math.random() * 2 - 1) * jitterAmount : 0;
+    const effectivePitch = Math.max(0.5, Math.min(2.0, basePitch + jitter));
     const startAtMs = Math.max(0, Math.floor(options.startAtMs ?? 0));
 
     audio.loop = loop;
-    audio.playbackRate = pitch;
+    audio.playbackRate = effectivePitch;
     audio.volume = this.calculateVolume(channel, volume);
 
     // Seek a few milliseconds into the sound to reduce attack/latency if requested
