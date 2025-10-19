@@ -21,9 +21,14 @@ export default class Cube extends THREE.Group {
     super();
 
     const geometry = new THREE.BoxGeometry(1, 1, 1);
+    // Mejorar la geometría para evitar problemas de renderizado
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
 
-    const material = new THREE.MeshToonMaterial({
+    const material = new THREE.MeshBasicMaterial({
       color: randomColor ? Math.random() * 0xffffff : 0xffffff,
+      side: THREE.DoubleSide
     });
     material.transparent = true;
     this.cubeMesh = new THREE.Mesh(geometry, material);
@@ -62,7 +67,7 @@ export default class Cube extends THREE.Group {
     this.layers.enable(1);
 
     const cubeMaterial = this.cubeMesh
-      .material as THREE.MeshToonMaterial | THREE.MeshBasicMaterial;
+      .material as THREE.MeshBasicMaterial;
     cubeMaterial.color.set(color);
   }
 
