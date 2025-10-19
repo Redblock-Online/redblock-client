@@ -497,13 +497,18 @@ export default class Controls {
   }
 
   private updateHeadBobbing(deltaTime: number) {
-    // Detectar si el jugador está presionando teclas de movimiento
-    const isKeyPressed = this.keysPressed["w"] || this.keysPressed["a"] || this.keysPressed["s"] || this.keysPressed["d"];
-    const isCurrentlyMoving = isKeyPressed && this.onGround;
+    // Considerar movimiento real (velocidad) en lugar de solo teclas presionadas
+    // Además, cancelar si hay teclas opuestas presionadas (A+D o W+S)
+    const leftPressed = !!this.keysPressed["a"];
+    const rightPressed = !!this.keysPressed["d"];
+    const forwardPressed = !!this.keysPressed["w"];
+    const backwardPressed = !!this.keysPressed["s"];
+    const opposingPressed = (leftPressed && rightPressed) || (forwardPressed && backwardPressed);
+    const isCurrentlyMoving = this.onGround && !opposingPressed && (this.velocity.lengthSq() > 1e-6);
     
     // Debug: mostrar estado del movimiento
     if (isCurrentlyMoving && !this.isMoving) {
-      console.log('Movimiento detectado - teclas presionadas');
+      console.log('Movimiento detectado');
     }
     
     if (isCurrentlyMoving) {
