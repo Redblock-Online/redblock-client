@@ -15,7 +15,14 @@ export default class Target extends THREE.Group {
   public baseScale: number;
   public scenarioPortal: "next" | "prev" | null;
   
-  private static cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+  private static cubeGeometry = (() => {
+    const geometry = new THREE.BoxGeometry(1, 1, 1);
+    // Mejorar la geometría para evitar problemas de renderizado
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+    return geometry;
+  })();
   private static edgeMaterial = new THREE.MeshBasicMaterial({ 
     color: 0x000000,
     depthWrite: true,
@@ -33,7 +40,10 @@ export default class Target extends THREE.Group {
     super();
 
     // Main cube mesh (slightly smaller to make room for edges)
-    const cubeMaterial = new THREE.MeshToonMaterial({ color });
+    const cubeMaterial = new THREE.MeshBasicMaterial({ 
+      color,
+      side: THREE.DoubleSide
+    });
     cubeMaterial.transparent = true;
     this.cubeMesh = new THREE.Mesh(Target.cubeGeometry, cubeMaterial);
     this.cubeMesh.scale.set(1, 1, 1);
@@ -115,7 +125,7 @@ export default class Target extends THREE.Group {
     this.shootableActivatedAt = now;
     this.layers.enable(1);
 
-    const cubeMaterial = this.cubeMesh.material as THREE.MeshToonMaterial;
+    const cubeMaterial = this.cubeMesh.material as THREE.MeshBasicMaterial;
     cubeMaterial.color.set(color);
   }
 
@@ -228,7 +238,7 @@ export default class Target extends THREE.Group {
    * Updates the color of the target
    */
   public setColor(color: THREE.Color | number) {
-    const material = this.cubeMesh.material as THREE.MeshToonMaterial;
+    const material = this.cubeMesh.material as THREE.MeshBasicMaterial;
     material.color.set(color);
   }
 
