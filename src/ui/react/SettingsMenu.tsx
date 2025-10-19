@@ -5,6 +5,7 @@ import SliderInput from "@/ui/react/components/SliderInput";
 import ToggleInput from "@/ui/react/components/ToggleInput";
 import SelectInput from "@/ui/react/components/SelectInput";
 import ColorInput from "@/ui/react/components/ColorInput";
+import { AudioManager } from "@/utils/AudioManager";
 
 type Tab = "game" | "controls" | "audio" | "video" | "gameplay" | "account";
 
@@ -61,6 +62,22 @@ const DEFAULT_GAME_SETTINGS: GameSettings = {
   showHints: true,
 };
 
+type AudioSettings = {
+  masterVolume: number;
+  sfxVolume: number;
+  musicVolume: number;
+  ambientVolume: number;
+  uiVolume: number;
+};
+
+const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
+  masterVolume: 1.0,
+  sfxVolume: 1.0,
+  musicVolume: 0.7,
+  ambientVolume: 0.5,
+  uiVolume: 0.8,
+};
+
 const TAB_LABELS: Record<Tab, string> = {
   game: "GAME",
   controls: "CONTROLS",
@@ -74,10 +91,12 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   const [activeTab, setActiveTab] = useState<Tab>("game");
   const [controlsHeight, setControlsHeight] = useState(0);
   const [gameHeight, setGameHeight] = useState(0);
+  const [audioHeight, setAudioHeight] = useState(0);
   const [otherTabsHeight, setOtherTabsHeight] = useState(198);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const controlsContentRef = useRef<HTMLDivElement>(null);
   const gameContentRef = useRef<HTMLDivElement>(null);
+  const audioContentRef = useRef<HTMLDivElement>(null);
   const otherTabsContentRef = useRef<HTMLDivElement>(null);
   const resetConfirmRef = useRef<HTMLDivElement>(null);
   
@@ -110,6 +129,18 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
     return DEFAULT_GAME_SETTINGS;
   });
 
+  const [audioSettings, setAudioSettings] = useState<AudioSettings>(() => {
+    // Load from AudioManager (which loads from localStorage)
+    const audio = AudioManager.getInstance();
+    return {
+      masterVolume: audio.getMasterVolume(),
+      sfxVolume: audio.getChannelVolume('sfx'),
+      musicVolume: audio.getChannelVolume('music'),
+      ambientVolume: audio.getChannelVolume('ambient'),
+      uiVolume: audio.getChannelVolume('ui'),
+    };
+  });
+
   // Calculate content heights based on active tab
   useEffect(() => {
     if (!visible) return;
@@ -124,7 +155,11 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
         const height = gameContentRef.current.scrollHeight;
         setGameHeight(height);
         console.log("Game height set to:", height);
-      } else if (activeTab !== "controls" && activeTab !== "game" && otherTabsContentRef.current) {
+      } else if (activeTab === "audio" && audioContentRef.current) {
+        const height = audioContentRef.current.scrollHeight;
+        setAudioHeight(height);
+        console.log("Audio height set to:", height);
+      } else if (activeTab !== "controls" && activeTab !== "game" && activeTab !== "audio" && otherTabsContentRef.current) {
         const height = otherTabsContentRef.current.scrollHeight;
         setOtherTabsHeight(height);
         console.log("Other tabs height set to:", height);
@@ -156,6 +191,18 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       return () => clearTimeout(timer);
     }
   }, [gameSettings, activeTab, visible]);
+
+  // Recalculate audio height when audio settings change
+  useEffect(() => {
+    if (activeTab === "audio" && audioContentRef.current && visible) {
+      const timer = setTimeout(() => {
+        const height = audioContentRef.current?.scrollHeight || 0;
+        setAudioHeight(height);
+        console.log("Audio height recalculated:", height);
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [audioSettings, activeTab, visible]);
 
   // Scroll reset confirmation into view when it appears
   useEffect(() => {
@@ -199,6 +246,16 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
     window.dispatchEvent(new CustomEvent("gameSettingsChanged", { detail: gameSettings }));
   }, [gameSettings]);
 
+  useEffect(() => {
+    // Update AudioManager when audio settings change
+    const audio = AudioManager.getInstance();
+    audio.setMasterVolume(audioSettings.masterVolume);
+    audio.setChannelVolume('sfx', audioSettings.sfxVolume);
+    audio.setChannelVolume('music', audioSettings.musicVolume);
+    audio.setChannelVolume('ambient', audioSettings.ambientVolume);
+    audio.setChannelVolume('ui', audioSettings.uiVolume);
+  }, [audioSettings]);
+
   const onSensitivityInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSensitivity(e.target.value);
     // ControlsWithMovement listens to #sensitivityRange input event
@@ -210,6 +267,10 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
 
   const updateGameSetting = <K extends keyof GameSettings>(key: K, value: GameSettings[K]) => {
     setGameSettings((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const updateAudioSetting = <K extends keyof AudioSettings>(key: K, value: AudioSettings[K]) => {
+    setAudioSettings((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleResetClick = () => {
@@ -273,9 +334,11 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
             ? `${Math.min(controlsHeight || 400, 400)}px` 
             : activeTab === "game"
             ? `${Math.min(gameHeight || 400, 400)}px`
+            : activeTab === "audio"
+            ? "295px"  // Fixed height for audio tab to show all 5 sliders
             : `${Math.min(otherTabsHeight || 198, 400)}px`,
           maxHeight: "400px",
-          overflowY: (activeTab === "controls" ? controlsHeight : activeTab === "game" ? gameHeight : otherTabsHeight) > 400 ? "auto" : "hidden"
+          overflowY: (activeTab === "controls" ? controlsHeight : activeTab === "game" ? gameHeight : activeTab === "audio" ? 295 : otherTabsHeight) > 400 ? "auto" : "hidden"
         }}>
           {/* Controls content */}
           <div
@@ -467,10 +530,66 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
             </div>
           </div>
 
+          {/* Audio tab content */}
+          <div
+            ref={audioContentRef}
+            className={`transition-opacity duration-300 ${
+              activeTab === "audio" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
+            }`}
+          >
+            <div className="flex flex-col gap-2">
+              <SliderInput
+                label="Master Volume"
+                value={Math.round(audioSettings.masterVolume * 100)}
+                min={0}
+                max={100}
+                step={5}
+                unit="%"
+                onChange={(value) => updateAudioSetting("masterVolume", value / 100)}
+              />
+              <SliderInput
+                label="SFX Volume"
+                value={Math.round(audioSettings.sfxVolume * 100)}
+                min={0}
+                max={100}
+                step={5}
+                unit="%"
+                onChange={(value) => updateAudioSetting("sfxVolume", value / 100)}
+              />
+              <SliderInput
+                label="Music Volume"
+                value={Math.round(audioSettings.musicVolume * 100)}
+                min={0}
+                max={100}
+                step={5}
+                unit="%"
+                onChange={(value) => updateAudioSetting("musicVolume", value / 100)}
+              />
+              <SliderInput
+                label="Ambient Volume"
+                value={Math.round(audioSettings.ambientVolume * 100)}
+                min={0}
+                max={100}
+                step={5}
+                unit="%"
+                onChange={(value) => updateAudioSetting("ambientVolume", value / 100)}
+              />
+              <SliderInput
+                label="UI Volume"
+                value={Math.round(audioSettings.uiVolume * 100)}
+                min={0}
+                max={100}
+                step={5}
+                unit="%"
+                onChange={(value) => updateAudioSetting("uiVolume", value / 100)}
+              />
+            </div>
+          </div>
+
           {/* Other tabs content */}
           <div
             className={`transition-opacity duration-300 ${
-              activeTab !== "controls" && activeTab !== "game" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
+              activeTab !== "controls" && activeTab !== "game" && activeTab !== "audio" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
             }`}
           >
             <div className="flex items-center justify-center min-h-[150px]">

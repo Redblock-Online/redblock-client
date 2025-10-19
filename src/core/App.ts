@@ -87,7 +87,10 @@ export default class App {
     
     console.log("[App] Constructor - options:", options);
     console.log("[App] Constructor - isEditorMode:", this.isEditorMode);
+    
+    // Initialize audio system
     this.audioManager = AudioManager.getInstance();
+    this.loadGameSounds();
 
     // Core systems
     this.camera = new Camera();
@@ -170,6 +173,25 @@ export default class App {
       }
     });
   }
+  
+  /**
+   * Load all game sounds
+   */
+  private async loadGameSounds() {
+    try {
+      await this.audioManager.preloadSounds([
+        ['impact', '/audio/sfx/impact.mp3', 'sfx'],
+        ['steps', '/audio/sfx/steps.wav', 'sfx'],
+        // Add more sounds here as needed
+        // ['shoot', '/audio/sfx/shoot.mp3', 'sfx'],
+        // ['ui_click', '/audio/sfx/ui_click.mp3', 'ui'],
+      ]);
+    } catch (error) {
+      console.warn('[App] Some sounds failed to load:', error);
+      // Continue anyway - game can work without audio
+    }
+  }
+  
   /**
    * Initialize level physics and gameplay
    * Call this when a level/scenario starts
@@ -530,8 +552,8 @@ export default class App {
       this.reactionTimes.push(reactionSeconds);
     }
     
-    // Reproducir sonido de impacto
-    this.audioManager.playSound('impact', 0.12);
+    // Play impact sound (can overlap with footsteps)
+    this.audioManager.play('impact', { volume: 0.3 });
   }
 
   private buildRoundSummary(roundDurationSeconds: number | null): TimerHint {
