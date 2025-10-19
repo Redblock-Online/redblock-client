@@ -307,13 +307,15 @@ export default class Controls {
     const desiredVel = targetDirection.clone().multiplyScalar(effectiveSpeed);
     const bothLateralPressed = !!this.keysPressed["a"] && !!this.keysPressed["d"];
 
-    if (bothLateralPressed) {
-      this.velocity.set(0, 0, 0)
+    // Si no hay teclas presionadas, detener inmediatamente
+    if (targetDirection.length() === 0) {
+      this.velocity.set(0, 0, 0);
+    } else if (bothLateralPressed) {
+      this.velocity.set(0, 0, 0);
     } else {
       this.velocity.lerp(desiredVel, this.acceleration);
+      this.velocity.multiplyScalar(Math.pow(this.damping, deltaTime));
     }
-   
-    this.velocity.multiplyScalar(Math.pow(this.damping, deltaTime));
     this.yawObject.position.addScaledVector(this.velocity, deltaTime);
 
     const now = performance.now() / 1000;
@@ -371,12 +373,13 @@ export default class Controls {
   }
 
   private updateHeadBobbing(deltaTime: number) {
-    // Detectar si el jugador se está moviendo - usar una detección más sensible
-    const isCurrentlyMoving = this.velocity.length() > 0.05 && this.onGround;
+    // Detectar si el jugador está presionando teclas de movimiento
+    const isKeyPressed = this.keysPressed["w"] || this.keysPressed["a"] || this.keysPressed["s"] || this.keysPressed["d"];
+    const isCurrentlyMoving = isKeyPressed && this.onGround;
     
     // Debug: mostrar estado del movimiento
     if (isCurrentlyMoving && !this.isMoving) {
-      console.log('Movimiento detectado - velocidad:', this.velocity.length());
+      console.log('Movimiento detectado - teclas presionadas');
     }
     
     if (isCurrentlyMoving) {
@@ -386,8 +389,8 @@ export default class Controls {
       // Reproducir audio de pasos cuando se está moviendo
       this.playStepsAudio();
     } else {
-      // Si no se está moviendo, gradualmente reducir el head bobbing
-      if (this.isMoving && performance.now() - this.lastMovementTime > 200) {
+      // Si no se está moviendo, detener inmediatamente el head bobbing
+      if (this.isMoving) {
         this.isMoving = false;
         this.headBobbingTime = 0;
         // Detener audio de pasos cuando se deja de mover
@@ -442,9 +445,9 @@ export default class Controls {
   private initStepsAudio() {
     // Intentar diferentes rutas para el archivo de audio
     const audioPaths = [
-      '/music/pasos.mp3',
-      './music/pasos.mp3',
-      '/public/music/pasos.mp3'
+      '/music/steps.mp3',
+      './music/steps.mp3',
+      '/public/music/steps.mp3'
     ];
     
     this.stepsAudio = new Audio(audioPaths[0]);
