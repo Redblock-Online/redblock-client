@@ -288,7 +288,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
 
   if (!visible) return null;
 
-  const tabs: Tab[] = ["game", "controls", "audio", "video", "gameplay", "account"];
+  const tabs: Tab[] = ["game", "controls", "audio"];
   const scaleValue = hudScale / 100;
 
   return (
