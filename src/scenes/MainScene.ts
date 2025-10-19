@@ -1,11 +1,11 @@
 // Main scene setup
 import * as THREE from "three";
-import RandomCubeGenerator from "@/objects/RandomCubeGenerator";
 import Light from "@/objects/Light";
 import Target from "@/objects/Target";
 import type { PlayerCore } from "@/utils/ws/WSManager";
 import WSManager from "@/utils/ws/WSManager";
 import type { PhysicsSystem } from "@/systems/PhysicsSystem";
+import TargetManager from "@/systems/TargetManager";
 export type TargetInfo = {
   x: number;
   y: number;
@@ -72,7 +72,8 @@ function targetsInfoChanged(prev: TargetInfo[], next: TargetInfo[]): boolean {
 
 export default class MainScene extends THREE.Scene {
   private neighborRooms: Map<string, { x: number; z: number }> = new Map();
-  public targets: Target[] = [];
+  public targets: Target[] = []; // Legacy array kept for compatibility
+  public targetManager: TargetManager; // New optimized target management
   public me: PlayerCore;
   public wsManager: WSManager;
   public neighborMeshes: Map<string, THREE.Group> = new Map();
@@ -126,11 +127,15 @@ export default class MainScene extends THREE.Scene {
     super();
     const white = new THREE.Color(0xffffff);
     this.background = white;
-    this.targets = targets;
+    this.targets = targets; // Legacy array kept for compatibility
     this.me = me;
     this.wsManager = wsManager;
     this.physicsSystem = physicsSystem;
     this.isEditorMode = isEditorMode;
+    
+    // Initialize target manager for optimized target generation
+    this.targetManager = new TargetManager(this);
+    
     const light = new Light();
     this.add(light);
   }
@@ -200,30 +205,39 @@ export default class MainScene extends THREE.Scene {
     }
   }
 
+  /**
+   * Load scenario with optimized target generation
+   * @param targetCount - Number of targets to spawn
+   * @param halfSize - Use half-size targets (0.2 scale)
+   */
   public loadScenario(targetCount: number, halfSize: boolean = false) {
     const amount = Math.max(1, Math.floor(targetCount));
-    this.generateCubes(amount, this.me.room_coord_x, this.me.room_coord_z, halfSize);
+    const scale = halfSize ? 0.2 : 0.4;
+    
+    // Reset previous targets
+    this.targetManager.resetAllTargets();
+    
+    // Generate new targets using optimized manager
+    const newTargets = this.targetManager.generateTargets(
+      amount,
+      this.me.room_coord_x,
+      this.me.room_coord_z,
+      scale
+    );
+    
+    // Update legacy targets array for compatibility with existing code
+    this.targets = newTargets;
+    
+    console.log(`[MainScene] Loaded scenario with ${newTargets.length} targets`);
   }
 
+  /**
+   * Legacy method kept for backwards compatibility
+   * @deprecated Use loadScenario() instead
+   */
   public generateCubes(amount: number, roomCoordX: number, roomCoordZ: number, halfSize: boolean = false) {
-    const rcg = new RandomCubeGenerator(
-      this.targets,
-      this,
-      false,
-      this.wsManager
-    );
-    rcg.generate(true, halfSize);
-    for (let i = 0; i < amount - 1; i++) {
-      rcg.generate(false, halfSize);
-    }
-    this.targets.forEach((target) => {
-      target.position.set(
-        target.position.x + roomCoordX,
-        target.position.y,
-        target.position.z + roomCoordZ
-      );
-      this.add(target);
-    });
+    console.warn('[MainScene] generateCubes is deprecated, use loadScenario instead');
+    this.loadScenario(amount, halfSize);
   }
 
   private updateNeighborTargets(neighborId: string, targetsInfo: TargetInfo[]) {

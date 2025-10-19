@@ -321,21 +321,10 @@ export default class App {
     );
     if (!remaining) {
       this.stopTimer();
-      // Clean up excess invisible targets (keep some for reuse) - single iteration
-      const visible: Target[] = [];
-      const invisible: Target[] = [];
       
-      for (const t of this.targets) {
-        if (t.visible || t.animating) {
-          visible.push(t);
-        } else if (invisible.length < 50) {
-          invisible.push(t);
-        }
-      }
-      
-      if (invisible.length >= 50) {
-        this.targets = [...visible, ...invisible];
-      }
+      // TargetManager handles all cleanup and pooling automatically
+      // No manual dispose needed - the pool manages everything efficiently
+      console.log('[App] Level complete. TargetManager stats:', this.scene.targetManager.getStats());
     }
 
     return "regular";
@@ -351,7 +340,10 @@ export default class App {
       line = this.tracerPool.pop()!;
 
       if (!line.geometry.getAttribute("position")) {
+        // Dispose old geometry before cloning new one
+        const oldGeom = line.geometry;
         line.geometry = this.tracerGeom!.clone();
+        if (oldGeom) oldGeom.dispose();
       }
       const posAttr = line.geometry.getAttribute("position") as BufferAttribute;
       posAttr.setXYZ(0, from.x, from.y, from.z);
@@ -741,33 +733,37 @@ export default class App {
   }
 
   private resetTargets() {
-    // Don't remove or clear targets - just hide them for reuse
-    this.targets.forEach((t) => {
-      // Kill any active animations
-      const activeTweens = (t as { activeTweens?: Array<{ kill: () => void }> }).activeTweens;
-      if (activeTweens && Array.isArray(activeTweens)) {
-        activeTweens.forEach((tween) => tween.kill());
-        activeTweens.length = 0;
-      }
-      
-      t.visible = false;
-      t.shootable = false;
-      t.animating = false;
-    });
+    // Use TargetManager to efficiently reset all targets
+    this.scene.targetManager.resetAllTargets();
+    
+    // Update legacy targets array
+    this.targets = this.scene.targetManager.getActiveTargets();
+    
     this.clearScenarioPortals();
+    
+    console.log('[App] Targets reset via TargetManager');
   }
 
   private clearScenarioPortals() {
-    this.scenarioPortals.forEach((portal) => this.scene.remove(portal));
+    // Hide portals instead of removing them (for reuse)
+    this.scenarioPortals.forEach((portal) => {
+      portal.visible = false;
+    });
+  }
+
+  private disposeScenarioPortals() {
+    // Complete cleanup with dispose (only when needed)
+    this.scenarioPortals.forEach((portal) => {
+      this.scene.remove(portal);
+      portal.dispose(); // Returns material to pool, clears references
+    });
     this.scenarioPortals = [];
   }
 
   private applyScenarioTargetScale() {
     const scale = this.currentScenarioTargetScale;
-    this.targets.forEach((cube) => {
-      cube.baseScale = scale;
-      cube.scale.set(scale, scale, scale);
-    });
+    // Use TargetManager to update scale efficiently (only active targets)
+    this.scene.targetManager.updateActiveTargetsScale(scale);
   }
 
   private setupScenarioPortals() {
@@ -782,22 +778,37 @@ export default class App {
     const baseX = this.scene.me?.room_coord_x ?? 0;
     const baseZ = this.scene.me?.room_coord_z ?? 0;
 
-    const portals: Array<{ type: "prev" | "next"; enabled: boolean; position: [number, number, number]; color: number }>
+    const portalConfigs: Array<{ type: "prev" | "next"; enabled: boolean; position: [number, number, number]; color: number }>
       = [
         { type: "prev", enabled: hasPrev, position: [baseX + 2, 0, baseZ - 5], color: 0x4287f5 },
         { type: "next", enabled: hasNext, position: [baseX + 2, 0, baseZ + 5], color: 0xf5a142 },
       ];
 
-    portals.forEach((portal) => {
-      if (!portal.enabled) return;
-      const target = new Target(0xffffff, true, true);
-      target.scenarioPortal = portal.type;
-      target.position.set(...portal.position);
-      target.baseScale = 0.5;
-      target.scale.set(0.5, 0.5, 0.5);
-      target.makeShootable(portal.color);
-      this.scenarioPortals.push(target);
-      this.scene.add(target);
+    // Reuse existing portals or create new ones only if needed
+    let portalIndex = 0;
+    portalConfigs.forEach((config) => {
+      if (!config.enabled) return;
+      
+      let portal: Target;
+      if (portalIndex < this.scenarioPortals.length) {
+        // Reuse existing portal
+        portal = this.scenarioPortals[portalIndex];
+        portal.visible = true;
+      } else {
+        // Create new portal only if we don't have enough
+        portal = new Target(0xffffff, true, true);
+        portal.baseScale = 0.5;
+        portal.scale.set(0.5, 0.5, 0.5);
+        this.scenarioPortals.push(portal);
+        this.scene.add(portal);
+      }
+      
+      // Update portal properties
+      portal.scenarioPortal = config.type;
+      portal.position.set(...config.position);
+      portal.makeShootable(config.color);
+      
+      portalIndex++;
     });
   }
 
@@ -825,8 +836,14 @@ export default class App {
     if (!this.isEditorMode) {
       const useHalfSize = scenario.targetScale === 0.2;
       this.scene.loadScenario(scenario.targetCount, useHalfSize);
+      
+      // Sync targets array after generation (TargetManager updates scene.targets)
+      this.targets = this.scene.targets;
+      
       this.applyScenarioTargetScale();
       this.setupScenarioPortals();
+      
+      console.log(`[App] Scenario started with ${this.targets.length} targets`);
     }
 
     this.loop.start();

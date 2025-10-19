@@ -16,14 +16,129 @@ export default class Target extends THREE.Group {
   public scenarioPortal: "next" | "prev" | null;
   public activeTweens: gsap.core.Tween[] = [];
   
+  // Shared geometries and materials (static to avoid creating duplicates)
   private static cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
-  private static edgeMaterial = new THREE.MeshBasicMaterial({ 
-    color: 0x000000,
-    depthWrite: true,
-    polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -1
-  });
+  
+  // Edge material pool (each target needs independent edge materials for animations)
+  private static edgeMaterialPool: THREE.MeshBasicMaterial[] = [];
+  private static edgeMaterialPoolSize = 1200; // 100 targets * 12 edges each
+  
+  private static getEdgeMaterial(): THREE.MeshBasicMaterial {
+    Target.initializeMaterialPool(); // Ensure pool is ready
+    
+    if (Target.edgeMaterialPool.length > 0) {
+      return Target.edgeMaterialPool.pop()!;
+    }
+    
+    // Pool exhausted - create new (should rarely happen)
+    console.warn('[Target] Edge material pool exhausted! Creating new material.');
+    return new THREE.MeshBasicMaterial({ 
+      color: 0x000000,
+      depthWrite: true,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+      transparent: true,
+      opacity: 1
+    });
+  }
+  
+  private static returnEdgeMaterial(material: THREE.MeshBasicMaterial) {
+    if (Target.edgeMaterialPool.length < Target.edgeMaterialPoolSize) {
+      material.opacity = 1;
+      material.transparent = true;
+      Target.edgeMaterialPool.push(material);
+    } else {
+      material.dispose();
+    }
+  }
+  
+  // Material pool for efficient reuse (pre-create a fixed number)
+  private static materialPool: THREE.MeshToonMaterial[] = [];
+  private static materialPoolSize = 100; // Max simultaneous targets expected
+  private static materialPoolInitialized = false;
+  
+  /**
+   * Pre-warm material pool to avoid runtime allocations
+   */
+  private static initializeMaterialPool() {
+    if (Target.materialPoolInitialized) return;
+    
+    console.log('[Target] Pre-warming material pools...');
+    
+    // Pre-create cube materials
+    for (let i = 0; i < Target.materialPoolSize; i++) {
+      const mat = new THREE.MeshToonMaterial({ 
+        color: 0xffffff,
+        transparent: true,
+        opacity: 1
+      });
+      Target.materialPool.push(mat);
+    }
+    
+    // Pre-create edge materials (12 per target)
+    for (let i = 0; i < Target.edgeMaterialPoolSize; i++) {
+      const mat = new THREE.MeshBasicMaterial({ 
+        color: 0x000000,
+        depthWrite: true,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
+        transparent: true,
+        opacity: 1
+      });
+      Target.edgeMaterialPool.push(mat);
+    }
+    
+    Target.materialPoolInitialized = true;
+    console.log(`[Target] Material pools initialized: ${Target.materialPool.length} cube + ${Target.edgeMaterialPool.length} edge materials`);
+  }
+  
+  private static getMaterial(): THREE.MeshToonMaterial {
+    Target.initializeMaterialPool(); // Ensure pool is ready
+    
+    if (Target.materialPool.length > 0) {
+      return Target.materialPool.pop()!;
+    }
+    
+    // Pool exhausted - create new (should rarely happen)
+    console.warn('[Target] Cube material pool exhausted! Creating new material.');
+    return new THREE.MeshToonMaterial({ 
+      color: 0xffffff,
+      transparent: true,
+      opacity: 1
+    });
+  }
+  
+  private static returnMaterial(material: THREE.MeshToonMaterial) {
+    // Reset to default state and return to pool
+    if (Target.materialPool.length < Target.materialPoolSize) {
+      material.color.set(0xffffff);
+      material.opacity = 1;
+      Target.materialPool.push(material);
+    } else {
+      // Pool is full, dispose instead
+      material.dispose();
+    }
+  }
+  
+  // Shared cylinder geometries for edges (keyed by scale)
+  private static cylinderGeometryCache = new Map<number, THREE.CylinderGeometry>();
+  
+  private static getCylinderGeometry(targetScale: number): THREE.CylinderGeometry {
+    // Round to avoid cache misses from floating point precision
+    const key = Math.round(targetScale * 1000) / 1000;
+    
+    if (!Target.cylinderGeometryCache.has(key)) {
+      const edgeRadius = 0.025;
+      const edgeLength = 1.0;
+      const scaledRadius = edgeRadius / targetScale;
+      const geom = new THREE.CylinderGeometry(scaledRadius, scaledRadius, edgeLength, 16);
+      Target.cylinderGeometryCache.set(key, geom);
+    }
+    
+    return Target.cylinderGeometryCache.get(key)!;
+  }
 
   constructor(
     color: THREE.Color | number = 0xffffff,
@@ -33,10 +148,11 @@ export default class Target extends THREE.Group {
   ) {
     super();
 
-    // Main cube mesh (slightly smaller to make room for edges)
-    const cubeMaterial = new THREE.MeshToonMaterial({ color });
-    cubeMaterial.transparent = true;
-    this.cubeMesh = new THREE.Mesh(Target.cubeGeometry, cubeMaterial);
+    // Main cube mesh - get material from pool
+    const material = Target.getMaterial();
+    material.color.set(color);
+    material.transparent = true;
+    this.cubeMesh = new THREE.Mesh(Target.cubeGeometry, material);
     this.cubeMesh.scale.set(1, 1, 1);
     this.cubeMesh.name = isTarget ? "Target" : "";
     this.cubeMesh.renderOrder = 0; // Render cube first
@@ -66,14 +182,9 @@ export default class Target extends THREE.Group {
    */
   private createEdges(targetScale: number = 1): THREE.Group {
     const group = new THREE.Group();
-    const edgeRadius = 0.025; // Thickness of the edge (constant regardless of scale)
-    const edgeLength = 1.0; // Length of each edge
-
-    // Cylinder geometry for edges (default: vertical along Y axis)
-    // More segments (16) for smoother appearance at distance
-    // Scale the radius inversely to maintain constant visual thickness
-    const scaledRadius = edgeRadius / targetScale;
-    const cylinderGeometry = new THREE.CylinderGeometry(scaledRadius, scaledRadius, edgeLength, 16);
+    
+    // Get shared cylinder geometry from cache
+    const cylinderGeometry = Target.getCylinderGeometry(targetScale);
 
     // Define the 12 edges of a cube with correct positions and rotations
     const edges = [
@@ -97,7 +208,9 @@ export default class Target extends THREE.Group {
     ];
 
     edges.forEach(({ pos, rot, rotY }) => {
-      const edge = new THREE.Mesh(cylinderGeometry, Target.edgeMaterial);
+      // Get independent edge material from pool for proper animation support
+      const edgeMaterial = Target.getEdgeMaterial();
+      const edge = new THREE.Mesh(cylinderGeometry, edgeMaterial);
       edge.position.set(pos[0], pos[1], pos[2]);
       edge.rotation.set(rot[0], rotY || 0, rot[2]);
       edge.renderOrder = 1; // Render edges after the cube
@@ -243,5 +356,30 @@ export default class Target extends THREE.Group {
   public setOpacity(opacity: number) {
     const cubeMaterial = this.cubeMesh.material as THREE.Material;
     cubeMaterial.opacity = opacity;
+  }
+
+  /**
+   * Properly dispose of target resources and return materials to pool
+   */
+  public dispose() {
+    // Kill any active tweens
+    this.activeTweens.forEach(t => t.kill());
+    this.activeTweens = [];
+    
+    // Return cube material to pool (geometry is shared, don't dispose)
+    const cubeMaterial = this.cubeMesh.material as THREE.MeshToonMaterial;
+    Target.returnMaterial(cubeMaterial);
+    
+    // Return edge materials to pool
+    this.edgesGroup.children.forEach((edge) => {
+      const mesh = edge as THREE.Mesh;
+      if (mesh.material) {
+        Target.returnEdgeMaterial(mesh.material as THREE.MeshBasicMaterial);
+      }
+    });
+    
+    // Clear references (geometries are shared, don't dispose)
+    this.cubeMesh.geometry = null as unknown as THREE.BufferGeometry;
+    this.cubeMesh.material = null as unknown as THREE.Material;
   }
 }
