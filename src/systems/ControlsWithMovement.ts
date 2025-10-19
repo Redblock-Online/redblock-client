@@ -232,6 +232,20 @@ export default class Controls {
     const qRotX = this.quantize(rotX, this.rotQuant);
     const qRotY = this.quantize(rotY, this.rotQuant);
 
+    const targetsInfo = buildTargetsInfo(
+      this.targets,
+      this.getAmmountOfTargetsSelected()
+    );
+    
+    // Temporary diagnostic log
+    if (Math.random() < 0.05) { // Log 5% of updates to avoid spam
+      console.log('[Controls] Sending player update:', {
+        targetsCount: this.targets.length,
+        selectedCount: this.getAmmountOfTargetsSelected(),
+        sentTargetsInfo: targetsInfo.length
+      });
+    }
+    
     this.wsManager.sendPlayerUpdate({
       id: this.wsManager.getMe()!.id,
       local_player_position_x: qx,
@@ -239,10 +253,7 @@ export default class Controls {
       local_player_position_z: qz,
       player_rotation_x: qRotX,
       player_rotation_y: qRotY,
-      targetsInfo: buildTargetsInfo(
-        this.targets,
-        this.getAmmountOfTargetsSelected()
-      ),
+      targetsInfo: targetsInfo,
     });
 
     // Update last sent states
@@ -595,5 +606,13 @@ export default class Controls {
       // Safety: force-stop all 'steps' sounds in case ID was lost
       this.audioManager.stopAllByName('steps');
     }
+  }
+
+  /**
+   * Update the targets array reference (called when scenario loads new targets)
+   */
+  public updateTargets(targets: Target[]) {
+    this.targets = targets;
+    console.log(`[Controls] Targets updated: ${targets.length} targets`);
   }
 }

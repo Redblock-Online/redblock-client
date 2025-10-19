@@ -76,7 +76,8 @@ export default class MainScene extends THREE.Scene {
   public targetManager: TargetManager; // New optimized target management
   public me: PlayerCore;
   public wsManager: WSManager;
-  public neighborMeshes: Map<string, THREE.Group> = new Map();
+  private neighborMeshes: Map<string, THREE.Group> = new Map();
+  private neighborRoomMeshes: Map<string, THREE.Group> = new Map();
   public neighborTargetInfos: Map<string, TargetInfo[]> = new Map();
   public neighborTargetsRendered: Map<string, Target[]> = new Map();
   private clock = new THREE.Clock();
@@ -244,11 +245,13 @@ export default class MainScene extends THREE.Scene {
     const prev = this.neighborTargetInfos.get(neighborId) ?? [];
     if (!targetsInfoChanged(prev, targetsInfo)) return;
 
+    console.log(`[MainScene] 🎯 Updating neighbor ${neighborId} targets:`, targetsInfo.length, 'targets');
     this.neighborTargetInfos.set(neighborId, targetsInfo);
 
     const rendered = this.neighborTargetsRendered.get(neighborId) ?? [];
     while (rendered.length < targetsInfo.length) {
-      const t = new Target(0xffffff); 
+      const t = new Target(0xcccccc); // Light gray for neighbor targets (visible on white background)
+      console.log(`[MainScene] 🎯 Created new neighbor target, total:`, rendered.length + 1);
       rendered.push(t);
       this.add(t);
     }
@@ -267,8 +270,16 @@ export default class MainScene extends THREE.Scene {
       t.visible = true;
       t.position.set(info.x, info.y, info.z);
 
-      const desiredColor = info.shootable ? 0xff0000 : 0xffffff;
+      const desiredColor = info.shootable ? 0xff0000 : 0xcccccc; // Light gray for non-shootable neighbor targets
       t.setColor(desiredColor);
+      
+      console.log(`[MainScene] 🎯 Target ${i} for neighbor ${neighborId}:`, {
+        pos: `(${info.x.toFixed(1)}, ${info.y.toFixed(1)}, ${info.z.toFixed(1)})`,
+        visible: t.visible,
+        shootable: info.shootable,
+        disabled: info.disabled,
+        color: desiredColor.toString(16)
+      });
     }
 
     this.neighborTargetsRendered.set(neighborId, rendered);
@@ -284,8 +295,18 @@ export default class MainScene extends THREE.Scene {
     const roomChanged = !stored || stored.x !== roomX || stored.z !== roomZ;
     
     if (roomChanged) {
-      this.generateRoom(roomX, roomZ);
       this.neighborRooms.set(neighborId, { x: roomX, z: roomZ });
+      // Create/update a dedicated room mesh for this neighbor without touching the local ground
+      const existing = this.neighborRoomMeshes.get(neighborId);
+      if (existing) {
+        this.remove(existing);
+        this.neighborRoomMeshes.delete(neighborId);
+      }
+      const neighborRoom = MainScene.roomPrototype.clone();
+      neighborRoom.position.set(roomX, -0.5, roomZ);
+      neighborRoom.scale.set(20, 1, 20);
+      this.add(neighborRoom);
+      this.neighborRoomMeshes.set(neighborId, neighborRoom);
     }
     
     return roomChanged;
@@ -295,7 +316,7 @@ export default class MainScene extends THREE.Scene {
     let mesh = this.neighborMeshes.get(neighborId);
     
     if (!mesh) {
-      mesh = new Target(0xffffff);
+      mesh = new Target(0xcccccc); // Light gray for neighbor avatar (visible on white background)
       this.neighborMeshes.set(neighborId, mesh);
       this.add(mesh);
     }
@@ -348,6 +369,11 @@ export default class MainScene extends THREE.Scene {
         this.neighborMeshes.delete(id);
         this.neighborStates.delete(id);
         this.neighborRooms.delete(id);
+        const roomMesh = this.neighborRoomMeshes.get(id);
+        if (roomMesh) {
+          this.remove(roomMesh);
+          this.neighborRoomMeshes.delete(id);
+        }
       }
     });
   }
@@ -381,6 +407,11 @@ export default class MainScene extends THREE.Scene {
     for (const n of neighbors) {
       currentIds.add(n.id);
 
+      console.log(`[MainScene] 👥 Processing neighbor ${n.id}:`, {
+        room: `(${n.room_coord_x}, ${n.room_coord_z})`,
+        pos: `(${n.local_player_position_x?.toFixed(1)}, ${n.local_player_position_y?.toFixed(1)}, ${n.local_player_position_z?.toFixed(1)})`,
+        targetsCount: n.targetsInfo?.length ?? 0
+      });
       this.updateNeighborTargets(n.id, n.targetsInfo);
       const roomChanged = this.checkNeighborRoomChange(n.id, n.room_coord_x, n.room_coord_z);
       const mesh = this.getOrCreateNeighborMesh(n.id);

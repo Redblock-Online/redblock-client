@@ -895,10 +895,14 @@ export default class App {
       // Sync targets array after generation (TargetManager updates scene.targets)
       this.targets = this.scene.targets;
       
+      // CRITICAL: Also update controls targets reference so it can send correct targetsInfo
+      this.controls.updateTargets(this.targets);
+      
       this.applyScenarioTargetScale();
       this.setupScenarioPortals();
       
       console.log(`[App] Scenario started with ${this.targets.length} targets`);
+      console.log(`[App] Controls now has ${this.targets.length} targets for network sync`);
     }
 
     this.loop.start();
