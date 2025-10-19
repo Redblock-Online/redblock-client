@@ -40,6 +40,8 @@ import { ComponentManager } from "./core/ComponentManager";
 import type { SerializedScenario } from "./scenarioStore";
 import { EditorModeManager } from "./core/EditorModeManager";
 import { InputRouter } from "./core/InputRouter";
+import { EditorSerializer } from "./core/EditorSerializer";
+import { AlertManager } from "./core/AlertManager";
 import { DragHandler } from "./core/handlers/DragHandler";
 import { TransformHandler } from "./core/handlers/TransformHandler";
 import { SelectionHandler } from "./core/handlers/SelectionHandler";
@@ -83,6 +85,7 @@ export default class EditorApp {
   private readonly groups: GroupManager;
   private readonly movement: MovementController;
   private readonly components: ComponentManager;
+  public readonly alerts: AlertManager;
   private readonly pointerUpListeners = new Set<PointerUpListener>();
   private readonly dragCommitListeners = new Set<(changes: DragCommitEntry[]) => void>();
 
@@ -146,6 +149,7 @@ export default class EditorApp {
     this.groups = new GroupManager(this.scene, this.blocks, this.selection);
     this.movement = new MovementController(this.camera, this.controls);
     this.components = new ComponentManager(this.blocks, this.selection, this.groups);
+    this.alerts = new AlertManager();
 
     // Initialize new mode system
     this.modeManager = new EditorModeManager();
@@ -348,6 +352,49 @@ export default class EditorApp {
    */
   public isUserTyping(): boolean {
     return this.isTyping;
+  }
+
+  /**
+   * Validate scene and update alerts
+   */
+  public validateScene(): void {
+    // Find spawn point
+    const spawnPoint = this.blocks.getAllBlocks().find(block => 
+      block.mesh.userData.isSpawnPoint === true
+    );
+
+    if (spawnPoint) {
+      // Check if there's a floor beneath the spawn point
+      const spawnPos = new Vector3();
+      spawnPoint.mesh.getWorldPosition(spawnPos);
+      
+      // Raycast downward from spawn point
+      const raycaster = new Raycaster();
+      raycaster.set(spawnPos, new Vector3(0, -1, 0));
+      
+      // Get all meshes except the spawn point itself
+      const meshes = this.blocks.getAllBlocks()
+        .filter(b => b.id !== spawnPoint.id)
+        .map(b => b.mesh);
+      
+      const intersects = raycaster.intersectObjects(meshes, true);
+      
+      // Check if there's a floor within reasonable distance (10 units)
+      const hasFloor = intersects.length > 0 && intersects[0].distance < 10;
+      
+      if (!hasFloor) {
+        this.alerts.publish(
+          "spawn-no-floor",
+          "warning",
+          "Spawn point has no floor beneath it. Players will fall into the void."
+        );
+      } else {
+        this.alerts.clear("spawn-no-floor");
+      }
+    } else {
+      // No spawn point - could add another alert here if needed
+      this.alerts.clear("spawn-no-floor");
+    }
   }
 
   public placeBlockAt(clientX: number, clientY: number): EditorBlock | null {

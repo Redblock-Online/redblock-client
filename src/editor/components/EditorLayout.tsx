@@ -6,6 +6,7 @@ import { EditorHeader } from "./EditorHeader";
 import { EditorSidebar } from "./EditorSidebar";
 import { EditorOverlays } from "./EditorOverlays";
 import { DropdownMenu } from "./DropdownMenu";
+import type { Alert } from "../core/AlertManager";
 
 interface MenuGroup {
   id: string;
@@ -53,6 +54,7 @@ interface EditorLayoutProps {
   deleteSelection: () => void;
   renameSelection?: (id: string, newName: string) => void;
   setTyping?: (typing: boolean) => void;
+  alerts: Alert[];
 }
 
 export function EditorLayout(props: EditorLayoutProps): ReactElement {
@@ -69,6 +71,7 @@ export function EditorLayout(props: EditorLayoutProps): ReactElement {
         menuAnchors={props.menuAnchors}
         onMenuClick={props.onMenuClick}
         closeMenus={props.closeMenus}
+        alerts={props.alerts}
       />
       <DropdownMenu menu={props.activeMenu} position={props.menuPosition} onClose={props.closeMenus} />
       <div className="flex flex-1 overflow-hidden px-2 pb-2 pt-2 gap-2">

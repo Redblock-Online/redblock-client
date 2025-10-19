@@ -24,6 +24,8 @@ import {
   type StoredScenario,
 } from "../scenarioStore";
 import type { SerializedScenario } from "../scenarioStore";
+import type { Alert } from "../core/AlertManager";
+import { AlertIcon } from "./AlertIcon";
 
 type VectorState = { x: number; y: number; z: number };
 type ClipboardPayload = {
@@ -47,6 +49,9 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const [positionState, setPositionState] = useState<VectorState>({ x: 0, y: 0, z: 0 });
   const [scaleState, setScaleState] = useState<VectorState>({ x: 1, y: 1, z: 1 });
   const [rotationState, setRotationState] = useState<VectorState>({ x: 0, y: 0, z: 0 });
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [showInspector, setShowInspector] = useState(true);
 
   const selectedItemRef = useRef<EditorItem | null>(null);
 
@@ -98,11 +103,50 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     }
   }, [editor, refreshScenarios]);
 
+  // Subscribe to alerts
+  useEffect(() => {
+    const unsubscribe = editor.alerts.addListener((newAlerts) => {
+      setAlerts(newAlerts);
+    });
+    
+    // Initial validation
+    editor.validateScene();
+    
+    return unsubscribe;
+  }, [editor]);
+
+  // Keyboard shortcuts for toggling panels
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Ignore if user is typing in an input
+      if (editor.isUserTyping()) return;
+      
+      // Ignore if any modifier keys are pressed
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      
+      switch (event.key.toLowerCase()) {
+        case "b":
+          event.preventDefault();
+          setShowSidebar(prev => !prev);
+          break;
+        case "i":
+          event.preventDefault();
+          setShowInspector(prev => !prev);
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [editor]);
+
   const autoSaveScenario = useCallback(() => {
     if (typeof window === "undefined") {
       return;
     }
     markUnsaved();
+    // Validate scene when auto-saving
+    editor.validateScene();
     if (autoSaveTimeoutRef.current !== null) {
       window.clearTimeout(autoSaveTimeoutRef.current);
     }
@@ -955,6 +999,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
           </nav>
         </div>
         <div className="flex items-center gap-4">
+          <AlertIcon alerts={alerts} />
           {!isGameActive ? (
             <button
               onClick={handleStartGame}
@@ -1037,7 +1082,8 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         
         {/* Editor Content */}
         <div className="relative flex flex-1 gap-2 overflow-hidden px-2 pb-2 pt-2">
-              <aside className="relative z-10 flex w-64 flex-col gap-2 rounded border border-[#1a1a1a] bg-[#383838] p-3 pointer-events-auto overflow-auto">
+              {showSidebar && (
+                <aside className="relative z-10 flex w-64 flex-col gap-2 rounded border border-[#1a1a1a] bg-[#383838] p-3 pointer-events-auto overflow-auto">
           <div className="text-[11px] text-[#999999] mb-1">Components</div>
           <ItemMenu
             items={items}
@@ -1064,6 +1110,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             </div>
           ) : null}
         </aside>
+              )}
         <main className="pointer-events-none relative flex-1">
           <div className="pointer-events-none absolute inset-0">
             <div className="absolute left-4 top-4 flex max-w-md flex-col gap-1.5 rounded border border-[#1a1a1a] bg-[#323232]/95 px-3 py-2.5 text-[11px] text-[#cccccc]">
@@ -1077,6 +1124,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
                 Select with left click · Move (G) · Rotate (R) · Scale (F) · constrain with X / Y / Z
               </span>
               <span className="leading-relaxed text-[10px]">Move camera with WASD</span>
+              <span className="leading-relaxed text-[10px]">Toggle Components (B) · Toggle Inspector (I)</span>
               {transformLabel ? (
                 <span className="mt-1 w-fit rounded border border-[#1a1a1a] bg-[#4772b3] px-2.5 py-1 text-[10px] text-white">
                   {transformLabel}
@@ -1095,11 +1143,12 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             ) : null}
           </div>
         </main>
-        <aside
-          className={`relative z-10 w-72 rounded border border-[#1a1a1a] bg-[#383838] p-3 transition-opacity overflow-auto ${
-            inspectorVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-40"
-          }`}
-        >
+        {showInspector && (
+          <aside
+            className={`relative z-10 w-72 rounded border border-[#1a1a1a] bg-[#383838] p-3 transition-opacity overflow-auto ${
+              inspectorVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-40"
+            }`}
+          >
           <PropertiesPanel
             selection={selection}
             positionState={positionState}
@@ -1166,6 +1215,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             setTyping={setTyping}
           />
         </aside>
+        )}
         </div>
 
         {/* Game Overlay - Full screen */}

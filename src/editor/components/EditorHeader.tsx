@@ -1,5 +1,7 @@
 import Image from "next/image";
 import type { ReactElement } from "react";
+import { AlertIcon } from "./AlertIcon";
+import type { Alert } from "../core/AlertManager";
 
 interface MenuGroup {
   id: string;
@@ -16,6 +18,7 @@ interface EditorHeaderProps {
   menuAnchors: React.MutableRefObject<Record<string, HTMLButtonElement | null>>;
   onMenuClick: (menuId: string) => void;
   closeMenus: () => void;
+  alerts: Alert[];
 }
 
 export function EditorHeader({
@@ -27,6 +30,7 @@ export function EditorHeader({
   menuAnchors,
   onMenuClick,
   closeMenus,
+  alerts,
 }: EditorHeaderProps): ReactElement {
   return (
     <header className="relative z-50 flex h-12 items-center justify-between border-b border-[#1a1a1a] bg-[#323232] px-4 pointer-events-auto">
@@ -65,16 +69,19 @@ export function EditorHeader({
           ))}
         </nav>
       </div>
-      <div className="flex flex-col items-end text-right">
-        <div className="text-[11px] text-[#999999]">
-          Scenario:{" "}
-          <span className="text-[11px] text-[#cccccc]">
-            {activeScenarioName}
-          </span>
-          {hasUnsavedChanges ? <span className="ml-1 text-[#cccccc]">*</span> : null}
-        </div>
-        <div className="text-[12px] font-medium text-[#cccccc]">
-          {title}
+      <div className="flex items-center gap-4">
+        <AlertIcon alerts={alerts} />
+        <div className="flex flex-col items-end text-right">
+          <div className="text-[11px] text-[#999999]">
+            Scenario:{" "}
+            <span className="text-[11px] text-[#cccccc]">
+              {activeScenarioName}
+            </span>
+            {hasUnsavedChanges ? <span className="ml-1 text-[#cccccc]">*</span> : null}
+          </div>
+          <div className="text-[12px] font-medium text-[#cccccc]">
+            {title}
+          </div>
         </div>
       </div>
     </header>
