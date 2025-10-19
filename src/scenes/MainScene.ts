@@ -85,6 +85,8 @@ export default class MainScene extends THREE.Scene {
   private isEditorMode: boolean = false;
   private currentGroundCollider: { min: THREE.Vector3; max: THREE.Vector3 } | null = null;
   private currentRoomMesh: THREE.Group | null = null;
+  private frameCount = 0;
+  private readonly neighborUpdateInterval = 2; // Update neighbors every N frames for performance
   
   // Reusable objects for neighbor updates to avoid allocations
   private _tempTargetPos = new THREE.Vector3();
@@ -104,11 +106,9 @@ export default class MainScene extends THREE.Scene {
     // Add a solid prism for the ground: top face stays at y=0, volume extrudes downward
     const prismDepth = 50; // world units; extrude downward to make side faces 20x50
     const groundGeometry = new THREE.BoxGeometry(1, prismDepth, 1);
-    // Use standard material with high emissive to stay white but allow subtle shadows
-    const groundMaterial = new THREE.MeshStandardMaterial({ 
-      color: 0xffffff,
-      emissive: 0xffffff,
-      emissiveIntensity: 0.3  // Subtle emissive glow to stay white
+    // Use basic material for maximum performance (no lighting calculations)
+    const groundMaterial = new THREE.MeshBasicMaterial({ 
+      color: 0xffffff
     });
     const groundPrism = new THREE.Mesh(groundGeometry, groundMaterial);
     // Align top face with previous square ground level (world y ≈ -2)
@@ -353,18 +353,29 @@ export default class MainScene extends THREE.Scene {
   }
 
   public update() {
+    this.frameCount++;
+    
     const neighbors = this.wsManager.getNeighbors();
     
     // Early exit if no neighbors (common in offline mode)
     if (neighbors.length === 0) {
-      // Still cleanup if we had neighbors before
-      if (this.neighborMeshes.size > 0) {
+      // Still cleanup if we had neighbors before (but only occasionally)
+      if (this.neighborMeshes.size > 0 && this.frameCount % 60 === 0) {
         this.cleanupDisconnectedNeighbors(new Set());
       }
       return;
     }
     
     const dt = this.clock.getDelta();
+    
+    // Always interpolate for smooth movement
+    this.interpolateNeighborMeshes(dt);
+    
+    // Update neighbor data less frequently to reduce overhead
+    if (this.frameCount % this.neighborUpdateInterval !== 0) {
+      return;
+    }
+    
     const currentIds = new Set<string>();
 
     for (const n of neighbors) {
@@ -390,7 +401,6 @@ export default class MainScene extends THREE.Scene {
       }
     }
 
-    this.interpolateNeighborMeshes(dt);
     this.cleanupDisconnectedNeighbors(currentIds);
   }
 }

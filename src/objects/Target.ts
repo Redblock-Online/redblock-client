@@ -133,7 +133,8 @@ export default class Target extends THREE.Group {
       const edgeRadius = 0.025;
       const edgeLength = 1.0;
       const scaledRadius = edgeRadius / targetScale;
-      const geom = new THREE.CylinderGeometry(scaledRadius, scaledRadius, edgeLength, 16);
+      // Reduced from 16 to 6 segments for 60% fewer vertices (massive performance gain)
+      const geom = new THREE.CylinderGeometry(scaledRadius, scaledRadius, edgeLength, 6);
       Target.cylinderGeometryCache.set(key, geom);
     }
     

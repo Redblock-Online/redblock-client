@@ -23,6 +23,10 @@ export class PhysicsSystem {
   private physicsEnabled = false; // Physics paused by default
   private colliders: Map<CollisionBox, RAPIER.Collider> = new Map();
   
+  // Fixed timestep accumulator for stable, optimized physics
+  private readonly fixedTimeStep = 1 / 60; // 60Hz physics updates
+  private accumulator = 0;
+  
   public playerRadius = 0.25; // Reduced from 0.3 to 0.25 to avoid getting stuck on edges
   public playerHeight = 1.5;
   private stepHeight = 0.2; // Reduced from 0.5 to 0.2 - only small steps can be climbed
@@ -38,9 +42,14 @@ export class PhysicsSystem {
   private async initRapier() {
     await RAPIER.init();
     
-    // Create physics world with gravity
+    // Create physics world with gravity (reduced precision for performance)
     const gravity = new RAPIER.Vector3(0.0, -24.0, 0.0);
     this.world = new RAPIER.World(gravity);
+    
+    // Reduce integration parameters for better performance
+    // Default is usually 4 substeps - we reduce to 2 for speed
+    this.world.integrationParameters.numSolverIterations = 2; // Reduced from 4
+    this.world.integrationParameters.numInternalPgsIterations = 1; // Minimal
     
     // Create character controller with small offset to smooth out collisions
     this.characterController = this.world.createCharacterController(0.01);
@@ -433,13 +442,32 @@ export class PhysicsSystem {
   }
 
   /**
-   * Update physics world
-   * Call this every frame
+   * Update physics world with fixed timestep accumulator
+   * Call this every frame - internally steps physics at fixed 60Hz
    */
-  public step(_deltaTime: number): void {
+  public step(deltaTime: number): void {
     if (!this.initialized || !this.physicsEnabled) return;
-    // Use fixed timestep for stability
-    this.world.step();
+    
+    // Clamp delta time to prevent spiral of death
+    const clampedDelta = Math.min(deltaTime, 0.1);
+    
+    // Accumulate time
+    this.accumulator += clampedDelta;
+    
+    // Step physics at fixed timestep (more stable and can skip steps when slow)
+    let stepsThisFrame = 0;
+    const maxStepsPerFrame = 3; // Prevent too many steps on slow frames
+    
+    while (this.accumulator >= this.fixedTimeStep && stepsThisFrame < maxStepsPerFrame) {
+      this.world.step();
+      this.accumulator -= this.fixedTimeStep;
+      stepsThisFrame++;
+    }
+    
+    // If we hit max steps, discard remaining time to prevent spiral
+    if (stepsThisFrame >= maxStepsPerFrame) {
+      this.accumulator = 0;
+    }
   }
 
   /**

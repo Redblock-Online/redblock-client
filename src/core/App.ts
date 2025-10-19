@@ -108,7 +108,7 @@ export default class App {
     this.tracerGeom = new BufferGeometry();
     const positions = new Float32Array(6);
     this.tracerGeom.setAttribute('position', new BufferAttribute(positions, 3));
-    this.impactGeom = new SphereGeometry(0.06, 8, 8);
+    this.impactGeom = new SphereGeometry(0.06, 6, 4); // Reduced from 8x8 to 6x4 for performance
 
     this.renderer = new Renderer(this.scene, this.camera.instance, this.canvas);
     this.controls = new ControlsWithMovement(
@@ -399,23 +399,23 @@ export default class App {
     this.scene.add(sphere);
 
     try {
-      gsap.timeline()
-        .to(sphere.scale, { x: 1.6, y: 1.6, z: 1.6, duration: 0.08 })
-        .to((sphere.material as MeshBasicMaterial), {
-          opacity: 0, duration: 0.18, onComplete: () => {
-            this.scene.remove(sphere!);
-            if (this.impactPool.length < 10) {
-              this.impactPool.push(sphere!);
-            }
+      // Simplified animation - single tween instead of timeline for performance
+      gsap.to(sphere.scale, { x: 1.4, y: 1.4, z: 1.4, duration: 0.06 });
+      gsap.to((sphere.material as MeshBasicMaterial), {
+        opacity: 0, duration: 0.15, onComplete: () => {
+          this.scene.remove(sphere!);
+          if (this.impactPool.length < 10) {
+            this.impactPool.push(sphere!);
           }
-        });
+        }
+      });
     } catch {
       setTimeout(() => {
         this.scene.remove(sphere!);
         if (this.impactPool.length < 10) {
           this.impactPool.push(sphere!);
         }
-      }, 250);
+      }, 200);
     }
   }
 

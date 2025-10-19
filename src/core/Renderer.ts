@@ -3,7 +3,7 @@ import { EffectComposer, RenderPass, ShaderPass } from "three/examples/jsm/Addon
 import CustomOutlinePass from "./CustomPass/CustomOutlinePass";
 
 const minPixelRatio = 1;
-const maxPixelRatio = 2; // Reduced from 4 to 2 for better performance (still sharp on retina)
+const maxPixelRatio = 1.25; // Aggressively reduced for toaster-level performance
 const pixelRatio = Math.min(maxPixelRatio, Math.max(minPixelRatio, window.devicePixelRatio));
 
 export default class Renderer {
@@ -18,17 +18,16 @@ export default class Renderer {
 
     this.renderer = new THREE.WebGLRenderer({ 
       canvas, 
-      antialias: true,
+      antialias: false, // Disabled for performance - outline pass provides edge definition
       alpha: false,
       powerPreference: "high-performance",
-      precision: "highp"
+      precision: "mediump" // Reduced from highp for better performance
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(pixelRatio);
     
-    // Configuraciones para mejor compatibilidad cross-platform
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Shadows disabled for maximum performance (visual style doesn't require them)
+    this.renderer.shadowMap.enabled = false;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.NoToneMapping;
     this.renderer.toneMappingExposure = 1.0;
@@ -41,17 +40,17 @@ export default class Renderer {
     const renderPass = new RenderPass(scene, camera);
     this.composer.addPass(renderPass);
 
-    // 2) Custom outline pass
+    // 2) Custom outline pass (simplified settings for performance)
     this.outlinePass = new CustomOutlinePass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
       scene,
       camera,
       {
-        edgeStrength: 1.0,
-        edgeThreshold: 0.0025,
-        thickness: 1.0,
-        normalThreshold: 0.15,
-        normalStrength: 1.0,
+        edgeStrength: 0.8, // Reduced for faster processing
+        edgeThreshold: 0.005, // Increased threshold = fewer edges detected
+        thickness: 0.8, // Thinner edges = faster
+        normalThreshold: 0.2, // Higher threshold = fewer edges
+        normalStrength: 0.8,
         outlineColor: 0x000000,
       }
     );

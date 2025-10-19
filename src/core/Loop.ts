@@ -17,6 +17,8 @@ export default class Loop {
   pistol: Pistol;
   physicsSystem: PhysicsSystem;
   private frameCount: number = 0;
+  private lastRenderTime: number = 0;
+  private readonly minFrameTime = 1000 / 144; // Cap at 144fps to save resources
   
   constructor(
     renderer: EffectComposer,
@@ -48,16 +50,21 @@ export default class Loop {
     if (!this.active) return;
 
     const now = performance.now();
+    
+    // Frame rate limiter - skip frame if too soon (save CPU/GPU on high-refresh displays)
+    if (now - this.lastRenderTime < this.minFrameTime) {
+      requestAnimationFrame(this.animate);
+      return;
+    }
+    
     this.deltaTime = (now - this.lastTime) / 1000;
-
     this.lastTime = now;
+    this.lastRenderTime = now;
     this.frameCount++;
     
-    // Clean up completed GSAP tweens every 600 frames (~10 seconds at 60fps)
-    // This prevents memory leaks from thousands of completed animations
-    if (this.frameCount % 600 === 0) {
-      // GSAP automatically cleans up, but we can help by triggering a tick
-      // This is safe and won't affect active animations
+    // Clean up completed GSAP tweens every 1200 frames (~20 seconds at 60fps)
+    // Reduced frequency from 600 to 1200 for less overhead
+    if (this.frameCount % 1200 === 0) {
       const gsap = (window as { gsap?: { ticker: { tick: () => void } } }).gsap;
       if (gsap) {
         gsap.ticker.tick();

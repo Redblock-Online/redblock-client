@@ -69,16 +69,16 @@ export default class Controls {
   private isEditorMode = false; // If true, disable movement limits
 
   private changeCheckAccumulator = 0;
-  private changeCheckInterval = 1 / 24; // 24 times per second (~0.04166s)
+  private changeCheckInterval = 1 / 20; // Reduced from 24 to 20 Hz for less network overhead
 
   private lastSentPos = new THREE.Vector3(Number.NaN, Number.NaN, Number.NaN);
   private lastSentRotX = Number.NaN; // pitch
   private lastSentRotY = Number.NaN; // yaw
 
-  private posThreshold = 0.05; // 5 cm
-  private rotThreshold = THREE.MathUtils.degToRad(0.9); // ~0.9°
-  private posQuant = 0.01; // 1 cm
-  private rotQuant = THREE.MathUtils.degToRad(0.1); // ~0.1°
+  private posThreshold = 0.08; // Increased from 5cm to 8cm - less network spam
+  private rotThreshold = THREE.MathUtils.degToRad(1.5); // Increased from 0.9° to 1.5°
+  private posQuant = 0.02; // Increased from 1cm to 2cm quantization
+  private rotQuant = THREE.MathUtils.degToRad(0.2); // Increased from 0.1° to 0.2°
 
   private nextSendAt = 0; // ms timestamp
 
@@ -174,8 +174,11 @@ export default class Controls {
 
   // ====== checkChanges optimized ======
   private checkChanges() {
+    // Early exit if paused or no WS manager
+    if (this.paused || !this.wsManager.getMe()) return;
+    
     const now = performance.now();
-    if (now < this.nextSendAt) return; // 20 Hz cap
+    if (now < this.nextSendAt) return; // Rate limited
 
     const pos = this.yawObject.position;
     const rotX = this.yawObject.rotation.y; // yaw
