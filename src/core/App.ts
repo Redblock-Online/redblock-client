@@ -598,9 +598,7 @@ export default class App {
     };
 
     const hits = this.shotsHit;
-    let roundTime: number| null = 0;
-
-    roundTime = roundDurationSeconds !== null && roundDurationSeconds > 0 ? hits / roundTime : null;
+    const roundTime: number | null = roundDurationSeconds;
 
     const baselineReaction = stored.best.avgReaction ?? avgReaction ?? null;
     const reactionNormalized =
