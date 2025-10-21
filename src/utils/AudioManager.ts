@@ -22,6 +22,9 @@
  * audio.play('shoot', { volume: 0.3 });
  * audio.play('impact', { volume: 0.5 });
  * 
+ * // Play with random variants
+ * audio.play('shoot', { variants: ['gunshot01', 'gunshot02', 'gunshot03'] });
+ * 
  * // Play looped sound
  * const stepsId = audio.play('steps', { volume: 0.4, loop: true });
  * audio.stop(stepsId); // Stop when done
@@ -42,6 +45,7 @@ interface AudioOptions {
   startAtMs?: number;     // Optional: start playback offset in milliseconds
   randomizePitch?: boolean; // If true, jitter the pitch slightly each play
   pitchJitter?: number;     // Max absolute jitter to apply around base pitch (e.g., 0.04 -> ±0.04)
+  variants?: string[];     // Array of alternative sound names to randomly choose from
 }
 
 interface LoadedSound {
@@ -310,35 +314,43 @@ export class AudioManager {
       this.ctx.resume().catch(() => {/* ignore */});
     }
 
-    const sound = this.sounds.get(name);
+    // Choose sound name: if variants provided, pick one randomly from the list
+    const chosenName = options.variants && options.variants.length > 0
+      ? options.variants[Math.floor(Math.random() * options.variants.length)]
+      : name;
+
+    const sound = this.sounds.get(chosenName);
     if (!sound) {
       const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-      const last = this.lastMissingWarn.get(name) ?? 0;
+      const last = this.lastMissingWarn.get(chosenName) ?? 0;
       if (now - last > 500) {
-        console.warn(`[AudioManager] Sound '${name}' not loaded. Available:`, Array.from(this.sounds.keys()));
-        this.lastMissingWarn.set(name, now);
+        console.warn(`[AudioManager] Sound '${chosenName}' not loaded. Available:`, Array.from(this.sounds.keys()));
+        this.lastMissingWarn.set(chosenName, now);
       }
       // If we know about this sound (or it's a common default), lazy-load (but don't auto-replay loops)
-      let known = this.knownSounds.get(name);
+      let known = this.knownSounds.get(chosenName);
       if (!known) {
         // Register sensible defaults for common names to survive HMR/device resets
-        if (name === 'steps') known = { url: '/audio/sfx/steps.wav', channel: 'sfx' } as const;
-        if (name === 'shoot') known = { url: '/audio/sfx/shoot.mp3', channel: 'sfx' } as const;
-        if (known) this.knownSounds.set(name, known);
+        if (chosenName === 'steps') known = { url: '/audio/sfx/events/steps.wav', channel: 'sfx' } as const;
+        if (chosenName === 'shoot') known = { url: '/audio/sfx/events/gunshot01.wav', channel: 'sfx' } as const;
+        if (chosenName === 'btn-click') known = { url: '/audio/ui/btn-click01.wav', channel: 'ui' } as const;
+        if (chosenName === 'escape-event') known = { url: '/audio/sfx/events/escape-event.wav', channel: 'sfx' } as const;
+  // legacy UI button sounds removed: no default mapping for 'btn-click'
+        if (known) this.knownSounds.set(chosenName, known);
       }
-      if (known && !this.loadingSounds.has(name)) {
-        this.loadingSounds.add(name);
-        this.loadSound(name, known.url, known.channel)
+      if (known && !this.loadingSounds.has(chosenName)) {
+        this.loadingSounds.add(chosenName);
+        this.loadSound(chosenName, known.url, known.channel)
           .then(() => {
-            this.loadingSounds.delete(name);
+            this.loadingSounds.delete(chosenName);
             // Don't auto-play looped sounds (like footsteps) - caller may have stopped moving
             // Only auto-play one-shots (like shoot)
             if (!options.loop) {
-              this.play(name, options);
+              this.play(chosenName, { ...options, variants: undefined });
             }
           })
           .catch(() => {
-            this.loadingSounds.delete(name);
+            this.loadingSounds.delete(chosenName);
           });
       }
       return null;

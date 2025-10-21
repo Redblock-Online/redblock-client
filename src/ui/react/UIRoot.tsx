@@ -11,6 +11,7 @@ import PauseMenu from "./PauseMenu";
 import SettingsMenu from "./SettingsMenu";
 import Crosshair from "./components/Crosshair";
 import StatsDisplay from "./components/StatsDisplay";
+import { AudioManager } from "@/utils/AudioManager";
 
 type Props = {
   onStart: (scenarioId: string) => void;
@@ -35,10 +36,24 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
   const pausedRef = useRef(false);
   const timerRunningRef = useRef(false);
   const hadRunningBeforePauseRef = useRef(false);
+  const lastPausedForSoundRef = useRef(paused);
 
   useEffect(() => {
     pausedRef.current = paused;
   }, [paused]);
+
+  useEffect(() => {
+    const wasPaused = lastPausedForSoundRef.current;
+    if (!wasPaused && paused && started) {
+      try {
+        const audio = AudioManager.getInstance();
+        audio.play("escape-event", { channel: "sfx", volume: 0.7 });
+      } catch {
+        /* ignore */
+      }
+    }
+    lastPausedForSoundRef.current = paused;
+  }, [paused, started]);
 
   // Load and listen to game settings
   useEffect(() => {

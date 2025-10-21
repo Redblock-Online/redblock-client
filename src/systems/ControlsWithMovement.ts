@@ -51,6 +51,8 @@ export default class Controls {
   private audioManager: AudioManager;
   private stepsAudioId: string | null = null;
   private wasOnGroundLastFrame = false;
+  private footstepsPlaying = false;
+  private timeSinceStoppedMoving = 0;
 
   private keysPressed: Record<string, boolean> = {};
   private wsManager: WSManager;
@@ -523,66 +525,72 @@ export default class Controls {
     const opposingPressed = (leftPressed && rightPressed) || (forwardPressed && backwardPressed);
     const isCurrentlyMoving = this.onGround && !opposingPressed && (this.velocity.lengthSq() > 1e-6);
     
-    // Debug: mostrar estado del movimiento
+    // Debug: show movement state
     if (isCurrentlyMoving && !this.isMoving) {
-      console.log('Movimiento detectado');
+      console.log('Movement detected');
     }
     
     if (isCurrentlyMoving) {
       this.isMoving = true;
       this.lastMovementTime = performance.now();
       this.headBobbingTime += deltaTime * this.headBobbingFrequency;
+      this.timeSinceStoppedMoving = 0;
       
       // Play footsteps audio when moving (only if not already playing)
-      if (!this.stepsAudioId) {
+      if (!this.footstepsPlaying) {
         // Detect landing: just touched ground this frame while moving
         const justLanded = this.onGround && !this.wasOnGroundLastFrame;
         // Use startAtMs: 0 when landing for immediate sound, otherwise skip initial silence
         const offset = justLanded ? 0 : 70;
         this.stepsAudioId = this.audioManager.play('steps', { volume: 0.4, loop: true, startAtMs: offset });
+        this.footstepsPlaying = true;
       }
     } else {
-      // Si no se está moviendo, detener inmediatamente el head bobbing
-      if (this.isMoving) {
-        this.isMoving = false;
-        this.headBobbingTime = 0;
-        
-        // Stop footsteps audio when stopping
-        if (this.stepsAudioId) {
-          this.audioManager.stop(this.stepsAudioId);
-          this.stepsAudioId = null;
+      // If not moving, immediately stop head bobbing
+      this.timeSinceStoppedMoving += deltaTime;
+      if (this.timeSinceStoppedMoving > 0.1) { // Small delay to avoid rapid toggles
+        if (this.isMoving) {
+          this.isMoving = false;
+          this.headBobbingTime = 0;
+          
+          // Stop footsteps audio when stopping
+          if (this.stepsAudioId) {
+            this.audioManager.stop(this.stepsAudioId);
+            this.stepsAudioId = null;
+          }
+          this.footstepsPlaying = false;
+          // Safety: force-stop all 'steps' sounds in case ID was lost
+          this.audioManager.stopAllByName('steps');
         }
-        // Safety: force-stop all 'steps' sounds in case ID was lost
-        this.audioManager.stopAllByName('steps');
       }
     }
 
     if (this.isMoving && this.onGround && !this.isCrouching) {
-      // Detectar dirección del movimiento
+      // Detect movement direction
       const _forwardMovement = this.keysPressed["w"];
       const backwardMovement = this.keysPressed["s"];
       const leftMovement = this.keysPressed["a"];
       const rightMovement = this.keysPressed["d"];
       
-      // Calcular amplitud basada en la dirección
+      // Calculate amplitude based on direction
       let verticalAmplitude = this.headBobbingAmplitude;
       let sideAmplitude = this.headBobbingSideAmplitude;
       
-      // Aumentar movimiento para direcciones laterales y hacia atrás
+      // Increase movement for lateral and backward directions
       if (leftMovement || rightMovement || backwardMovement) {
-        verticalAmplitude *= 1.4; // 40% más para laterales y atrás
-        sideAmplitude *= 1.6; // 60% más para laterales y atrás
+        verticalAmplitude *= 1.4; // 40% more for lateral and backward
+        sideAmplitude *= 1.6; // 60% more for lateral and backward
       }
       
-      // Calcular el movimiento de head bobbing
+      // Calculate head bobbing movement
       const verticalBob = Math.sin(this.headBobbingTime * Math.PI * 2) * verticalAmplitude;
       const sideBob = Math.sin(this.headBobbingTime * Math.PI * 2 * 0.5) * sideAmplitude;
       
-      // Aplicar el movimiento a la cámara de forma más suave
+      // Apply movement to camera smoothly
       this.camera.position.y += (verticalBob - this.camera.position.y) * 5 * deltaTime;
       this.camera.position.x += (sideBob - this.camera.position.x) * 5 * deltaTime;
     } else {
-      // Suavemente regresar a la posición original
+      // Smoothly return to original position
       this.camera.position.y += (0 - this.camera.position.y) * this.headBobbingDamping * deltaTime;
       this.camera.position.x += (0 - this.camera.position.x) * this.headBobbingDamping * deltaTime;
     }
@@ -603,6 +611,7 @@ export default class Controls {
         this.audioManager.stop(this.stepsAudioId);
         this.stepsAudioId = null;
       }
+      this.footstepsPlaying = false;
       // Safety: force-stop all 'steps' sounds in case ID was lost
       this.audioManager.stopAllByName('steps');
     }

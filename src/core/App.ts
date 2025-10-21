@@ -184,8 +184,27 @@ export default class App {
       console.log('[App] Audio context pre-warmed');
       
       await this.audioManager.preloadSounds([
-        ['shoot', '/audio/sfx/shoot.mp3', 'sfx'],
-        ['steps', '/audio/sfx/steps.wav', 'sfx'],
+        // Gunshots sfx
+        ['gunshot01', '/audio/sfx/events/gunshot01.wav', 'sfx'],
+        ['gunshot02', '/audio/sfx/events/gunshot02.wav', 'sfx'],
+        ['gunshot03', '/audio/sfx/events/gunshot03.wav', 'sfx'],
+
+        // Buttons sfx
+        ['btn-click01', '/audio/sfx/ui/buttons/btn-click01.wav', 'sfx'],
+        ['btn-click02', '/audio/sfx/ui/buttons/btn-click02.wav', 'sfx'],
+        ['btn-click03', '/audio/sfx/ui/buttons/btn-click03.wav', 'sfx'],
+        ['btn-hover', '/audio/sfx/ui/buttons/btn-hover.wav', 'sfx'],
+
+        // Player sfx
+        ['steps', '/audio/sfx/events/steps.wav', 'sfx'],
+
+        // Events
+        ['escape-event', '/audio/sfx/actions/escape-event.wav', 'sfx'],
+
+        // UI Behavior
+        ['slider-down', '/audio/sfx/ui/slider-change/slider-down.wav', 'sfx'],
+        ['slider-up', '/audio/sfx/ui/slider-change/slider-up.wav', 'sfx'],
+
         // Add more sounds here as needed
         // ['ui_click', '/audio/sfx/ui_click.mp3', 'ui'],
       ]);
@@ -270,7 +289,7 @@ export default class App {
   private _tempCamDir = new Vector3();
   private _tempMuzzlePos = new Vector3();
   
-  public checkCrosshairIntersections(): "regular" | "portal" | null {
+  public checkCrosshairIntersections(): "regular" | "portal" | "last" | null {
     const objects = [...this.targets, ...this.scenarioPortals] as unknown as import("three").Object3D[];
     if (objects.length === 0) return null;
 
@@ -355,6 +374,8 @@ export default class App {
       // TargetManager handles all cleanup and pooling automatically
       // No manual dispose needed - the pool manages everything efficiently
       console.log('[App] Level complete. TargetManager stats:', this.scene.targetManager.getStats());
+
+      return "last";
     }
 
     return "regular";
@@ -462,25 +483,7 @@ export default class App {
     if (e.button === 0) {
       if (this.paused) return;
       this.recordShotFired();
-      
-      // Diagnostic: Log timing on first shot
-      if (this.shotsFired === 1) {
-        const latencyInfo = this.audioManager.getLatencyInfo();
-        console.log('[App] 🔍 Audio Diagnostics:', {
-          latencyInfo,
-          timestamp: performance.now(),
-          message: 'About to play shoot sound...'
-        });
-      }
-      
-      // Play shoot sound FIRST (before visual animation) for minimum latency
-      const playStart = performance.now();
-      this.audioManager.play('shoot', { volume: 0.35, startAtMs: 0, randomizePitch: true, pitchJitter: 0.08 });
-      const playEnd = performance.now();
-      
-      if (this.shotsFired === 1) {
-        console.log('[App] 🔍 play() call took:', (playEnd - playStart).toFixed(2), 'ms');
-      }
+      const shotNumber = this.shotsFired;
       
       this.pistol.shoot();
 
@@ -529,6 +532,27 @@ export default class App {
       const result = this.checkCrosshairIntersections();
       if (result === "portal") {
         this.shotsFired = Math.max(0, this.shotsFired - 1);
+      }
+
+      if (result === "last") {
+        this.audioManager.play('gunshot03', { volume: 0.35, startAtMs: 0 });
+      } else {
+        if (shotNumber === 1) {
+          const latencyInfo = this.audioManager.getLatencyInfo();
+          console.log('[App] 🔍 Audio Diagnostics:', {
+            latencyInfo,
+            timestamp: performance.now(),
+            message: 'About to play shoot sound...'
+          });
+        }
+
+        const playStart = performance.now();
+        this.audioManager.play('shoot', { volume: 0.35, startAtMs: 0, randomizePitch: true, pitchJitter: 0.05 });
+        const playEnd = performance.now();
+
+        if (shotNumber === 1) {
+          console.log('[App] 🔍 play() call took:', (playEnd - playStart).toFixed(2), 'ms');
+        }
       }
     }
   };
