@@ -118,26 +118,39 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   // Keyboard shortcuts for toggling panels
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Ignore if user is typing in an input
+      // Check if user is typing in an input field
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+        return;
+      }
+      
+      // Ignore if user is typing (from editor state)
       if (editor.isUserTyping()) return;
       
       // Ignore if any modifier keys are pressed
       if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
       
-      switch (event.key.toLowerCase()) {
-        case "b":
-          event.preventDefault();
-          setShowSidebar(prev => !prev);
-          break;
-        case "i":
-          event.preventDefault();
-          setShowInspector(prev => !prev);
-          break;
+      const key = event.key.toLowerCase();
+      
+      // Handle panel toggle shortcuts with high priority
+      if (key === "b") {
+        event.preventDefault();
+        event.stopPropagation();
+        setShowSidebar(prev => !prev);
+        return;
+      }
+      
+      if (key === "i") {
+        event.preventDefault();
+        event.stopPropagation();
+        setShowInspector(prev => !prev);
+        return;
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    // Use capture phase to ensure these shortcuts are handled first
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [editor]);
 
   const autoSaveScenario = useCallback(() => {

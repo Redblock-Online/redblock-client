@@ -104,8 +104,14 @@ export function BlockPreview({ item }: BlockPreviewProps): ReactElement {
     } else if (id.startsWith("component:")) {
       const compId = id.slice("component:".length);
       const comp = getComponent(compId);
-      if (comp && comp.members.length > 0) {
+      if (comp && comp.members && comp.members.length > 0) {
         for (const m of comp.members) {
+          // Skip null/undefined members
+          if (!m || !m.position || !m.rotation || !m.scale) {
+            console.warn(`BlockPreview: Skipping invalid member in component ${compId}:`, m);
+            continue;
+          }
+          
           const { mesh, geometry, material, edgesGeom, edgeMat } = createCube();
           mesh.position.set(m.position.x, m.position.y, m.position.z);
           mesh.rotation.set(m.rotation.x, m.rotation.y, m.rotation.z);
