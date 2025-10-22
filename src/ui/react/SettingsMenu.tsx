@@ -309,6 +309,15 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
         onClick={(e) => e.stopPropagation()}
         style={{ transform: `scale(${scaleValue})`, transformOrigin: 'center' }}
       >
+        {/* Close button (X) in top right corner */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center border-[3px] border-black bg-white hover:bg-black hover:text-white transition-all duration-200 z-10"
+          aria-label="Cerrar configuración"
+        >
+          <span className="font-mono font-bold text-lg leading-none">×</span>
+        </button>
+        
         <h2 className="font-mono text-xl font-bold tracking-wider">SETTINGS</h2>
         
         {/* Tabs - Grid layout for better wrapping */}

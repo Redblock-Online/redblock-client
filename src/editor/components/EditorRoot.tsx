@@ -40,6 +40,7 @@ const builtinItems: EditorItem[] = [
 
 export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const [activeItem, setActiveItem] = useState<EditorItem | null>(null);
+  const [showControls, setShowControls] = useState(true);
   const {
     components,
     refresh: refreshComponents,
@@ -1142,10 +1143,20 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
               )}
         <main className="pointer-events-none relative flex-1">
           <div className="pointer-events-none absolute inset-0">
-            <div className="absolute left-4 top-4 flex max-w-md flex-col gap-1.5 rounded border border-[#1a1a1a] bg-[#323232]/95 px-3 py-2.5 text-[13px] text-[#cccccc]">
-              <span className="text-[14px] text-[#999999] mb-0.5">
-                Controls
-              </span>
+            {showControls && (
+              <div className="absolute left-4 top-4 flex max-w-md flex-col gap-1.5 rounded border border-[#1a1a1a] bg-[#323232]/95 px-3 py-2.5 text-[13px] text-[#cccccc] relative pointer-events-auto">
+                {/* Close button (X) in top right corner */}
+                <button
+                  onClick={() => setShowControls(false)}
+                  className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center border border-[#1a1a1a] bg-[#323232] hover:bg-[#1a1a1a] hover:text-white transition-all duration-200 z-10 rounded pointer-events-auto"
+                  aria-label="Cerrar controles"
+                >
+                  <span className="font-mono font-bold text-sm leading-none text-[#cccccc]">×</span>
+                </button>
+                
+                <span className="text-[14px] text-[#999999] mb-0.5">
+                  Controls
+                </span>
               <span className="leading-relaxed text-[14px]">
                 Orbit with right click · Pan with Shift + right click · Zoom with scroll
               </span>
@@ -1159,7 +1170,34 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
                   {transformLabel}
                 </span>
               ) : null}
-            </div>
+              </div>
+            )}
+            
+            {/* Show controls button when controls are hidden */}
+            {!showControls && (
+              <button
+                onClick={() => setShowControls(true)}
+                className="absolute left-4 top-4 w-8 h-8 flex items-center justify-center border border-[#1a1a1a] bg-[#323232] hover:bg-[#1a1a1a] hover:text-white transition-all duration-200 z-10 rounded pointer-events-auto"
+                aria-label="Mostrar controles"
+              >
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  width="20" 
+                  height="20" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeLinecap="round" 
+                  strokeLinejoin="round" 
+                  strokeWidth="2"
+                  className="text-[#cccccc]"
+                >
+                  <path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0-18 0m9-3h.01"/>
+                  <path d="M11 12h1v4h1"/>
+                </svg>
+              </button>
+            )}
+            
             {activeItem ? (
               <div className="absolute bottom-4 left-1/2 w-max -translate-x-1/2 rounded border border-[#1a1a1a] bg-[#323232]/95 px-4 py-2 text-[13px] text-[#cccccc]">
                 Drag the {activeItem.label.toLowerCase()} from the components panel onto the canvas to place it
