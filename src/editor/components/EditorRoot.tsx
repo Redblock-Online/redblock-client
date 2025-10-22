@@ -999,7 +999,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             height={410}
             className="h-8 w-auto"
           />
-          <nav className="flex items-center gap-0.5 text-[11px] text-[#cccccc]">
+          <nav className="flex items-center gap-0.5 text-[13px] text-[#cccccc]">
             {menuGroups.map((menu) => (
               <div key={menu.id} className="relative">
                 <button
@@ -1007,7 +1007,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
                     menuAnchors.current[menu.id] = node;
                   }}
                   type="button"
-                  className={`rounded px-3 py-1.5 text-[11px] transition ${
+                  className={`rounded px-3 py-1.5 text-[13px] transition ${
                     openMenuId === menu.id
                       ? "bg-[#4772b3] text-white"
                       : "text-[#cccccc] hover:bg-[#404040]"
@@ -1033,7 +1033,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             <button
               onClick={handleStartGame}
               disabled={!hasSpawnPoint || isTransitioning}
-              className={`flex h-8 items-center gap-2 rounded border border-[#1a1a1a] px-4 text-[11px] transition ${
+              className={`flex h-8 items-center gap-2 rounded border border-[#1a1a1a] px-4 text-[13px] transition ${
                 hasSpawnPoint && !isTransitioning
                   ? "bg-[#4772b3] text-white hover:bg-[#5a8fd6]"
                   : "bg-[#2b2b2b] text-[#666666] cursor-not-allowed"
@@ -1047,7 +1047,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             <button
               onClick={handleStopGame}
               disabled={isTransitioning}
-              className={`flex h-8 items-center gap-2 rounded border border-[#1a1a1a] px-4 text-[11px] text-white transition ${
+              className={`flex h-8 items-center gap-2 rounded border border-[#1a1a1a] px-4 text-[13px] text-white transition ${
                 isTransitioning
                   ? "bg-[#2b2b2b] cursor-not-allowed"
                   : "bg-[#ef4444] hover:bg-[#dc2626]"
@@ -1059,14 +1059,14 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             </button>
           )}
           <div className="flex flex-col items-end text-right">
-            <div className="text-[11px] text-[#999999]">
+            <div className="text-[13px] text-[#999999]">
               Scenario:{" "}
-              <span className="text-[11px] text-[#cccccc]">
+              <span className="text-[13px] text-[#cccccc]">
                 {activeScenarioName}
               </span>
               {hasUnsavedChanges ? <span className="ml-1 text-[#cccccc]">*</span> : null}
             </div>
-            <div className="text-[12px] font-medium text-[#cccccc]">{title}</div>
+            <div className="text-[14px] font-medium text-[#cccccc]">{title}</div>
           </div>
         </div>
         </header>
@@ -1086,7 +1086,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
                     <button
                       key={item.id}
                       type="button"
-                      className={`block w-full px-3 py-1.5 text-left text-[11px] transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      className={`block w-full px-3 py-1.5 text-left text-[13px] transition disabled:cursor-not-allowed disabled:opacity-50 ${
                         disabled
                           ? "text-[#666666]"
                           : "text-[#cccccc] hover:bg-[#4772b3] hover:text-white"
@@ -1113,7 +1113,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         <div className="relative flex flex-1 gap-2 overflow-hidden px-2 pb-2 pt-2">
               {showSidebar && (
                 <aside className="relative z-10 flex w-64 flex-col gap-2 rounded border border-[#1a1a1a] bg-[#383838] p-3 pointer-events-auto overflow-auto">
-          <div className="text-[11px] text-[#999999] mb-1">Components</div>
+          <div className="text-[13px] text-[#999999] mb-1">Components</div>
           <ItemMenu
             items={items}
             activeItem={activeItem}
@@ -1127,7 +1127,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
           {activeItem && activeItem.id.startsWith("component:") ? (
             <div className="mt-4 flex flex-col gap-2">
               <button
-                className="h-7 rounded border border-[#1a1a1a] bg-[#ef4444] text-[11px] text-white transition hover:bg-[#dc2626]"
+                className="h-7 rounded border border-[#1a1a1a] bg-[#ef4444] text-[13px] text-white transition hover:bg-[#dc2626]"
                 onClick={() => {
                   const id = activeItem.id.slice("component:".length);
                   const def = components.find((entry) => entry.id === id);
@@ -1142,31 +1142,31 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
               )}
         <main className="pointer-events-none relative flex-1">
           <div className="pointer-events-none absolute inset-0">
-            <div className="absolute left-4 top-4 flex max-w-md flex-col gap-1.5 rounded border border-[#1a1a1a] bg-[#323232]/95 px-3 py-2.5 text-[11px] text-[#cccccc]">
-              <span className="text-[10px] text-[#999999] mb-0.5">
+            <div className="absolute left-4 top-4 flex max-w-md flex-col gap-1.5 rounded border border-[#1a1a1a] bg-[#323232]/95 px-3 py-2.5 text-[13px] text-[#cccccc]">
+              <span className="text-[14px] text-[#999999] mb-0.5">
                 Controls
               </span>
-              <span className="leading-relaxed text-[10px]">
+              <span className="leading-relaxed text-[14px]">
                 Orbit with right click · Pan with Shift + right click · Zoom with scroll
               </span>
-              <span className="leading-relaxed text-[10px]">
+              <span className="leading-relaxed text-[14px]">
                 Select with left click · Move (G) · Rotate (R) · Scale (F) · constrain with X / Y / Z
               </span>
-              <span className="leading-relaxed text-[10px]">Move camera with WASD</span>
-              <span className="leading-relaxed text-[10px]">Toggle Components (B) · Toggle Inspector (I)</span>
+              <span className="leading-relaxed text-[14px]">Move camera with WASD</span>
+              <span className="leading-relaxed text-[14px]">Toggle Components (B) · Toggle Inspector (I)</span>
               {transformLabel ? (
-                <span className="mt-1 w-fit rounded border border-[#1a1a1a] bg-[#4772b3] px-2.5 py-1 text-[10px] text-white">
+                <span className="mt-1 w-fit rounded border border-[#1a1a1a] bg-[#4772b3] px-2.5 py-1 text-[14px] text-white">
                   {transformLabel}
                 </span>
               ) : null}
             </div>
             {activeItem ? (
-              <div className="absolute bottom-4 left-1/2 w-max -translate-x-1/2 rounded border border-[#1a1a1a] bg-[#323232]/95 px-4 py-2 text-[11px] text-[#cccccc]">
+              <div className="absolute bottom-4 left-1/2 w-max -translate-x-1/2 rounded border border-[#1a1a1a] bg-[#323232]/95 px-4 py-2 text-[13px] text-[#cccccc]">
                 Drag the {activeItem.label.toLowerCase()} from the components panel onto the canvas to place it
               </div>
             ) : null}
             {editingActive ? (
-              <div className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 rounded border border-[#1a1a1a] bg-[#4772b3] px-4 py-2 text-[11px] text-white">
+              <div className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 rounded border border-[#1a1a1a] bg-[#4772b3] px-4 py-2 text-[13px] text-white">
                 Press Enter to finish editing the component
               </div>
             ) : null}

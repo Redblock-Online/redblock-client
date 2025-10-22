@@ -21,7 +21,7 @@ export function EditorSidebar({
 }: EditorSidebarProps): ReactElement {
   return (
     <aside className="relative z-50 flex w-64 flex-col gap-2 rounded border border-[#1a1a1a] bg-[#383838] p-3 pointer-events-auto overflow-auto">
-      <div className="text-[11px] text-[#999999] mb-1">Components</div>
+      <div className="text-[13px] text-[#999999] mb-1">Components</div>
       <ItemMenu
         items={items}
         activeItem={activeItem}
@@ -31,7 +31,7 @@ export function EditorSidebar({
       {activeItem && activeItem.id.startsWith("component:") ? (
         <div className="mt-4 flex flex-col gap-2">
           <button
-            className="h-7 rounded border border-[#1a1a1a] bg-[#ef4444] text-[11px] text-white transition hover:bg-[#dc2626]"
+            className="h-7 rounded border border-[#1a1a1a] bg-[#ef4444] text-[13px] text-white transition hover:bg-[#dc2626]"
             onClick={() => {
               const id = activeItem.id.slice("component:".length);
               const def = components.find((entry) => entry.id === id);

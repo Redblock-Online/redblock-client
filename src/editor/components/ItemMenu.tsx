@@ -70,7 +70,7 @@ export function ItemMenu({ items, activeItem, onItemSelect, onItemDragStart, dis
                 </svg>
               )}
               <span
-                className={`text-[11px] ${
+                className={`text-[13px] ${
                   isActive ? "text-white" : "text-[#cccccc] group-hover:text-white"
                 }`}
               >

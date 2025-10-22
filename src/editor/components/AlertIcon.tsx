@@ -90,7 +90,7 @@ export function AlertIcon({ alerts }: AlertIconProps): ReactElement {
       {isHovered && (
         <div className="absolute right-0 top-full z-50 mt-1 w-80 rounded border border-[#1a1a1a] bg-[#2b2b2b] shadow-lg">
           <div className="border-b border-[#1a1a1a] px-3 py-2">
-            <h3 className="text-[11px] font-semibold text-white">
+            <h3 className="text-[13px] font-semibold text-white">
               {hasAlerts ? "Scene Issues" : "Scene Status"}
             </h3>
           </div>
@@ -109,7 +109,7 @@ export function AlertIcon({ alerts }: AlertIconProps): ReactElement {
               >
                 <path d="M20 6L9 17l-5-5" />
               </svg>
-              <span className="text-[11px] text-[#999999]">
+              <span className="text-[13px] text-[#999999]">
                 No issues detected
               </span>
             </div>
@@ -169,10 +169,10 @@ export function AlertIcon({ alerts }: AlertIconProps): ReactElement {
                       )}
                     </div>
                     <div className="flex-1">
-                      <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide" style={{ color: getIconColor() }}>
+                      <div className="mb-0.5 text-[12px] font-semibold uppercase tracking-wide" style={{ color: getIconColor() }}>
                         {getSeverityLabel(alert.severity)}
                       </div>
-                      <div className="text-[11px] leading-relaxed text-[#cccccc]">
+                      <div className="text-[13px] leading-relaxed text-[#cccccc]">
                         {alert.message}
                       </div>
                     </div>

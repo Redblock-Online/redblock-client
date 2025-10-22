@@ -29,13 +29,13 @@ export function ComponentDeleteModal({ open, componentName, onCancel, onConfirm 
           onClick={handleDialogClick}
         >
           <header className="border-b border-[#1a1a1a] px-4 py-3">
-            <h2 className="text-[12px] font-medium text-[#cccccc]">Delete Component</h2>
+            <h2 className="text-[14px] font-medium text-[#cccccc]">Delete Component</h2>
           </header>
-          <div className="px-4 py-4 text-[11px] text-[#cccccc]">
+          <div className="px-4 py-4 text-[13px] text-[#cccccc]">
             <p className="mb-4">
               Are you sure you want to delete <span className="font-semibold">{componentName}</span>? This action will remove all its instances from the scene.
             </p>
-            <div className="flex justify-end gap-2 text-[11px]">
+            <div className="flex justify-end gap-2 text-[13px]">
               <button
                 type="button"
                 className="rounded border border-[#1a1a1a] bg-[#2b2b2b] px-3 py-1.5 text-[#cccccc] transition hover:bg-[#404040]"

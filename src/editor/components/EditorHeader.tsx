@@ -42,7 +42,7 @@ export function EditorHeader({
           height={410}
           className="h-8 w-auto"
         />
-        <nav className="flex items-center gap-0.5 text-[11px] text-[#cccccc]">
+        <nav className="flex items-center gap-0.5 text-[13px] text-[#cccccc]">
           {menuGroups.map((menu) => (
             <div key={menu.id} className="relative">
               <button
@@ -50,7 +50,7 @@ export function EditorHeader({
                   menuAnchors.current[menu.id] = node;
                 }}
                 type="button"
-                className={`rounded px-3 py-1.5 text-[11px] transition ${
+                className={`rounded px-3 py-1.5 text-[13px] transition ${
                   openMenuId === menu.id
                     ? "bg-[#4772b3] text-white"
                     : "text-[#cccccc] hover:bg-[#404040]"
@@ -72,14 +72,14 @@ export function EditorHeader({
       <div className="flex items-center gap-4">
         <AlertIcon alerts={alerts} />
         <div className="flex flex-col items-end text-right">
-          <div className="text-[11px] text-[#999999]">
+          <div className="text-[13px] text-[#999999]">
             Scenario:{" "}
-            <span className="text-[11px] text-[#cccccc]">
+            <span className="text-[13px] text-[#cccccc]">
               {activeScenarioName}
             </span>
             {hasUnsavedChanges ? <span className="ml-1 text-[#cccccc]">*</span> : null}
           </div>
-          <div className="text-[12px] font-medium text-[#cccccc]">
+          <div className="text-[14px] font-medium text-[#cccccc]">
             {title}
           </div>
         </div>

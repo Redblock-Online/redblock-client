@@ -18,7 +18,7 @@ export function EditorTabs({ activeTab, onTabChange, children }: EditorTabsProps
           <button
             type="button"
             onClick={() => onTabChange("scenario")}
-            className={`rounded px-4 py-1.5 text-[11px] transition ${
+            className={`rounded px-4 py-1.5 text-[13px] transition ${
               activeTab === "scenario" ? "bg-[#4772b3] text-white" : "text-[#cccccc] hover:bg-[#404040]"
             }`}
           >
@@ -27,7 +27,7 @@ export function EditorTabs({ activeTab, onTabChange, children }: EditorTabsProps
           <button
             type="button"
             onClick={() => onTabChange("game")}
-            className={`rounded px-4 py-1.5 text-[11px] transition ${
+            className={`rounded px-4 py-1.5 text-[13px] transition ${
               activeTab === "game" ? "bg-[#4772b3] text-white" : "text-[#cccccc] hover:bg-[#404040]"
             }`}
           >

@@ -40,13 +40,13 @@ export function AxisInput({ label, value, onChange, step = 0.1, min, precision }
 
   return (
     <div className="relative">
-      <span className="absolute left-1.5 top-1/2 -translate-y-1/2 select-none text-[9px] uppercase text-[#999999]">
+      <span className="absolute left-1.5 top-1/2 -translate-y-1/2 select-none text-[13px] uppercase text-[#999999]">
         {label}
       </span>
       <input
         ref={inputRef}
         type="text"
-        className="h-6 w-full rounded border border-[#1a1a1a] bg-[#1e1e1e] pl-5 pr-1.5 text-right text-[11px] text-[#cccccc] outline-none focus:border-[#4772b3] focus:bg-[#252525]"
+        className="h-6 w-full rounded border border-[#1a1a1a] bg-[#1e1e1e] pl-5 pr-1.5 text-right text-[13px] text-[#cccccc] outline-none focus:border-[#4772b3] focus:bg-[#252525]"
         value={isEditing ? draft : format(value)}
         onFocus={(e) => {
           setIsEditing(true);

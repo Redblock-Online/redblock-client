@@ -175,8 +175,8 @@ export function GameTab({ scenario, isActive, onStop }: GameTabProps): ReactElem
       {showExitHint && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-[#323232] border border-[#1a1a1a] text-[#cccccc] px-6 py-4 rounded text-center pointer-events-none z-50">
           <div className="text-[16px] font-medium mb-2">Cursor Released</div>
-          <div className="text-[13px] mb-2">Press <span className="font-medium text-[#4772b3]">ESC</span> again to exit preview</div>
-          <div className="text-[11px] text-[#999999]">or click the screen to continue playing</div>
+          <div className="text-[15px] mb-2">Press <span className="font-medium text-[#4772b3]">ESC</span> again to exit preview</div>
+          <div className="text-[15px] text-[#999999]">or click the screen to continue playing</div>
         </div>
       )}
       

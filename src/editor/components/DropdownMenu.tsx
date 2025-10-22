@@ -38,7 +38,7 @@ export function DropdownMenu({ menu, position, onClose }: DropdownMenuProps): Re
               <button
                 key={item.id}
                 type="button"
-                className={`block w-full px-3 py-1.5 text-left text-[11px] transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                className={`block w-full px-3 py-1.5 text-left text-[13px] transition disabled:cursor-not-allowed disabled:opacity-50 ${
                   disabled
                     ? "text-[#666666]"
                     : "text-[#cccccc] hover:bg-[#4772b3] hover:text-white"
