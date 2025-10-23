@@ -35,6 +35,7 @@ export default function GameClient() {
       uiController = mountUI({
         onStart: (scenarioId: string) => appInstance?.startGame(scenarioId),
         onPauseChange: (paused: boolean) => appInstance?.setPaused(paused),
+        onExit: () => appInstance?.stopMusic(),
       });
 
       appInstance.attachUI(uiController);

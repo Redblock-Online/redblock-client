@@ -5,6 +5,7 @@ import type { TimerController, TimerHint } from "./TimerDisplay";
 export type GameApi = {
   onStart: (scenarioId: string) => void;
   onPauseChange: (paused: boolean) => void;
+  onExit?: () => void;
 };
 export type UIController = { timer: TimerController };
 
@@ -28,6 +29,7 @@ export function mountUI(api: GameApi): UIController {
     <UIRoot
       onStart={api.onStart}
       onPauseChange={api.onPauseChange}
+      onExit={api.onExit}
       bindTimerController={(ctrl) => {
         timerCtrl = ctrl;
         // flush any queued actions

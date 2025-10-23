@@ -17,13 +17,14 @@ type Props = {
   onStart: (scenarioId: string) => void;
   onPauseChange: (paused: boolean) => void;
   bindTimerController: (ctrl: TimerController) => void;
+  onExit?: () => void;
 };
 
 function isTouchDevice() {
   return "ontouchstart" in window || navigator.maxTouchPoints > 0;
 }
 
-export default function UIRoot({ onStart, onPauseChange, bindTimerController }: Props) {
+export default function UIRoot({ onStart, onPauseChange, bindTimerController, onExit }: Props) {
   const [started, setStarted] = useState(false);
   const [paused, setPaused] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -273,6 +274,7 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
           onPauseChange(false);
           setPaused(false);
           setStarted(false);
+          onExit?.();
         }}
         onSettings={() => setSettingsOpen(true)}
       />
@@ -280,6 +282,7 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
         visible={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         hudScale={_hudScale}
+        escapeSoundEnabled={started}
       />
     </>
   );

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Button from "@/ui/react/components/Button";
 import KeybindInput from "@/ui/react/components/KeybindInput";
 import SliderInput from "@/ui/react/components/SliderInput";
@@ -14,6 +14,7 @@ type Props = {
   onClose: () => void;
   hudScale?: number;
   hideBackground?: boolean;
+  escapeSoundEnabled?: boolean;
 };
 
 type Keybindings = {
@@ -87,7 +88,7 @@ const TAB_LABELS: Record<Tab, string> = {
   account: "ACCOUNT",
 };
 
-export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBackground = false }: Props) {
+export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBackground = false, escapeSoundEnabled = false }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("game");
   const [controlsHeight, setControlsHeight] = useState(0);
   const [gameHeight, setGameHeight] = useState(0);
@@ -140,6 +141,81 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       uiVolume: audio.getChannelVolume('ui'),
     };
   });
+
+  const sensitivityInitialNumeric = (() => {
+    const parsed = parseFloat(sensitivity);
+    return Number.isFinite(parsed) ? parsed : 1;
+  })();
+  const sensitivityPrevRef = useRef<number>(sensitivityInitialNumeric);
+  const sensitivityLastSoundRef = useRef<number>(0);
+
+  const playButtonClick = useCallback(() => {
+    if (typeof window === "undefined") return;
+    try {
+      AudioManager.getInstance().play("btn-click01", {
+        variants: ["btn-click01", "btn-click02", "btn-click03"],
+        volume: 0.45,
+        randomizePitch: true,
+        pitchJitter: 0.012,
+        channel: "sfx",
+      });
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const playButtonHover = useCallback(() => {
+    if (typeof window === "undefined") return;
+    try {
+      AudioManager.getInstance().play("btn-hover", {
+        volume: 0.2,
+        randomizePitch: true,
+        pitchJitter: 0.01,
+        channel: "sfx",
+      });
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const playSensitivitySliderSound = useCallback((newValue: number) => {
+    if (typeof window === "undefined") {
+      sensitivityPrevRef.current = newValue;
+      return;
+    }
+
+    const previous = sensitivityPrevRef.current;
+    if (!Number.isFinite(previous)) {
+      sensitivityPrevRef.current = newValue;
+      return;
+    }
+
+    const now = Date.now();
+    if (now - sensitivityLastSoundRef.current >= 100) {
+      try {
+        if (newValue > previous) {
+          AudioManager.getInstance().play('slider-up', {
+            volume: 0.15,
+            randomizePitch: true,
+            pitchJitter: 0.01,
+            maxVoices: 3,
+          });
+        } else if (newValue < previous) {
+          AudioManager.getInstance().play('slider-down', {
+            volume: 0.1,
+            randomizePitch: true,
+            pitchJitter: 0.01,
+            maxVoices: 3,
+          });
+        }
+      } catch {
+        /* ignore */
+      }
+      sensitivityLastSoundRef.current = now;
+    }
+
+    sensitivityPrevRef.current = newValue;
+  }, []);
 
   // Calculate content heights based on active tab
   useEffect(() => {
@@ -220,6 +296,13 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
 
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        if (escapeSoundEnabled) {
+          try {
+            AudioManager.getInstance().play("escape-event", { channel: "sfx", volume: 0.7 });
+          } catch {
+            /* ignore */
+          }
+        }
         onClose();
       }
     };
@@ -228,7 +311,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
     return () => {
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [visible, onClose]);
+  }, [visible, onClose, escapeSoundEnabled]);
 
   useEffect(() => {
     localStorage.setItem("mouseSensitivity", sensitivity);
@@ -257,6 +340,10 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   }, [audioSettings]);
 
   const onSensitivityInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const numericValue = parseFloat(e.target.value);
+    if (!Number.isNaN(numericValue)) {
+      playSensitivitySliderSound(numericValue);
+    }
     setSensitivity(e.target.value);
     // ControlsWithMovement listens to #sensitivityRange input event
   };
@@ -274,15 +361,18 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   };
 
   const handleResetClick = () => {
+    playButtonClick();
     setShowResetConfirm(true);
   };
 
   const confirmReset = () => {
+    playButtonClick();
     setKeybindings(DEFAULT_KEYBINDINGS);
     setShowResetConfirm(false);
   };
 
   const cancelReset = () => {
+    playButtonClick();
     setShowResetConfirm(false);
   };
 
@@ -376,42 +466,57 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                   label="Move Forward"
                   currentKey={keybindings.forward}
                   onKeyChange={(key) => updateKeybinding("forward", key)}
+                  onPlayClick={playButtonClick}
+                  onPlayHover={playButtonHover}
                 />
                 <KeybindInput
                   label="Move Backward"
                   currentKey={keybindings.backward}
                   onKeyChange={(key) => updateKeybinding("backward", key)}
+                  onPlayClick={playButtonClick}
+                  onPlayHover={playButtonHover}
                 />
                 <KeybindInput
                   label="Move Left"
                   currentKey={keybindings.left}
                   onKeyChange={(key) => updateKeybinding("left", key)}
+                  onPlayClick={playButtonClick}
+                  onPlayHover={playButtonHover}
                 />
                 <KeybindInput
                   label="Move Right"
                   currentKey={keybindings.right}
                   onKeyChange={(key) => updateKeybinding("right", key)}
+                  onPlayClick={playButtonClick}
+                  onPlayHover={playButtonHover}
                 />
                 <KeybindInput
                   label="Jump"
                   currentKey={keybindings.jump}
                   onKeyChange={(key) => updateKeybinding("jump", key)}
+                  onPlayClick={playButtonClick}
+                  onPlayHover={playButtonHover}
                 />
                 <KeybindInput
                   label="Crouch"
                   currentKey={keybindings.crouch}
                   onKeyChange={(key) => updateKeybinding("crouch", key)}
+                  onPlayClick={playButtonClick}
+                  onPlayHover={playButtonHover}
                 />
                 <KeybindInput
                   label="Shoot"
                   currentKey={keybindings.shoot}
                   onKeyChange={(key) => updateKeybinding("shoot", key)}
+                  onPlayClick={playButtonClick}
+                  onPlayHover={playButtonHover}
                 />
                 
                 {/* Reset button / Confirmation */}
                 {!showResetConfirm ? (
                   <button
                     onClick={handleResetClick}
+                    onMouseEnter={playButtonHover}
                     className="mt-2 font-mono font-bold tracking-wider border-[3px] border-black px-4 py-1.5 uppercase transition-all bg-transparent text-black hover:bg-black hover:text-white text-xs"
                   >
                     RESET CONTROLS TO DEFAULT
@@ -430,12 +535,14 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                     <div className="flex gap-2">
                       <button
                         onClick={confirmReset}
+                        onMouseEnter={playButtonHover}
                         className="flex-1 font-mono font-bold tracking-wider border-[3px] border-black px-3 py-1 uppercase transition-all bg-[#ff0000] text-white hover:bg-black text-xs"
                       >
                         YES
                       </button>
                       <button
                         onClick={cancelReset}
+                        onMouseEnter={playButtonHover}
                         className="flex-1 font-mono font-bold tracking-wider border-[3px] border-black px-3 py-1 uppercase transition-all bg-transparent text-black hover:bg-black hover:text-white text-xs"
                       >
                         NO

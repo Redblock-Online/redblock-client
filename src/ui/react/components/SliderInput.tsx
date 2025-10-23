@@ -33,9 +33,9 @@ export default function SliderInput({
     if (now - lastSoundTimeRef.current >= 100) {
       // Play sound based on direction with different volumes
       if (newValue > previousValueRef.current) {
-        audio.play('slider-up', {volume: 0.15, randomizePitch: true, pitchJitter: 0.01});
+        audio.play('slider-up', {volume: 0.15, randomizePitch: true, pitchJitter: 0.01, maxVoices: 3});
       } else if (newValue < previousValueRef.current) {
-        audio.play('slider-down', {volume: 0.08, randomizePitch: true, pitchJitter: 0.01});
+        audio.play('slider-down', {volume: 0.10, randomizePitch: true, pitchJitter: 0.01, maxVoices: 3});
       }
       
       lastSoundTimeRef.current = now;
