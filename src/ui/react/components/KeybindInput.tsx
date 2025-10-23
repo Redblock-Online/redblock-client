@@ -5,9 +5,11 @@ type Props = {
   currentKey: string;
   onKeyChange: (newKey: string) => void;
   disabled?: boolean;
+  onPlayClick?: () => void;
+  onPlayHover?: () => void;
 };
 
-export default function KeybindInput({ label, currentKey, onKeyChange, disabled }: Props) {
+export default function KeybindInput({ label, currentKey, onKeyChange, disabled, onPlayClick, onPlayHover }: Props) {
   const [isListening, setIsListening] = useState(false);
 
   useEffect(() => {
@@ -61,7 +63,15 @@ export default function KeybindInput({ label, currentKey, onKeyChange, disabled 
       <span className="font-mono font-bold text-xs tracking-wider uppercase">{label}</span>
       <button
         disabled={disabled}
-        onClick={() => setIsListening(true)}
+        onClick={() => {
+          onPlayClick?.();
+          setIsListening(true);
+        }}
+        onMouseEnter={() => {
+          if (!disabled) {
+            onPlayHover?.();
+          }
+        }}
         className={`font-mono font-bold tracking-wider border-[3px] border-black px-4 py-1 min-w-[90px] uppercase transition-all text-xs ${
           isListening
             ? "bg-[#ff0000] text-white animate-pulse"

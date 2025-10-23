@@ -23,7 +23,10 @@
  * audio.play('impact', { volume: 0.5 });
  * 
  * // Play with random variants
- * audio.play('shoot', { variants: ['gunshot01', 'gunshot02', 'gunshot03'] });
+ * audio.play('shoot', { variants: ['lazer01_1', 'lazer02_1'] });
+ *
+ * // Delay playback slightly to stagger overlapping sounds
+ * audio.play('hit01', { latencyMs: 80 });
  * 
  * // Play looped sound
  * const stepsId = audio.play('steps', { volume: 0.4, loop: true });
@@ -43,9 +46,11 @@ interface AudioOptions {
   channel?: AudioChannel; // Override channel from loaded sound
   pitch?: number;         // Playback rate (0.5 = half speed, 2.0 = double), defaults to 1.0
   startAtMs?: number;     // Optional: start playback offset in milliseconds
+  latencyMs?: number;     // Optional: delay playback start by N milliseconds (clamped 0-100)
   randomizePitch?: boolean; // If true, jitter the pitch slightly each play
   pitchJitter?: number;     // Max absolute jitter to apply around base pitch (e.g., 0.04 -> ±0.04)
   variants?: string[];     // Array of alternative sound names to randomly choose from
+  maxVoices?: number;      // Maximum concurrent instances for this sound (oldest voices are released)
 }
 
 interface LoadedSound {
@@ -63,6 +68,8 @@ interface ActiveHtmlSound {
   audio: HTMLAudioElement;
   channel: AudioChannel;
   kind: 'html';
+  startedAt: number;
+  playTimeoutId?: number;
 }
 
 interface ActiveWebSound {
@@ -72,6 +79,7 @@ interface ActiveWebSound {
   gain: GainNode;
   channel: AudioChannel;
   kind: 'web';
+  startedAt: number;
 }
 
 export class AudioManager {
@@ -356,6 +364,13 @@ export class AudioManager {
       return null;
     }
 
+    const maxVoices = options.maxVoices ?? undefined;
+    if (typeof maxVoices === 'number' && maxVoices > 0) {
+      this.enforceVoiceLimit(name, maxVoices);
+    }
+
+    const latencyMs = Math.max(0, Math.min(100, Math.floor(options.latencyMs ?? 0)));
+
     // Try Web Audio first for minimal latency
     if (this.ctx && sound.audioBuf) {
       // One-time diagnostic log
@@ -385,6 +400,7 @@ export class AudioManager {
       if (chGain) instanceGain.connect(chGain);
       else instanceGain.connect(this.masterGain!);
 
+      const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
       const id = `${name}_${this.nextSoundId++}`;
       this.activeSounds.set(id, {
         id,
@@ -392,16 +408,22 @@ export class AudioManager {
         node: source,
         gain: instanceGain,
         channel,
-        kind: 'web'
+        kind: 'web',
+        startedAt,
       });
 
       const offset = startAtMs / 1000;
-      // Use immediate scheduling for lowest latency (no scheduling overhead)
+      const startDelaySec = latencyMs / 1000;
+      const when = this.ctx.currentTime + startDelaySec;
+      // Use precise scheduling for low latency while supporting optional delay
       try {
-        source.start(0, offset);
+        source.start(when, offset);
       } catch (e) {
         // If start throws (e.g., offset too large), start at 0
-        try { source.start(0); } catch { /* ignore */ }
+        try { source.start(when); }
+        catch {
+          try { source.start(0); } catch { /* ignore */ }
+        }
       }
 
       if (!loop) {
@@ -451,14 +473,28 @@ export class AudioManager {
 
     // Generate unique ID and store as active
     const id = `${name}_${this.nextSoundId++}`;
-    this.activeSounds.set(id, { id, name, audio, channel, kind: 'html' });
+    const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const activeEntry: ActiveHtmlSound = { id, name, audio, channel, kind: 'html', startedAt };
+    this.activeSounds.set(id, activeEntry);
 
-    // Play
-    audio.play().catch(error => {
-      console.warn(`[AudioManager] Failed to play '${name}':`, error);
-      this.returnToPool(audio!);
-      this.activeSounds.delete(id);
-    });
+    const playAudio = () => {
+      if (!this.activeSounds.has(id)) return; // sound was stopped before playback
+      audio.play().catch(error => {
+        console.warn(`[AudioManager] Failed to play '${name}':`, error);
+        this.returnToPool(audio);
+        this.activeSounds.delete(id);
+      });
+    };
+
+    if (latencyMs > 0) {
+      const timeoutId = window.setTimeout(() => {
+        activeEntry.playTimeoutId = undefined;
+        playAudio();
+      }, latencyMs);
+      activeEntry.playTimeoutId = timeoutId;
+    } else {
+      playAudio();
+    }
 
     // Auto-cleanup when finished (if not looping)
     if (!loop) {
@@ -478,6 +514,10 @@ export class AudioManager {
     const activeSound = this.activeSounds.get(id);
     if (!activeSound) return;
     if (activeSound.kind === 'html') {
+      if (activeSound.playTimeoutId !== undefined) {
+        window.clearTimeout(activeSound.playTimeoutId);
+        activeSound.playTimeoutId = undefined;
+      }
       activeSound.audio.pause();
       activeSound.audio.currentTime = 0;
       this.returnToPool(activeSound.audio);
@@ -664,6 +704,23 @@ export class AudioManager {
     // Return to pool if not full
     if (this.audioPool.length < this.poolSize) {
       this.audioPool.push(audio);
+    }
+  }
+
+  private enforceVoiceLimit(baseName: string, maxVoices: number): void {
+    if (maxVoices <= 0) return;
+
+    const activeForName = Array.from(this.activeSounds.entries())
+      .filter(([, sound]) => sound.name === baseName)
+      .sort((a, b) => a[1].startedAt - b[1].startedAt);
+
+    const allowedExisting = Math.max(0, maxVoices - 1);
+    const overflow = activeForName.length - allowedExisting;
+    if (overflow <= 0) return;
+
+    for (let i = 0; i < overflow; i++) {
+      const [id] = activeForName[i];
+      this.stop(id);
     }
   }
 }

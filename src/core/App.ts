@@ -9,10 +9,11 @@ import Pistol from "@/objects/Pistol";
 import Target from "@/objects/Target";
 import WSManager, { type PlayerCore } from "@/utils/ws/WSManager";
 import type { UIController } from "@/ui/react/mountUI";
-import type { TimerHint, TimerHintTableRow } from "@/ui/react/TimerDisplay";
-import { SCENARIOS, type ScenarioConfig, getScenarioById } from "@/config/scenarios";
 import { AudioManager } from "@/utils/AudioManager";
+import { SCENARIOS, type ScenarioConfig, getScenarioById } from "@/config/scenarios";
+import type { TimerHint, TimerHintTableRow } from "@/ui/react/TimerDisplay";
 import gsap from "gsap";
+
 
 type StoredMetricSet = {
   accuracy: number | null;
@@ -78,6 +79,7 @@ export default class App {
   private isEditorMode: boolean = false;
 
   private audioManager: AudioManager;
+  private practiceMusicId: string | null = null;
 
   constructor(ui?: UIController, options?: { disableServer?: boolean }) {
     this.ui = ui;
@@ -184,10 +186,9 @@ export default class App {
       console.log('[App] Audio context pre-warmed');
       
       await this.audioManager.preloadSounds([
-        // Gunshots sfx
-        ['gunshot01', '/audio/sfx/events/gunshot01.wav', 'sfx'],
-        ['gunshot02', '/audio/sfx/events/gunshot02.wav', 'sfx'],
-        ['gunshot03', '/audio/sfx/events/gunshot03.wav', 'sfx'],
+        // Weapon sfx
+        ['lazer01_1', '/audio/sfx/events/weapons/pistol/lazer01_1.wav', 'sfx'],
+        ['lazer02_1', '/audio/sfx/events/weapons/pistol/lazer02_1.wav', 'sfx'],
 
         // Buttons sfx
         ['btn-click01', '/audio/sfx/ui/buttons/btn-click01.wav', 'sfx'],
@@ -198,12 +199,19 @@ export default class App {
         // Player sfx
         ['steps', '/audio/sfx/events/steps.wav', 'sfx'],
 
-        // Events
-        ['escape-event', '/audio/sfx/actions/escape-event.wav', 'sfx'],
+        // Target feedback
+        ['hit01', '/audio/sfx/events/hit-target/hit01.wav', 'sfx'],
 
-        // UI Behavior
+        // Events
+        ['escape-event', '/audio/sfx/ui/actions/escape-event.wav', 'sfx'],
+
+        // UI Behavior:
+          // Slider
         ['slider-down', '/audio/sfx/ui/slider-change/slider-down.wav', 'sfx'],
         ['slider-up', '/audio/sfx/ui/slider-change/slider-up.wav', 'sfx'],
+
+        // Music
+        ['practice-music', '/audio/sfx/music/unCasual.ogg', 'music'],
 
         // Add more sounds here as needed
         // ['ui_click', '/audio/sfx/ui_click.mp3', 'ui'],
@@ -214,6 +222,40 @@ export default class App {
       console.warn('[App] Some sounds failed to load:', error);
       // Continue anyway - game can work without audio
     }
+  }
+
+  private playPracticeMusic() {
+    // If already playing, don't restart
+    if (this.audioManager.isPlaying('practice-music')) {
+      return;
+    }
+    this.stopPracticeMusic();
+    try {
+      const id = this.audioManager.play('practice-music', {
+        channel: 'music',
+        volume: 0.3,
+        loop: true,
+      });
+      this.practiceMusicId = id ?? null;
+    } catch (error) {
+      console.warn('[App] Failed to start practice music', error);
+    }
+  }
+
+  private stopPracticeMusic() {
+    if (this.practiceMusicId) {
+      this.audioManager.stop(this.practiceMusicId);
+      this.practiceMusicId = null;
+    }
+    // Ensure all instances are halted if we lost the handle (e.g., during reloads)
+    this.audioManager.stopAllByName('practice-music');
+  }
+
+  /**
+   * Public method to stop practice music (used by UI on exit)
+   */
+  public stopMusic() {
+    this.stopPracticeMusic();
   }
   
   /**
@@ -267,7 +309,7 @@ export default class App {
       this.ui?.timer.stop(summary);
     }
     this.gameRunning = false;
-    
+
     // Don't disable physics - keep them running so player can still move
   }
 
@@ -289,7 +331,7 @@ export default class App {
   private _tempCamDir = new Vector3();
   private _tempMuzzlePos = new Vector3();
   
-  public checkCrosshairIntersections(): "regular" | "portal" | "last" | null {
+  public checkCrosshairIntersections(): "regular" | "portal" | null {
     const objects = [...this.targets, ...this.scenarioPortals] as unknown as import("three").Object3D[];
     if (objects.length === 0) return null;
 
@@ -312,6 +354,17 @@ export default class App {
     if (!hitTarget.shootable || hitTarget.animating) return null;
 
     this.recordHit(hitTarget);
+    try {
+      this.audioManager.play('hit01', {
+        channel: 'sfx',
+        volume: 0.8,
+        randomizePitch: true,
+        pitchJitter: 0.01,
+        latencyMs: 50,
+      });
+    } catch {
+      /* ignore */
+    }
     hitTarget.absorbAndDisappear();
 
     const candidates = this.targets.filter(
@@ -369,13 +422,14 @@ export default class App {
       (t) => t.visible && !t.animating && t.shootable
     );
     if (!remaining) {
+  // Play celebratory laser sound for hitting the last target
+  this.audioManager.play('lazer02_1', { volume: 0.35, startAtMs: 0 });
+      
       this.stopTimer();
       
       // TargetManager handles all cleanup and pooling automatically
       // No manual dispose needed - the pool manages everything efficiently
       console.log('[App] Level complete. TargetManager stats:', this.scene.targetManager.getStats());
-
-      return "last";
     }
 
     return "regular";
@@ -483,7 +537,8 @@ export default class App {
     if (e.button === 0) {
       if (this.paused) return;
       this.recordShotFired();
-      const shotNumber = this.shotsFired;
+      
+      this.audioManager.play('lazer01_1', { volume: 0.35, startAtMs: 0, randomizePitch: true, pitchJitter: 0.02, maxVoices: 6 });
       
       this.pistol.shoot();
 
@@ -532,27 +587,6 @@ export default class App {
       const result = this.checkCrosshairIntersections();
       if (result === "portal") {
         this.shotsFired = Math.max(0, this.shotsFired - 1);
-      }
-
-      if (result === "last") {
-        this.audioManager.play('gunshot03', { volume: 0.35, startAtMs: 0 });
-      } else {
-        if (shotNumber === 1) {
-          const latencyInfo = this.audioManager.getLatencyInfo();
-          console.log('[App] 🔍 Audio Diagnostics:', {
-            latencyInfo,
-            timestamp: performance.now(),
-            message: 'About to play shoot sound...'
-          });
-        }
-
-        const playStart = performance.now();
-        this.audioManager.play('shoot', { volume: 0.35, startAtMs: 0, randomizePitch: true, pitchJitter: 0.05 });
-        const playEnd = performance.now();
-
-        if (shotNumber === 1) {
-          console.log('[App] 🔍 play() call took:', (playEnd - playStart).toFixed(2), 'ms');
-        }
       }
     }
   };
@@ -928,6 +962,9 @@ export default class App {
     }
 
     this.loop.start();
+    if (!this.isEditorMode) {
+      this.playPracticeMusic();
+    }
     this.startTimer();
     this.gameRunning = true;
   }
