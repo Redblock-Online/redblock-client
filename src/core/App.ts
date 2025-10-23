@@ -14,6 +14,7 @@ import { SCENARIOS, type ScenarioConfig, getScenarioById } from "@/config/scenar
 import type { TimerHint, TimerHintTableRow } from "@/ui/react/TimerDisplay";
 import gsap from "gsap";
 
+
 type StoredMetricSet = {
   accuracy: number | null;
   avgReaction: number | null;
