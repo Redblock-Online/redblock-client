@@ -8,4 +8,4 @@ RUN npm run build
 
 # Serve
 EXPOSE 3002
-CMD ["npm", "run", "start"]
+CMD ["npx", "docusaurus", "start", "--port", "3002", "--host", "0.0.0.0"]
