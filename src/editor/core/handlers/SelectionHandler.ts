@@ -15,9 +15,8 @@ export class SelectionHandler {
     private modeManager: EditorModeManager,
     private editor: EditorApp,
   ) {
-    // Create selection box (will be attached to canvas container)
-    const canvas = this.editor.getCanvas();
-    this.selectionBox = new SelectionBox(canvas.parentElement!);
+    // Create selection box (will be attached to document.body for proper positioning)
+    this.selectionBox = new SelectionBox(document.body);
   }
 
   public setDragHandler(handler: DragHandler): void {
@@ -37,10 +36,25 @@ export class SelectionHandler {
     const additive = event.shiftKey || event.metaKey || event.ctrlKey;
     const hit = this.editor.pickBlock(event.clientX, event.clientY, additive);
 
-    if (hit && this.dragHandler) {
-      // Block was clicked, start drag
-      this.dragHandler.start(event.clientX, event.clientY);
-      this.isDraggingBox = false;
+    if (hit) {
+      if (this.dragHandler) {
+        // Check if we should start drag or just add to selection
+        const currentSelection = this.editor.getSelectionArray();
+        const isAlreadySelected = currentSelection.some(block => block.id === hit.id);
+        
+        // Only start drag if the clicked block is already selected and we're not in additive mode
+        if (!additive && isAlreadySelected) {
+          // Block was clicked and is already selected, start drag
+          this.dragHandler.start(event.clientX, event.clientY);
+          this.isDraggingBox = false;
+        } else {
+          // Add to selection or toggle, don't start drag yet
+          this.isDraggingBox = false;
+        }
+      } else {
+        // No drag handler, just handle selection (already done by pickBlock)
+        this.isDraggingBox = false;
+      }
     } else {
       // No block hit, prepare for box selection
       this.isDraggingBox = true;
@@ -48,7 +62,22 @@ export class SelectionHandler {
   }
 
   public handlePointerMove(event: PointerEvent): void {
-    if (!this.isDraggingBox) return;
+    if (!this.isDraggingBox) {
+      // Check if we should start dragging a selected block
+      const currentSelection = this.editor.getSelectionArray();
+      if (currentSelection.length > 0 && this.dragHandler) {
+        const dx = event.clientX - this.dragStartX;
+        const dy = event.clientY - this.dragStartY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance > this.DRAG_THRESHOLD) {
+          // Start dragging the selected blocks
+          this.dragHandler.start(this.dragStartX, this.dragStartY);
+          this.isDraggingBox = false;
+        }
+      }
+      return;
+    }
 
     const dx = event.clientX - this.dragStartX;
     const dy = event.clientY - this.dragStartY;
