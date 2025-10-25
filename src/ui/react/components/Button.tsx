@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useCallback } from "react";
+import { AudioManager } from "@/utils/AudioManager";
 
 type Variant = "primary" | "outline" | "ghost";
 type Size = "lg" | "md" | "sm";
@@ -25,8 +26,55 @@ export default function Button({
   rightIcon,
   type = "button",
   disabled = false,
+  onClick,
+  onMouseEnter,
   ...rest
 }: Props) {
+  const playClickSound = useCallback(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const audio = AudioManager.getInstance();
+      audio.play("btn-click01", {
+        variants: ["btn-click01", "btn-click02", "btn-click03"],
+        volume: 0.45,
+        randomizePitch: true,
+        pitchJitter: 0.012,
+        channel: "sfx",
+      });
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const playHoverSound = useCallback(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const audio = AudioManager.getInstance();
+      audio.play("btn-hover", {
+        volume: 0.2,
+        randomizePitch: true,
+        pitchJitter: 0.01,
+        channel: "sfx",
+      });
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const handleClick = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    if (!disabled) {
+      playClickSound();
+    }
+    onClick?.(event);
+  }, [disabled, onClick, playClickSound]);
+
+  const handleMouseEnter = useCallback((event: React.MouseEvent<HTMLButtonElement>) => {
+    if (!disabled) {
+      playHoverSound();
+    }
+    onMouseEnter?.(event);
+  }, [disabled, onMouseEnter, playHoverSound]);
+
   const base = cn(
     "flex items-center justify-center font-mono font-bold tracking-wider border-[3px] border-black transition-all select-none",
     "uppercase text-center",
@@ -48,11 +96,14 @@ export default function Button({
     sm: "px-4 py-1.5 text-sm",
   };
 
+
   return (
     <button
       type={type}
       disabled={disabled}
       className={cn(base, byVariant[variant], bySize[size], className)}
+      onClick={handleClick}
+      onMouseEnter={handleMouseEnter}
       {...rest}
     >
       {leftIcon ? <span className="mr-3 inline-flex items-center ">{leftIcon}</span> : null}

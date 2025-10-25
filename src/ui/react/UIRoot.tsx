@@ -11,18 +11,20 @@ import PauseMenu from "./PauseMenu";
 import SettingsMenu from "./SettingsMenu";
 import Crosshair from "./components/Crosshair";
 import StatsDisplay from "./components/StatsDisplay";
+import { AudioManager } from "@/utils/AudioManager";
 
 type Props = {
   onStart: (scenarioId: string) => void;
   onPauseChange: (paused: boolean) => void;
   bindTimerController: (ctrl: TimerController) => void;
+  onExit?: () => void;
 };
 
 function isTouchDevice() {
   return "ontouchstart" in window || navigator.maxTouchPoints > 0;
 }
 
-export default function UIRoot({ onStart, onPauseChange, bindTimerController }: Props) {
+export default function UIRoot({ onStart, onPauseChange, bindTimerController, onExit }: Props) {
   const [started, setStarted] = useState(false);
   const [paused, setPaused] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -35,10 +37,24 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
   const pausedRef = useRef(false);
   const timerRunningRef = useRef(false);
   const hadRunningBeforePauseRef = useRef(false);
+  const lastPausedForSoundRef = useRef(paused);
 
   useEffect(() => {
     pausedRef.current = paused;
   }, [paused]);
+
+  useEffect(() => {
+    const wasPaused = lastPausedForSoundRef.current;
+    if (!wasPaused && paused && started) {
+      try {
+        const audio = AudioManager.getInstance();
+        audio.play("escape-event", { channel: "sfx", volume: 0.7 });
+      } catch {
+        /* ignore */
+      }
+    }
+    lastPausedForSoundRef.current = paused;
+  }, [paused, started]);
 
   // Load and listen to game settings
   useEffect(() => {
@@ -258,6 +274,7 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
           onPauseChange(false);
           setPaused(false);
           setStarted(false);
+          onExit?.();
         }}
         onSettings={() => setSettingsOpen(true)}
       />
@@ -265,6 +282,7 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController }: 
         visible={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         hudScale={_hudScale}
+        escapeSoundEnabled={started}
       />
     </>
   );

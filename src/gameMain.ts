@@ -8,6 +8,7 @@ export function initGame(): void {
   const ui: UIController = mountUI({
     onStart: (scenarioId: string) => app.startGame(scenarioId),
     onPauseChange: (paused: boolean) => app.setPaused(paused),
+    onExit: () => app.stopMusic(),
   });
   app.attachUI(ui);
   app.start();
