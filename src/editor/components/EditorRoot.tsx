@@ -37,7 +37,8 @@ type ClipboardPayload = {
 const builtinItems: EditorItem[] = [
   { id: "block", label: "Block", category: "primitive" },
   { id: "randomTargetGen", label: "Random Target Generator", category: "target" },
-  { id: "movingTargetGen", label: "Moving Target Generator", category: "target" },
+  // COMMENTED OUT: Moving Target Generator - Not implemented yet
+  // { id: "movingTargetGen", label: "Moving Target Generator", category: "target" },
   { id: "spawn", label: "Spawn Point", category: "gameLogic" },
 ];
 
@@ -729,7 +730,9 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       } else if (data === "randomTargetGen") {
         placed = editor.placeRandomTargetGeneratorAt(event.clientX, event.clientY);
       } else if (data === "movingTargetGen") {
-        placed = editor.placeMovingTargetGeneratorAt(event.clientX, event.clientY);
+        // COMMENTED OUT: Moving Target Generator - Not implemented yet
+        // placed = editor.placeMovingTargetGeneratorAt(event.clientX, event.clientY);
+        console.warn('[EditorRoot] Moving Target Generator not implemented yet');
       } else if (data === "spawn") {
         placed = editor.placeSpawnAt(event.clientX, event.clientY);
       } else if (data.startsWith("component:")) {

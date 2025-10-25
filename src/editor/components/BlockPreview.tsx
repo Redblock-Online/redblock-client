@@ -102,19 +102,20 @@ export function BlockPreview({ item }: BlockPreviewProps): ReactElement {
         { dispose: () => edgesGeom.dispose() },
         { dispose: () => edgeMat.dispose() },
       );
-    } else if (id === "movingTargetGen") {
-      const { mesh, geometry, material, edgesGeom, edgeMat } = createCube();
-      mesh.scale.set(0.6, 0.6, 0.6);
-      material.color.set(0x00ddff); // Cyan color
-      material.emissive = new Color(0x00ddff);
-      material.emissiveIntensity = 0.2;
-      group.add(mesh);
-      disposables.push(
-        { dispose: () => geometry.dispose() },
-        { dispose: () => material.dispose() },
-        { dispose: () => edgesGeom.dispose() },
-        { dispose: () => edgeMat.dispose() },
-      );
+    // COMMENTED OUT: Moving Target Generator - Not implemented yet
+    // } else if (id === "movingTargetGen") {
+    //   const { mesh, geometry, material, edgesGeom, edgeMat } = createCube();
+    //   mesh.scale.set(0.6, 0.6, 0.6);
+    //   material.color.set(0x00ddff); // Cyan color
+    //   material.emissive = new Color(0x00ddff);
+    //   material.emissiveIntensity = 0.2;
+    //   group.add(mesh);
+    //   disposables.push(
+    //     { dispose: () => geometry.dispose() },
+    //     { dispose: () => material.dispose() },
+    //     { dispose: () => edgesGeom.dispose() },
+    //     { dispose: () => edgeMat.dispose() },
+    //   );
     } else if (id === "spawn") {
       const { mesh, geometry, material } = createSpawnPoint();
       group.add(mesh);

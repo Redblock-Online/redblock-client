@@ -482,37 +482,38 @@ export default class EditorApp {
     return generator;
   }
 
-  public placeMovingTargetGeneratorAt(clientX: number, clientY: number): EditorBlock | null {
-    const point = this.intersectGround(clientX, clientY);
-    if (!point) {
-      return null;
-    }
+  // COMMENTED OUT: Moving Target Generator - Not implemented yet
+  // public placeMovingTargetGeneratorAt(clientX: number, clientY: number): EditorBlock | null {
+  //   const point = this.intersectGround(clientX, clientY);
+  //   if (!point) {
+  //     return null;
+  //   }
 
-    // Create a generator marker (cube with distinct appearance)
-    const generator = this.blocks.createBlock({
-      position: point.setY(0.5),
-      scale: new Vector3(0.6, 0.6, 0.6),
-    });
-    
-    // Mark as generator in userData
-    generator.mesh.userData.isGenerator = true;
-    generator.mesh.userData.generatorType = "moving";
-    generator.generatorConfig = { ...DEFAULT_MOVING_CONFIG };
-    generator.mesh.userData.generatorConfig = generator.generatorConfig;
-    
-    // Give it a distinct color (cyan/blue for moving generators)
-    const mesh = generator.mesh as Mesh;
-    if (mesh.material) {
-      const material = mesh.material as MeshStandardMaterial;
-      material.color.set(0x00ddff); // Cyan color for moving targets
-      material.emissive = new Color(0x00ddff);
-      material.emissiveIntensity = 0.2;
-    }
-    
-    this.clearMovementState();
-    this.selection.setSelectionSingle(generator);
-    return generator;
-  }
+  //   // Create a generator marker (cube with distinct appearance)
+  //   const generator = this.blocks.createBlock({
+  //     position: point.setY(0.5),
+  //     scale: new Vector3(0.6, 0.6, 0.6),
+  //   });
+  //   
+  //   // Mark as generator in userData
+  //   generator.mesh.userData.isGenerator = true;
+  //   generator.mesh.userData.generatorType = "moving";
+  //   generator.generatorConfig = { ...DEFAULT_MOVING_CONFIG };
+  //   generator.mesh.userData.generatorConfig = generator.generatorConfig;
+  //   
+  //   // Give it a distinct color (cyan/blue for moving generators)
+  //   const mesh = generator.mesh as Mesh;
+  //   if (mesh.material) {
+  //     const material = mesh.material as MeshStandardMaterial;
+  //     material.color.set(0x00ddff); // Cyan color for moving targets
+  //     material.emissive = new Color(0x00ddff);
+  //     material.emissiveIntensity = 0.2;
+  //   }
+  //   
+  //   this.clearMovementState();
+  //   this.selection.setSelectionSingle(generator);
+  //   return generator;
+  // }
 
   public updateGeneratorConfig(blockId: string, config: GeneratorConfig): void {
     const block = this.blocks.getBlock(blockId);
