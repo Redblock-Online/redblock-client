@@ -40,11 +40,16 @@
 
 export type AudioChannel = 'sfx' | 'music' | 'ambient' | 'ui';
 
-interface AudioOptions {
+export interface AudioOptions {
   volume?: number;        // 0.0 - 1.0, defaults to 1.0
   loop?: boolean;         // Loop the sound, defaults to false
   channel?: AudioChannel; // Override channel from loaded sound
-  pitch?: number;         // Playback rate (0.5 = half speed, 2.0 = double), defaults to 1.0
+  // Playback rate (0.5 = half speed, 2.0 = double), defaults to 1.0.
+  // For convenience you may instead provide `semitones` (musical cents) which
+  // will be converted to a playback rate via 2^(semitones/12). If both are
+  // provided, `semitones` takes precedence.
+  pitch?: number;
+  semitones?: number;
   startAtMs?: number;     // Optional: start playback offset in milliseconds
   latencyMs?: number;     // Optional: delay playback start by N milliseconds (clamped 0-100)
   randomizePitch?: boolean; // If true, jitter the pitch slightly each play
@@ -241,6 +246,19 @@ export class AudioManager {
     }
   }
 
+  // Ensure the audio context is resumed at most once. Returns a promise that resolves
+  // when the context is running. Useful for callers that want a safe, idempotent resume.
+  private _resumedOnce = false;
+  public async ensureResumed(): Promise<void> {
+    if (this._resumedOnce) return;
+    try {
+      await this.resume();
+      this._resumedOnce = true;
+    } catch {
+      /* ignore */
+    }
+  }
+
   /**
    * Get AudioContext base latency (lower is better)
    */
@@ -342,7 +360,7 @@ export class AudioManager {
         if (chosenName === 'steps') known = { url: '/audio/sfx/events/steps.wav', channel: 'sfx' } as const;
         if (chosenName === 'shoot') known = { url: '/audio/sfx/events/gunshot01.wav', channel: 'sfx' } as const;
         if (chosenName === 'btn-click') known = { url: '/audio/ui/btn-click01.wav', channel: 'ui' } as const;
-        if (chosenName === 'escape-event') known = { url: '/audio/sfx/events/escape-event.wav', channel: 'sfx' } as const;
+  if (chosenName === 'escape-event') known = { url: '/audio/sfx/events/escape-event.wav', channel: 'ui' } as const;
   // legacy UI button sounds removed: no default mapping for 'btn-click'
         if (known) this.knownSounds.set(chosenName, known);
       }
@@ -371,6 +389,16 @@ export class AudioManager {
 
     const latencyMs = Math.max(0, Math.min(100, Math.floor(options.latencyMs ?? 0)));
 
+    // Determine base playback rate. Prefer semitones if provided (musical units),
+    // otherwise fall back to raw playbackRate `pitch` or 1.0.
+    let basePitch: number;
+    if (typeof options.semitones === 'number' && Number.isFinite(options.semitones)) {
+      // Convert semitones to playback rate: 2^(n/12)
+      basePitch = Math.pow(2, options.semitones / 12);
+    } else {
+      basePitch = options.pitch ?? 1.0;
+    }
+
     // Try Web Audio first for minimal latency
     if (this.ctx && sound.audioBuf) {
       // One-time diagnostic log
@@ -382,10 +410,9 @@ export class AudioManager {
       const channel = options.channel ?? sound.channel;
       const volume = options.volume ?? 1.0;
       const loop = options.loop ?? false;
-      const basePitch = options.pitch ?? 1.0;
-      const jitterAmount = options.randomizePitch ? (options.pitchJitter ?? 0.04) : 0;
-      const jitter = jitterAmount > 0 ? (Math.random() * 2 - 1) * jitterAmount : 0;
-      const effectivePitch = Math.max(0.5, Math.min(2.0, basePitch + jitter));
+  const jitterAmount = options.randomizePitch ? (options.pitchJitter ?? 0.04) : 0;
+  const jitter = jitterAmount > 0 ? (Math.random() * 2 - 1) * jitterAmount : 0;
+  const effectivePitch = Math.max(0.5, Math.min(2.0, basePitch + jitter));
       const startAtMs = Math.max(0, Math.floor(options.startAtMs ?? 0));
 
       const source = this.ctx.createBufferSource();
@@ -445,10 +472,9 @@ export class AudioManager {
     const channel = options.channel ?? sound.channel;
     const volume = options.volume ?? 1.0;
     const loop = options.loop ?? false;
-    const basePitch = options.pitch ?? 1.0;
-    const jitterAmount = options.randomizePitch ? (options.pitchJitter ?? 0.04) : 0;
-    const jitter = jitterAmount > 0 ? (Math.random() * 2 - 1) * jitterAmount : 0;
-    const effectivePitch = Math.max(0.5, Math.min(2.0, basePitch + jitter));
+  const jitterAmount = options.randomizePitch ? (options.pitchJitter ?? 0.04) : 0;
+  const jitter = jitterAmount > 0 ? (Math.random() * 2 - 1) * jitterAmount : 0;
+  const effectivePitch = Math.max(0.5, Math.min(2.0, basePitch + jitter));
     const startAtMs = Math.max(0, Math.floor(options.startAtMs ?? 0));
 
     audio.loop = loop;
@@ -609,6 +635,20 @@ export class AudioManager {
    */
   public getChannelVolume(channel: AudioChannel): number {
     return this.channelVolumes.get(channel) ?? 1.0;
+  }
+
+  public getSoundDuration(name: string): number | null {
+    const sound = this.sounds.get(name);
+    if (!sound) return null;
+    const bufferDuration = sound.audioBuf?.duration;
+    if (typeof bufferDuration === "number" && Number.isFinite(bufferDuration) && bufferDuration > 0) {
+      return bufferDuration;
+    }
+    const elementDuration = sound.buffer.duration;
+    if (typeof elementDuration === "number" && Number.isFinite(elementDuration) && elementDuration > 0) {
+      return elementDuration;
+    }
+    return null;
   }
 
   /**

@@ -5,7 +5,7 @@ import SliderInput from "@/ui/react/components/SliderInput";
 import ToggleInput from "@/ui/react/components/ToggleInput";
 import SelectInput from "@/ui/react/components/SelectInput";
 import ColorInput from "@/ui/react/components/ColorInput";
-import { AudioManager } from "@/utils/AudioManager";
+import { AudioManager, type AudioOptions } from "@/utils/AudioManager";
 
 type Tab = "game" | "controls" | "audio" | "video" | "gameplay" | "account";
 
@@ -63,20 +63,24 @@ const DEFAULT_GAME_SETTINGS: GameSettings = {
   showHints: true,
 };
 
+type MusicCategory = "none" | "energy" | "calm";
+
 type AudioSettings = {
   masterVolume: number;
   sfxVolume: number;
   musicVolume: number;
   ambientVolume: number;
   uiVolume: number;
+  musicCategory: MusicCategory;
 };
 
-const _DEFAULT_AUDIO_SETTINGS: AudioSettings = {
+const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   masterVolume: 1.0,
   sfxVolume: 1.0,
   musicVolume: 0.7,
   ambientVolume: 0.5,
   uiVolume: 0.8,
+  musicCategory: "calm",
 };
 
 const TAB_LABELS: Record<Tab, string> = {
@@ -88,11 +92,21 @@ const TAB_LABELS: Record<Tab, string> = {
   account: "ACCOUNT",
 };
 
+const MUSIC_CATEGORY_LABELS: Record<MusicCategory, string> = {
+  none: "No Music",
+  energy: "Energy",
+  calm: "Calm",
+};
+
+const MUSIC_CATEGORIES: MusicCategory[] = ["none", "energy", "calm"];
+const TAB_PANEL_MAX_HEIGHT = 400;
+const TAB_PANEL_VERTICAL_PADDING = 32; // accounts for p-4 (top+bottom) + small buffer
+
 export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBackground = false, escapeSoundEnabled = false }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("game");
   const [controlsHeight, setControlsHeight] = useState(0);
   const [gameHeight, setGameHeight] = useState(0);
-  const [_audioHeight, setAudioHeight] = useState(0);
+  const [audioHeight, setAudioHeight] = useState(0);
   const [otherTabsHeight, setOtherTabsHeight] = useState(198);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const controlsContentRef = useRef<HTMLDivElement>(null);
@@ -100,6 +114,9 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   const audioContentRef = useRef<HTMLDivElement>(null);
   const otherTabsContentRef = useRef<HTMLDivElement>(null);
   const resetConfirmRef = useRef<HTMLDivElement>(null);
+  // Hover cooldown to avoid spamming hover sounds (ms)
+  const HOVER_COOLDOWN_MS = 80;
+  const lastHoverRef = useRef<number>(0);
   
   const [sensitivity, setSensitivity] = useState<string>(() => {
     const saved = localStorage.getItem("mouseSensitivity");
@@ -131,15 +148,31 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   });
 
   const [audioSettings, setAudioSettings] = useState<AudioSettings>(() => {
-    // Load from AudioManager (which loads from localStorage)
     const audio = AudioManager.getInstance();
-    return {
+    const base: AudioSettings = {
+      ...DEFAULT_AUDIO_SETTINGS,
       masterVolume: audio.getMasterVolume(),
       sfxVolume: audio.getChannelVolume('sfx'),
       musicVolume: audio.getChannelVolume('music'),
       ambientVolume: audio.getChannelVolume('ambient'),
       uiVolume: audio.getChannelVolume('ui'),
     };
+
+    if (typeof window !== "undefined") {
+      const saved = window.localStorage.getItem("audioSettings");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved) as Partial<AudioSettings>;
+          if (typeof parsed.musicCategory === "string") {
+            base.musicCategory = parsed.musicCategory as MusicCategory;
+          }
+        } catch {
+          /* ignore invalid saved settings */
+        }
+      }
+    }
+
+    return base;
   });
 
   const sensitivityInitialNumeric = (() => {
@@ -149,40 +182,87 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   const sensitivityPrevRef = useRef<number>(sensitivityInitialNumeric);
   const sensitivityLastSoundRef = useRef<number>(0);
 
-  const playButtonClick = useCallback(() => {
+  const playButtonClick = useCallback((opts?: Partial<AudioOptions>) => {
     if (typeof window === "undefined") return;
     try {
-      AudioManager.getInstance().play("btn-click01", {
+      // Ensure audio context is resumed (idempotent)
+      AudioManager.getInstance().ensureResumed().catch(() => {});
+      const defaults: Partial<AudioOptions> = {
         variants: ["btn-click01", "btn-click02", "btn-click03"],
         volume: 0.45,
         randomizePitch: true,
         pitchJitter: 0.012,
-        channel: "sfx",
-      });
+        channel: 'ui',
+      };
+      const options = { ...defaults, ...(opts ?? {}) } as AudioOptions;
+      const id = AudioManager.getInstance().play("btn-click01", options);
+      if (process.env.NODE_ENV !== 'production') console.debug('[SettingsMenu] playButtonClick -> play id:', id, 'options:', options);
     } catch {
       /* ignore */
     }
   }, []);
 
-  const playButtonHover = useCallback(() => {
+  const playButtonHover = useCallback((opts?: Partial<AudioOptions>) => {
     if (typeof window === "undefined") return;
     try {
-      AudioManager.getInstance().play("btn-hover", {
+      // Throttle rapid hover events to avoid spam
+      const now = Date.now();
+  if (now - lastHoverRef.current < HOVER_COOLDOWN_MS) return;
+      lastHoverRef.current = now;
+
+      AudioManager.getInstance().ensureResumed().catch(() => {});
+      const defaults: Partial<AudioOptions> = {
         volume: 0.2,
         randomizePitch: true,
         pitchJitter: 0.01,
-        channel: "sfx",
-      });
+        maxVoices: 3,
+        channel: 'ui',
+      };
+      const options = { ...defaults, ...(opts ?? {}) } as AudioOptions;
+      const id = AudioManager.getInstance().play("btn-hover", options);
+      if (process.env.NODE_ENV !== 'production') console.debug('[SettingsMenu] playButtonHover -> play id:', id, 'options:', options);
     } catch {
       /* ignore */
     }
   }, []);
 
-  const playSensitivitySliderSound = useCallback((newValue: number) => {
+  // Play a dedicated tab-swap sound when switching tabs.
+  // Accepts optional audio options to override defaults.
+  const playSwapTab = useCallback((opts?: Partial<AudioOptions>) => {
+    if (typeof window === "undefined") return;
+    try {
+      AudioManager.getInstance().ensureResumed().catch(() => {});
+      // AudioManager.pitch is a playbackRate (1.0 == normal).
+      // Previously a negative semitone-like value was used here (e.g. -5, -12),
+      // which gets clamped inside AudioManager — and makes overrides confusing.
+      // Use a sensible playback rate (slightly lower) as the default and allow
+      // callers to pass a proper playback rate to override it.
+      const defaults: Partial<AudioOptions> = {
+        volume: 0.3,
+        // Prefer musical semitone offsets for clarity — AudioManager will convert
+        // `semitones` to a playback rate. Negative values lower the pitch.
+        semitones: 0,
+        randomizePitch: true,
+        pitchJitter: 0.07,
+        maxVoices: 3,
+        channel: 'ui',
+      };
+      const options = { ...defaults, ...(opts ?? {}) } as AudioOptions;
+      const id = AudioManager.getInstance().play("swap-tab02", options);
+      if (process.env.NODE_ENV !== 'production') console.debug('[SettingsMenu] playSwapTab -> play id:', id, 'options:', options);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const playSensitivitySliderSound = useCallback((newValue: number, opts?: Partial<AudioOptions>) => {
     if (typeof window === "undefined") {
       sensitivityPrevRef.current = newValue;
       return;
     }
+
+    // Ensure audio context is resumed when interacting with slider
+    AudioManager.getInstance().ensureResumed().catch(() => {});
 
     const previous = sensitivityPrevRef.current;
     if (!Number.isFinite(previous)) {
@@ -194,19 +274,13 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
     if (now - sensitivityLastSoundRef.current >= 100) {
       try {
         if (newValue > previous) {
-          AudioManager.getInstance().play('slider-up', {
-            volume: 0.15,
-            randomizePitch: true,
-            pitchJitter: 0.01,
-            maxVoices: 3,
-          });
+          const defaults: Partial<AudioOptions> = { volume: 0.15, randomizePitch: true, pitchJitter: 0.01, maxVoices: 3 };
+          const options = { ...defaults, ...(opts ?? {}) } as AudioOptions;
+          AudioManager.getInstance().play('slider-up', options);
         } else if (newValue < previous) {
-          AudioManager.getInstance().play('slider-down', {
-            volume: 0.1,
-            randomizePitch: true,
-            pitchJitter: 0.01,
-            maxVoices: 3,
-          });
+          const defaults: Partial<AudioOptions> = { volume: 0.1, randomizePitch: true, pitchJitter: 0.01, maxVoices: 3 };
+          const options = { ...defaults, ...(opts ?? {}) } as AudioOptions;
+          AudioManager.getInstance().play('slider-down', options);
         }
       } catch {
         /* ignore */
@@ -298,7 +372,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       if (e.key === "Escape") {
         if (escapeSoundEnabled) {
           try {
-            AudioManager.getInstance().play("escape-event", { channel: "sfx", volume: 0.7 });
+            AudioManager.getInstance().play("escape-event", { channel: "ui", volume: 0.7 });
           } catch {
             /* ignore */
           }
@@ -312,6 +386,32 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       document.removeEventListener("keydown", handleEscape);
     };
   }, [visible, onClose, escapeSoundEnabled]);
+
+  // Diagnostic: when menu opens, log audio manager status to help debug playback issues
+  useEffect(() => {
+    if (!visible) return;
+    try {
+      const audio = AudioManager.getInstance();
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[SettingsMenu] AudioManager status:', {
+          masterVolume: audio.getMasterVolume(),
+          sfxVolume: audio.getChannelVolume('sfx'),
+          musicVolume: audio.getChannelVolume('music'),
+          ambientVolume: audio.getChannelVolume('ambient'),
+          uiVolume: audio.getChannelVolume('ui'),
+          muted: audio.isMuted(),
+          loadedSounds: audio.getLoadedSounds(),
+          activeCount: audio.getActiveSoundCount(),
+          latency: audio.getLatencyInfo(),
+        });
+      }
+    } catch (e) {
+      console.warn('[SettingsMenu] Failed to read AudioManager status', e);
+    }
+  }, [visible]);
+
+  // NOTE: UI sounds are preloaded at app bootstrap in `src/core/App.ts`.
+  // We intentionally do not lazy-preload here to avoid repeated network/CPU work.
 
   useEffect(() => {
     localStorage.setItem("mouseSensitivity", sensitivity);
@@ -339,6 +439,25 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
     audio.setChannelVolume('ui', audioSettings.uiVolume);
   }, [audioSettings]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("audioSettings", JSON.stringify(audioSettings));
+    window.dispatchEvent(new CustomEvent("audioSettingsChanged", { detail: audioSettings }));
+  }, [audioSettings]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (audioSettings.musicCategory === "none") {
+      try {
+        const audio = AudioManager.getInstance();
+        audio.stopAllByName('uncausal');
+        audio.stopAllByName('calm');
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [audioSettings.musicCategory]);
+
   const onSensitivityInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const numericValue = parseFloat(e.target.value);
     if (!Number.isNaN(numericValue)) {
@@ -358,6 +477,10 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
 
   const updateAudioSetting = <K extends keyof AudioSettings>(key: K, value: AudioSettings[K]) => {
     setAudioSettings((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const setMusicCategory = (category: MusicCategory) => {
+    setAudioSettings((prev) => (prev.musicCategory === category ? prev : { ...prev, musicCategory: category }));
   };
 
   const handleResetClick = () => {
@@ -381,6 +504,49 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   const tabs: Tab[] = ["game", "controls", "audio"];
   const scaleValue = hudScale / 100;
 
+  const computeDisplayHeight = (height: number, fallback: number) => {
+    if (height > 0) {
+      return Math.min(height + TAB_PANEL_VERTICAL_PADDING, TAB_PANEL_MAX_HEIGHT);
+    }
+    return Math.min(fallback, TAB_PANEL_MAX_HEIGHT);
+  };
+
+  const controlsDisplayHeight = computeDisplayHeight(controlsHeight, TAB_PANEL_MAX_HEIGHT);
+  const gameDisplayHeight = computeDisplayHeight(gameHeight, TAB_PANEL_MAX_HEIGHT);
+  const audioDisplayHeight = computeDisplayHeight(audioHeight, 300);
+  const otherDisplayHeight = computeDisplayHeight(otherTabsHeight, 198);
+
+  const activeRawHeight =
+    activeTab === "controls"
+      ? controlsHeight
+      : activeTab === "game"
+      ? gameHeight
+      : activeTab === "audio"
+      ? audioHeight
+      : otherTabsHeight;
+
+  const activeScrollHeight =
+    activeRawHeight > 0
+      ? activeRawHeight + TAB_PANEL_VERTICAL_PADDING
+      : activeTab === "audio"
+      ? audioDisplayHeight
+      : activeTab === "controls"
+      ? controlsDisplayHeight
+      : activeTab === "game"
+      ? gameDisplayHeight
+      : otherDisplayHeight;
+
+  const containerHeight =
+    activeTab === "controls"
+      ? `${controlsDisplayHeight}px`
+      : activeTab === "game"
+      ? `${gameDisplayHeight}px`
+      : activeTab === "audio"
+      ? `${audioDisplayHeight}px`
+      : `${otherDisplayHeight}px`;
+
+  const containerOverflowY = activeScrollHeight > TAB_PANEL_MAX_HEIGHT ? "auto" : "hidden";
+
   return (
     <div 
       className={`fixed inset-0 flex items-center justify-center text-black ${hideBackground ? 'z-[60] pointer-events-none' : 'z-20'}`} 
@@ -403,14 +569,15 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
         
         {/* Tabs - Grid layout for better wrapping */}
         <div className="grid grid-cols-3 gap-2 w-full">
-          {tabs.map((tab) => (
+            {tabs.map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => { playSwapTab({ semitones: -3 }); setActiveTab(tab); }}
+              onMouseEnter={() => playButtonHover()}
               className={`font-mono font-bold tracking-wider border-[3px] border-black px-4 py-2 uppercase transition-all duration-200 text-sm ${
-                activeTab === tab
-                  ? "bg-[#ff0000] text-white"
-                  : "bg-transparent text-black hover:bg-black/5"
+              activeTab === tab
+                ? "bg-[#ff0000] text-white"
+                : "bg-transparent text-black hover:bg-black/5"
               }`}
             >
               {TAB_LABELS[tab]}
@@ -420,15 +587,9 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
 
         {/* Tab content area */}
         <div className="w-full border-[3px] border-black/20 bg-white/50 relative transition-all duration-500 ease-in-out p-4" style={{ 
-          height: activeTab === "controls" 
-            ? `${Math.min(controlsHeight || 400, 400)}px` 
-            : activeTab === "game"
-            ? `${Math.min(gameHeight || 400, 400)}px`
-            : activeTab === "audio"
-            ? "280px"  // Fixed height for audio tab to show all 5 sliders
-            : `${Math.min(otherTabsHeight || 198, 400)}px`,
+          height: containerHeight,
           maxHeight: "400px",
-          overflowY: (activeTab === "controls" ? controlsHeight : activeTab === "game" ? gameHeight : activeTab === "audio" ? 295 : otherTabsHeight) > 400 ? "auto" : "hidden"
+          overflowY: containerOverflowY
         }}>
           {/* Controls content */}
           <div
@@ -516,7 +677,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 {!showResetConfirm ? (
                   <button
                     onClick={handleResetClick}
-                    onMouseEnter={playButtonHover}
+                    onMouseEnter={() => playButtonHover()}
                     className="mt-2 font-mono font-bold tracking-wider border-[3px] border-black px-4 py-1.5 uppercase transition-all bg-transparent text-black hover:bg-black hover:text-white text-xs"
                   >
                     RESET CONTROLS TO DEFAULT
@@ -535,14 +696,14 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                     <div className="flex gap-2">
                       <button
                         onClick={confirmReset}
-                        onMouseEnter={playButtonHover}
+                        onMouseEnter={() => playButtonHover()}
                         className="flex-1 font-mono font-bold tracking-wider border-[3px] border-black px-3 py-1 uppercase transition-all bg-[#ff0000] text-white hover:bg-black text-xs"
                       >
                         YES
                       </button>
                       <button
                         onClick={cancelReset}
-                        onMouseEnter={playButtonHover}
+                        onMouseEnter={() => playButtonHover()}
                         className="flex-1 font-mono font-bold tracking-wider border-[3px] border-black px-3 py-1 uppercase transition-all bg-transparent text-black hover:bg-black hover:text-white text-xs"
                       >
                         NO
@@ -690,6 +851,47 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 unit="%"
                 onChange={(value) => updateAudioSetting("uiVolume", value / 100)}
               />
+
+              <div className="mt-3 border-[3px] border-black bg-white p-3 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono font-bold text-xs tracking-wider uppercase">Songs</span>
+                  <span className="font-mono text-[10px] uppercase opacity-60">Select background vibe</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {MUSIC_CATEGORIES.map((category) => {
+                    const selected = audioSettings.musicCategory === category;
+                    return (
+                      <Button
+                        key={category}
+                        size="sm"
+                        variant="outline"
+                        motion="none"
+                        className={`text-xs tracking-wider w-full ${
+                          selected ? "bg-[#111] text-white hover:text-white hover:border-white" : "bg-white text-gray-950"
+                        }`}
+                        onClick={() => setMusicCategory(category)}
+                      >
+                        {MUSIC_CATEGORY_LABELS[category]}
+                      </Button>
+                    );
+                  })}
+                </div>
+                {audioSettings.musicCategory === "energy" && (
+                  <span className="font-mono text-[10px] uppercase opacity-70">
+                    Energy playlist is coming soon.
+                  </span>
+                )}
+                {audioSettings.musicCategory === "calm" && (
+                  <span className="font-mono text-[10px] uppercase opacity-70">
+                    Calm playlist. For long hours of practicing.
+                  </span>
+                )}
+                {audioSettings.musicCategory === "none" && (
+                  <span className="font-mono text-[10px] uppercase opacity-70">
+                    Music is turned off until you pick a playlist.
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 

@@ -27,6 +27,7 @@ type StoredStats = {
 };
 
 const IMPROVEMENT_EPS = 1e-3;
+const CALM_TRACK_NAMES = ["uncausal", "calm"] as const;
 
 function createEmptyMetricSet(): StoredMetricSet {
   return {
@@ -79,6 +80,27 @@ export default class App {
 
   private audioManager: AudioManager;
   private practiceMusicId: string | null = null;
+  private currentCalmTrack: (typeof CALM_TRACK_NAMES)[number] | null = null;
+  private calmTrackRotationIndex = Math.floor(Math.random() * CALM_TRACK_NAMES.length);
+  private ambientWindId: string | null = null;
+
+  private getPreferredMusicCategory(): 'none' | 'energy' | 'calm' {
+    if (typeof window === 'undefined') return 'calm';
+    try {
+      const raw = window.localStorage.getItem('audioSettings');
+      if (!raw) return 'calm';
+      const parsed = JSON.parse(raw) as { musicCategory?: unknown } | null;
+      const category = parsed?.musicCategory;
+      if (category === 'none' || category === 'energy' || category === 'calm') {
+        return category;
+      }
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[App] Failed to read music preference', error);
+      }
+    }
+    return 'calm';
+  }
 
   constructor(ui?: UIController, options?: { disableServer?: boolean }) {
     this.ui = ui;
@@ -190,10 +212,12 @@ export default class App {
         ['lazer02_1', '/audio/sfx/events/weapons/pistol/lazer02_1.wav', 'sfx'],
 
         // Buttons sfx
-        ['btn-click01', '/audio/sfx/ui/buttons/btn-click01.wav', 'sfx'],
-        ['btn-click02', '/audio/sfx/ui/buttons/btn-click02.wav', 'sfx'],
-        ['btn-click03', '/audio/sfx/ui/buttons/btn-click03.wav', 'sfx'],
-        ['btn-hover', '/audio/sfx/ui/buttons/btn-hover.wav', 'sfx'],
+        ['btn-click01', '/audio/sfx/ui/buttons/btn-click01.wav', 'ui'],
+        ['btn-click02', '/audio/sfx/ui/buttons/btn-click02.wav', 'ui'],
+        ['btn-click03', '/audio/sfx/ui/buttons/btn-click03.wav', 'ui'],
+        ['btn-hover', '/audio/sfx/ui/buttons/btn-hover.wav', 'ui'],
+        ['swap-tab01', '/audio/sfx/ui/buttons/swap-tab01.wav', 'ui'],
+        ['swap-tab02', '/audio/sfx/ui/buttons/swap-tab02.wav', 'ui'],
 
         // Player sfx
         ['steps', '/audio/sfx/events/steps.wav', 'sfx'],
@@ -202,15 +226,19 @@ export default class App {
         ['hit01', '/audio/sfx/events/hit-target/hit01.wav', 'sfx'],
 
         // Events
-        ['escape-event', '/audio/sfx/ui/actions/escape-event.wav', 'sfx'],
+        ['escape-event', '/audio/sfx/ui/actions/escape-event.wav', 'ui'],
 
         // UI Behavior:
           // Slider
-        ['slider-down', '/audio/sfx/ui/slider-change/slider-down.wav', 'sfx'],
-        ['slider-up', '/audio/sfx/ui/slider-change/slider-up.wav', 'sfx'],
+        ['slider-down', '/audio/sfx/ui/slider-change/slider-down.wav', 'ui'],
+        ['slider-up', '/audio/sfx/ui/slider-change/slider-up.wav', 'ui'],
 
         // Music
-        ['practice-music', '/audio/sfx/music/unCasual.ogg', 'music'],
+  ['uncausal', '/audio/music/calm/uncasual.ogg', 'music'],
+  ['calm', '/audio/music/calm/voices.ogg', 'music'],
+
+        // Ambient loops
+        ['ambient-wind', '/audio/ambiance/wind01.wav', 'ambient'],
 
         // Add more sounds here as needed
         // ['ui_click', '/audio/sfx/ui_click.mp3', 'ui'],
@@ -224,18 +252,31 @@ export default class App {
   }
 
   private playPracticeMusic() {
-    // If already playing, don't restart
-    if (this.audioManager.isPlaying('practice-music')) {
+    const preference = this.getPreferredMusicCategory();
+    if (preference !== 'calm') {
+      if (preference === 'none') {
+        this.stopPracticeMusic();
+      } else if (process.env.NODE_ENV !== 'production') {
+        console.debug('[App] Music preference set to energy - awaiting playlist');
+      }
+      return;
+    }
+
+    const anyCalmTrackActive = CALM_TRACK_NAMES.some((track) => this.audioManager.isPlaying(track));
+    if (anyCalmTrackActive) {
       return;
     }
     this.stopPracticeMusic();
     try {
-      const id = this.audioManager.play('practice-music', {
+      const nextTrack = CALM_TRACK_NAMES[this.calmTrackRotationIndex];
+      this.calmTrackRotationIndex = (this.calmTrackRotationIndex + 1) % CALM_TRACK_NAMES.length;
+      const id = this.audioManager.play(nextTrack, {
         channel: 'music',
         volume: 0.3,
         loop: true,
       });
       this.practiceMusicId = id ?? null;
+      this.currentCalmTrack = nextTrack;
     } catch (error) {
       console.warn('[App] Failed to start practice music', error);
     }
@@ -246,15 +287,51 @@ export default class App {
       this.audioManager.stop(this.practiceMusicId);
       this.practiceMusicId = null;
     }
+    this.currentCalmTrack = null;
     // Ensure all instances are halted if we lost the handle (e.g., during reloads)
-    this.audioManager.stopAllByName('practice-music');
+    CALM_TRACK_NAMES.forEach((track) => this.audioManager.stopAllByName(track));
+  }
+
+  private playAmbientWind() {
+    try {
+      const isAlreadyActive = this.ambientWindId !== null && this.audioManager.isPlaying('ambient-wind');
+      if (isAlreadyActive) {
+        return;
+      }
+      this.stopAmbientWind();
+      const id = this.audioManager.play('ambient-wind', {
+        channel: 'ambient',
+        volume: 0.1,
+        loop: true,
+      });
+      this.ambientWindId = id ?? null;
+    } catch (error) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.debug('[App] Failed to start ambient wind loop', error);
+      }
+    }
+  }
+
+  private stopAmbientWind() {
+    if (this.ambientWindId) {
+      try {
+        this.audioManager.stop(this.ambientWindId);
+      } catch {
+        /* ignore */
+      }
+      this.ambientWindId = null;
+    }
+    this.audioManager.stopAllByName('ambient-wind');
   }
 
   /**
    * Public method to stop practice music (used by UI on exit)
    */
   public stopMusic() {
-    this.stopPracticeMusic();
+    this.stopAmbientWind();
+    if (this.getPreferredMusicCategory() === 'none') {
+      this.stopPracticeMusic();
+    }
   }
   
   /**
@@ -308,6 +385,7 @@ export default class App {
       this.ui?.timer.stop(summary);
     }
     this.gameRunning = false;
+    this.stopAmbientWind();
 
     // Don't disable physics - keep them running so player can still move
   }
@@ -963,6 +1041,7 @@ export default class App {
     this.loop.start();
     if (!this.isEditorMode) {
       this.playPracticeMusic();
+      this.playAmbientWind();
     }
     this.startTimer();
     this.gameRunning = true;
