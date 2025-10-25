@@ -33,7 +33,7 @@ type ClipboardPayload = {
 };
 
 const builtinItems: EditorItem[] = [
-  { id: "block", label: "Block" },
+  { id: "block", label: "Block", category: "primitive" },
 ];
 
 export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
@@ -445,7 +445,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const items: EditorItem[] = useMemo(() => {
     return [
       ...builtinItems,
-      ...components.map((c) => ({ id: `component:${c.id}`, label: c.label })),
+      ...components.map((c) => ({ id: `component:${c.id}`, label: c.label, category: c.category ?? "myComponents" })),
     ];
   }, [components]);
 

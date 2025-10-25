@@ -5,7 +5,7 @@ import { getComponent } from "../componentsStore";
 import type { TransformMode } from "./useTransformSession";
 import type { HistoryAction } from "./useHistoryStack";
 
-const builtinItems: EditorItem[] = [{ id: "block", label: "Block" }];
+const builtinItems: EditorItem[] = [{ id: "block", label: "Block", category: "primitive" }];
 
 interface UseCanvasEventsProps {
   editor: EditorApp;

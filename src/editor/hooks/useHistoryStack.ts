@@ -8,7 +8,7 @@ export type GroupMember = {
 };
 
 export type HistoryAction =
-  | { type: "add"; id: string; transform: SelectionTransform }
+  | { type: "add"; id: string; transform: SelectionTransform; node?: SerializedNode }
   | { type: "transform"; id: string; before: SelectionTransform; after: SelectionTransform }
   | { type: "group"; groupId: string; members: GroupMember[] }
   | { type: "ungroup"; groupId: string; members: GroupMember[] }
@@ -91,12 +91,21 @@ export function useHistoryStack(
     }
 
     if (action.type === "add") {
-      editor.createBlock({
-        id: action.id,
-        position: action.transform.position,
-        rotation: action.transform.rotation,
-        scale: action.transform.scale,
-      });
+      // If we have the full node data, use it to restore the block completely
+      if (action.node) {
+        const restored = editor.instantiateSerializedNodes([action.node], []);
+        if (restored.length > 0) {
+          editor.setSelectionByIds([restored[0].id]);
+        }
+      } else {
+        // Fallback to simple block creation (for backwards compatibility)
+        editor.createBlock({
+          id: action.id,
+          position: action.transform.position,
+          rotation: action.transform.rotation,
+          scale: action.transform.scale,
+        });
+      }
     } else if (action.type === "transform") {
       applyTransformSnapshot(action.id, action.after);
     } else if (action.type === "group") {

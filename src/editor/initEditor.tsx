@@ -61,6 +61,12 @@ export function initEditor(): void {
     editorAppSingleton = new EditorApp(canvas);
     editorAppSingleton.start();
 
+    // Expose editor globally for debugging
+    if (typeof window !== "undefined") {
+      (window as Window & { editor?: typeof editorAppSingleton }).editor = editorAppSingleton;
+      console.log("[Editor] Editor exposed globally as window.editor");
+    }
+
     try {
       const autosave = findScenarioByName(AUTO_SAVE_SCENARIO_NAME);
       if (autosave) {

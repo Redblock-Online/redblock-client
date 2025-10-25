@@ -230,7 +230,7 @@ export default class Target extends THREE.Group {
     this.shootableActivatedAt = now;
     this.layers.enable(1);
 
-    const cubeMaterial = this.cubeMesh.material as THREE.MeshBasicMaterial;
+    const cubeMaterial = this.cubeMesh.material as THREE.MeshToonMaterial;
     cubeMaterial.color.set(color);
   }
 

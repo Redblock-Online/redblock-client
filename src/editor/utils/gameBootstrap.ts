@@ -6,6 +6,7 @@ import type { UIController } from "@/ui/react/mountUI";
 import type { TimerController, TimerHint } from "@/ui/react/TimerDisplay";
 import * as THREE from "three";
 import Cube from "@/objects/Cube";
+import Target from "@/objects/Target";
 
 export interface GameInstance {
   dispose: () => void;
@@ -24,6 +25,144 @@ function processBlockRecursively(
   // Skip spawn points
   if (block.isSpawnPoint) {
     return;
+  }
+  
+  // Handle target generators - generate targets but don't show the generator itself
+  if (block.isGenerator && block.generatorConfig) {
+    console.log(`[Bootstrap] Processing generator at position:`, block.transform.position);
+    console.log(`[Bootstrap] Generator config:`, block.generatorConfig);
+    
+    const config = block.generatorConfig;
+    const isEnabled = config.enabled !== false; // Default to true if undefined
+    const isVisible = config.visible !== false; // Default to true if undefined
+    
+    // If not enabled, skip generation but store metadata for later activation
+    if (!isEnabled) {
+      console.log(`[Bootstrap] Generator is disabled, skipping target generation`);
+      // Store generator metadata in app for later activation
+      if (!app.generatorMetadata) {
+        app.generatorMetadata = new Map();
+      }
+      // Use block ID from serialized data
+      // Use block ID from serialized data
+      const generatorId = block.id || `gen-${Date.now()}`;
+      console.log(`[Bootstrap] Disabled generator ID: ${generatorId}`);
+      app.generatorMetadata.set(generatorId, {
+        config: block.generatorConfig,
+        position: block.transform.position,
+        targets: [] // Will be populated when activated
+      });
+      console.log(`[Bootstrap] Stored disabled generator metadata with ID: ${generatorId}`);
+      return;
+    }
+    
+    // Get generator position (this is where the generator marker was placed)
+    const generatorPos = new THREE.Vector3(
+      block.transform.position.x,
+      block.transform.position.y,
+      block.transform.position.z
+    );
+    
+    // Generate targets using the configuration
+    const targetCount = config.targetCount;
+    const targetScale = config.targetScale;
+    
+    console.log(`[Bootstrap] Generating ${targetCount} targets with scale ${targetScale}`);
+    
+    // Get spawn bounds (for randomStatic type)
+    const bounds = config.type === "randomStatic" ? config.spawnBounds : null;
+    
+    // Get generator ID for linking targets
+    const generatorId = block.id || `gen-${Date.now()}`;
+    console.log(`[Bootstrap] Generator ID: ${generatorId}`);
+    
+    // Track targets for this generator
+    const generatorTargets: Target[] = [];
+    
+    // Generate targets based on generator type
+    for (let i = 0; i < targetCount; i++) {
+      // Use Target instead of Cube for proper target management
+      const target = new Target(0xffffff, true, false, targetScale === 0.2);
+      
+      // Position targets within configured bounds
+      let x, y, z;
+      if (bounds) {
+        // Use configured spawn bounds (relative to generator position)
+        x = generatorPos.x + bounds.minX + Math.random() * (bounds.maxX - bounds.minX);
+        y = generatorPos.y + bounds.minY + Math.random() * (bounds.maxY - bounds.minY);
+        z = generatorPos.z + bounds.minZ + Math.random() * (bounds.maxZ - bounds.minZ);
+      } else {
+        // Fallback to cone pattern for moving targets
+        const angle = (i / targetCount) * Math.PI * 0.8 - Math.PI * 0.4;
+        const distance = 3 + Math.random() * 8;
+        x = generatorPos.x + Math.cos(angle) * distance;
+        y = generatorPos.y + Math.random() * 2;
+        z = generatorPos.z + Math.sin(angle) * distance;
+      }
+      
+      target.position.set(x, y, z);
+      // Scale is already set in constructor via halfSize parameter
+      // No rotation - keep targets axis-aligned
+      
+      // Mark as target and link to generator
+      target.cubeMesh.name = "Target";
+      target.cubeMesh.userData.isTarget = true;
+      target.cubeMesh.userData.generatorId = generatorId; // Link target to its generator
+      
+      // Color is already white from constructor
+      // Target class handles outline internally
+      
+      // Handle visibility
+      if (!isVisible) {
+        target.visible = false;
+        console.log(`[Bootstrap] Target hidden (visible=false)`);
+      }
+      
+      parentGroup.add(target);
+      
+      // Add to collision system
+      target.updateWorldMatrix(true, true);
+      const boundingBox = new THREE.Box3().setFromObject(target);
+      const collider = {
+        min: boundingBox.min.clone(),
+        max: boundingBox.max.clone(),
+        object: target
+      };
+      
+      app.collisionSystem.waitForInit().then(() => {
+        app.collisionSystem.addCollider(collider);
+      });
+      
+      // Add to app.targets array so it can be managed
+      app.targets.push(target);
+      
+      // Track for this generator
+      generatorTargets.push(target);
+    }
+    
+    console.log(`[Bootstrap] Generated ${targetCount} targets from generator (generator marker hidden)`);
+    console.log(`[Bootstrap] Total targets in app.targets: ${app.targets.length}`);
+    
+    // Make first target of THIS generator shootable (red) if visible
+    if (generatorTargets.length > 0 && isVisible) {
+      generatorTargets[0].makeShootable(0xff0000);
+      console.log(`[Bootstrap] First target of this generator made shootable (red)`);
+    } else if (generatorTargets.length > 0 && !isVisible) {
+      console.log(`[Bootstrap] Targets are invisible, first will be made shootable when visible`);
+    }
+    
+    // Store generator metadata for event system
+    if (!app.generatorMetadata) {
+      app.generatorMetadata = new Map();
+    }
+    app.generatorMetadata.set(generatorId, {
+      config: block.generatorConfig,
+      position: block.transform.position,
+      targets: generatorTargets
+    });
+    console.log(`[Bootstrap] Stored generator metadata with ID: ${generatorId}, targets: ${generatorTargets.length}`);
+    
+    return; // Don't render the generator marker itself - only the targets
   }
   
   // Process based on type
@@ -257,8 +396,16 @@ function loadCustomScenario(app: App, scenario: SerializedScenario) {
   // Process each block from the scenario recursively (handles nested groups/components)
   console.log("[Bootstrap] Processing blocks recursively...");
   console.log("[Bootstrap] Component definitions available:", scenario.componentDefinitions.length);
+  console.log("[Bootstrap] Total blocks to process:", scenario.blocks.length);
+  
   scenario.blocks.forEach((block: SerializedNode, index: number) => {
-    console.log(`[Bootstrap] Processing top-level block ${index}:`, block.type);
+    console.log(`[Bootstrap] ========== Block ${index} ==========`);
+    console.log(`[Bootstrap] Type: ${block.type}`);
+    console.log(`[Bootstrap] isSpawnPoint: ${block.isSpawnPoint}`);
+    console.log(`[Bootstrap] isGenerator: ${block.isGenerator}`);
+    console.log(`[Bootstrap] generatorConfig:`, block.generatorConfig);
+    console.log(`[Bootstrap] Position:`, block.transform.position);
+    
     processBlockRecursively(block, customGroup, app, true, scenario.componentDefinitions);
   });
   

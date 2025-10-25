@@ -17,6 +17,7 @@
     "prepare": "husky install",
     "test": "vitest run",
     "test:watch": "vitest"
+
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.3",

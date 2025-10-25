@@ -1,3 +1,5 @@
+import type { ComponentCategory } from "./components/CategoryFilter";
+
 export type ComponentMemberTransform = {
   position: { x: number; y: number; z: number };
   rotation: { x: number; y: number; z: number };
@@ -8,6 +10,7 @@ export type SavedComponent = {
   id: string; // e.g., comp-1
   label: string; // human label shown in the Components panel
   members: ComponentMemberTransform[]; // transforms are local to the component root
+  category?: ComponentCategory; // Category for filtering (defaults to "target")
 };
 
 const STORAGE_KEY = "redblock.components";

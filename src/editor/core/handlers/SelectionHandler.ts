@@ -38,8 +38,11 @@ export class SelectionHandler {
     const hit = this.editor.pickBlock(event.clientX, event.clientY, additive);
 
     if (hit && this.dragHandler) {
-      // Block was clicked, start drag
-      this.dragHandler.start(event.clientX, event.clientY);
+      // Don't start drag if we're selecting a generator target
+      if (!this.editor.isSelectingGenerator()) {
+        // Block was clicked, start drag
+        this.dragHandler.start(event.clientX, event.clientY);
+      }
       this.isDraggingBox = false;
     } else {
       // No block hit, prepare for box selection

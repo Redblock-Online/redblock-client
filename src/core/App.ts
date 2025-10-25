@@ -4,7 +4,7 @@ import MainScene from "@/scenes/MainScene";
 import Loop from "./Loop";
 import ControlsWithMovement from "@/systems/ControlsWithMovement";
 import { PhysicsSystem } from "@/systems/PhysicsSystem";
-import { Raycaster, Vector2, Vector3, BufferGeometry, Line, LineBasicMaterial, BufferAttribute, Mesh, SphereGeometry, MeshBasicMaterial } from "three";
+import { Raycaster, Vector2, Vector3, BufferGeometry, Line , LineBasicMaterial, BufferAttribute, Mesh, SphereGeometry, MeshBasicMaterial, Box3, Material } from "three";
 import Pistol from "@/objects/Pistol";
 import Target from "@/objects/Target";
 import WSManager, { type PlayerCore } from "@/utils/ws/WSManager";
@@ -13,6 +13,7 @@ import type { TimerHint, TimerHintTableRow } from "@/ui/react/TimerDisplay";
 import { SCENARIOS, type ScenarioConfig, getScenarioById } from "@/config/scenarios";
 import { AudioManager } from "@/utils/AudioManager";
 import gsap from "gsap";
+import type { GeneratorConfig } from "@/editor/types/generatorConfig";
 
 type StoredMetricSet = {
   accuracy: number | null;
@@ -57,6 +58,11 @@ export default class App {
   targets: Target[] = [];
   gameRunning: boolean = false;
   wsManager: WSManager;
+  generatorMetadata?: Map<string, {
+    config: GeneratorConfig;
+    position: { x: number; y: number; z: number };
+    targets: Target[];
+  }>;
   private currentScenarioIndex: number | null = null;
   private scenarios: ScenarioConfig[] = SCENARIOS;
   private scenarioPortals: Target[] = [];
@@ -78,6 +84,7 @@ export default class App {
   private isEditorMode: boolean = false;
 
   private audioManager: AudioManager;
+  private completedGenerators = new Set<string>(); // Track which generators have been completed
 
   constructor(ui?: UIController, options?: { disableServer?: boolean }) {
     this.ui = ui;
@@ -295,9 +302,17 @@ export default class App {
     this.recordHit(hitTarget);
     hitTarget.absorbAndDisappear();
 
+    // Get the generator ID of the hit target
+    const hitGeneratorId = hitTarget.cubeMesh.userData.generatorId as string | undefined;
+    console.log(`[App] Hit target from generator: ${hitGeneratorId}`);
+    
+    // Only consider candidates from the SAME generator
     const candidates = this.targets.filter(
-      (t) => t.visible && !t.shootable && !t.animating && t !== hitTarget
+      (t) => t.visible && !t.shootable && !t.animating && t !== hitTarget &&
+             t.cubeMesh.userData.generatorId === hitGeneratorId
     );
+    
+    console.log(`[App] Found ${candidates.length} candidates from same generator`);
 
     if (candidates.length > 0) {
       this.camera.instance.getWorldPosition(this.cameraWorldPos);
@@ -343,13 +358,24 @@ export default class App {
       }
 
       const nextTarget = forwardBest?.cube ?? nearestBest?.cube ?? null;
-      nextTarget?.makeShootable();
+      if (nextTarget) {
+        const nextGeneratorId = nextTarget.cubeMesh.userData.generatorId;
+        console.log(`[App] Making next target shootable from generator: ${nextGeneratorId}`);
+        nextTarget.makeShootable();
+      }
     }
 
+    // Check if any generator was completed
+    const newGeneratorsActivated = this.checkGeneratorCompletion(hitTarget);
+    
     const remaining = this.targets.some(
       (t) => t.visible && !t.animating && t.shootable
     );
-    if (!remaining) {
+    const remainingCount = this.targets.filter(t => t.visible && !t.animating && t.shootable).length;
+    console.log(`[App] Remaining shootable targets: ${remaining} (count: ${remainingCount}), New generators activated: ${newGeneratorsActivated}`);
+    
+    // Only stop timer if no targets remain AND no new generators were activated
+    if (!remaining && !newGeneratorsActivated) {
       this.stopTimer();
       
       // TargetManager handles all cleanup and pooling automatically
@@ -362,6 +388,199 @@ export default class App {
 
   get getAmmountOfTargetsSelected() {
     return this.currentScenarioTargetCount;
+  }
+
+  /**
+   * Check if a generator was completed and execute its events
+   * Returns true if new generators were activated
+   */
+  private checkGeneratorCompletion(hitTarget: Target): boolean {
+    const generatorId = hitTarget.cubeMesh.userData.generatorId as string | undefined;
+    console.log(`[App] checkGeneratorCompletion - generatorId: ${generatorId}`);
+    
+    if (!generatorId || !this.generatorMetadata) {
+      console.log(`[App] No generatorId or metadata, returning false`);
+      return false;
+    }
+    
+    // Skip if already completed
+    if (this.completedGenerators.has(generatorId)) {
+      console.log(`[App] Generator ${generatorId} already completed, skipping`);
+      return false;
+    }
+    
+    const metadata = this.generatorMetadata.get(generatorId);
+    if (!metadata) {
+      console.log(`[App] No metadata for generator ${generatorId}`);
+      return false;
+    }
+    
+    // Check if all targets from this generator are destroyed
+    // A target is destroyed if it's invisible (animation completed) or currently animating
+    const generatorTargets = metadata.targets;
+    const allDestroyed = generatorTargets.every(t => !t.visible || t.animating);
+    
+    console.log(`[App] Generator ${generatorId} - targets: ${generatorTargets.length}, all destroyed: ${allDestroyed}`);
+    console.log(`[App] Target states:`, generatorTargets.map(t => ({ animating: t.animating, visible: t.visible, shootable: t.shootable })));
+    
+    if (allDestroyed) {
+      console.log(`[App] Generator ${generatorId} completed!`);
+      this.completedGenerators.add(generatorId);
+      
+      // Execute onComplete events
+      const events = metadata.config.events?.onComplete || [];
+      console.log(`[App] Executing ${events.length} events`);
+      console.log(`[App] Events:`, events);
+      
+      let activatedGenerators = false;
+      for (const event of events) {
+        console.log(`[App] Executing event: ${event.type}, targetGeneratorId: ${'targetGeneratorId' in event ? event.targetGeneratorId : 'N/A'}`);
+        
+        switch (event.type) {
+          case "startGenerator":
+            if ('targetGeneratorId' in event && event.targetGeneratorId) {
+              this.activateGenerator(event.targetGeneratorId);
+              activatedGenerators = true;
+            }
+            break;
+          // Add more event types here
+          default:
+            console.warn(`[App] Unknown event type: ${event.type}`);
+        }
+      }
+      
+      console.log(`[App] Activated generators: ${activatedGenerators}`);
+      return activatedGenerators;
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Activate a disabled generator
+   */
+  private activateGenerator(generatorId: string): void {
+    console.log(`[App] Activating generator: ${generatorId}`);
+    
+    if (!this.generatorMetadata) {
+      console.warn(`[App] No generator metadata available`);
+      return;
+    }
+    
+    const metadata = this.generatorMetadata.get(generatorId);
+    if (!metadata) {
+      console.warn(`[App] Generator ${generatorId} not found in metadata`);
+      return;
+    }
+    
+    // Remove from completed generators so it can be completed again
+    this.completedGenerators.delete(generatorId);
+    console.log(`[App] Removed generator ${generatorId} from completed list`);
+    
+    // If generator already has targets, reset and reactivate them
+    if (metadata.targets.length > 0) {
+      console.log(`[App] Resetting and reactivating ${metadata.targets.length} existing targets`);
+      console.log(`[App] Targets before reset:`, metadata.targets.map(t => ({ visible: t.visible, animating: t.animating, shootable: t.shootable })));
+      metadata.targets.forEach(target => {
+        // Kill any active animations
+        if (target.activeTweens) {
+          target.activeTweens.forEach(t => t.kill());
+          target.activeTweens = [];
+        }
+        
+        // Reset state
+        target.visible = true;
+        target.animating = false;
+        target.shootable = false;
+        target.shootableActivatedAt = null;
+        
+        // Reset transform
+        target.scale.set(target.baseScale, target.baseScale, target.baseScale);
+        target.rotation.set(0, 0, 0);
+        
+        // Reset materials opacity
+        const cubeMaterial = target.cubeMesh.material as Material & { opacity?: number };
+        if (cubeMaterial && 'opacity' in cubeMaterial) cubeMaterial.opacity = 1;
+        
+        // Reset edge materials
+        target.edgesGroup.children.forEach((edge) => {
+          const edgeMaterial = (edge as Mesh).material as Material & { opacity?: number };
+          if (edgeMaterial && 'opacity' in edgeMaterial) edgeMaterial.opacity = 1;
+        });
+        
+        // Reset color to white
+        target.setColor(0xffffff);
+      });
+      
+      // Make first target shootable
+      if (metadata.targets.length > 0) {
+        metadata.targets[0].makeShootable(0xff0000);
+        console.log(`[App] First target reset and made shootable`);
+        console.log(`[App] Targets after reset:`, metadata.targets.map(t => ({ visible: t.visible, animating: t.animating, shootable: t.shootable })));
+      }
+      return;
+    }
+    
+    // Generate new targets for this generator
+    const config = metadata.config;
+    const generatorPos = metadata.position;
+    const targetCount = config.targetCount;
+    const targetScale = config.targetScale;
+    const bounds = config.type === "randomStatic" ? config.spawnBounds : null;
+    
+    console.log(`[App] Generating ${targetCount} new targets for generator ${generatorId}`);
+    
+    const generatorTargets: Target[] = [];
+    
+    for (let i = 0; i < targetCount; i++) {
+      const target = new Target(0xffffff, true, false, targetScale === 0.2);
+      
+      // Position targets
+      let x, y, z;
+      if (bounds) {
+        x = generatorPos.x + bounds.minX + Math.random() * (bounds.maxX - bounds.minX);
+        y = generatorPos.y + bounds.minY + Math.random() * (bounds.maxY - bounds.minY);
+        z = generatorPos.z + bounds.minZ + Math.random() * (bounds.maxZ - bounds.minZ);
+      } else {
+        const angle = (i / targetCount) * Math.PI * 0.8 - Math.PI * 0.4;
+        const distance = 3 + Math.random() * 8;
+        x = generatorPos.x + Math.cos(angle) * distance;
+        y = generatorPos.y + Math.random() * 2;
+        z = generatorPos.z + Math.sin(angle) * distance;
+      }
+      
+      target.position.set(x, y, z);
+      target.cubeMesh.name = "Target";
+      target.cubeMesh.userData.isTarget = true;
+      target.cubeMesh.userData.generatorId = generatorId;
+      
+      this.scene.add(target);
+      
+      // Add to collision system
+      target.updateWorldMatrix(true, true);
+      const boundingBox = new Box3().setFromObject(target);
+      const collider = {
+        min: boundingBox.min.clone(),
+        max: boundingBox.max.clone(),
+        object: target
+      };
+      
+      this.collisionSystem.waitForInit().then(() => {
+        this.collisionSystem.addCollider(collider);
+      });
+      
+      this.targets.push(target);
+      generatorTargets.push(target);
+    }
+    
+    // Update metadata with generated targets
+    metadata.targets = generatorTargets;
+    
+    // Make first target shootable
+    if (generatorTargets.length > 0) {
+      generatorTargets[0].makeShootable(0xff0000);
+      console.log(`[App] Generated ${generatorTargets.length} targets, first one is shootable`);
+    }
   }
 
   private spawnTracer(from: Vector3, to: Vector3, color = 0xffff66) {
@@ -451,11 +670,8 @@ export default class App {
 
   // ===== Helpers =====
   private onMouseDown = (e: MouseEvent) => {
+    // Don't auto-restart when game ends - let events control the flow
     if (!this.gameRunning) {
-      if (this.currentScenarioIndex !== null) {
-        const scenario = this.scenarios[this.currentScenarioIndex];
-        this.startScenarioById(scenario.id);
-      }
       return;
     }
 
@@ -885,10 +1101,20 @@ export default class App {
 
     this.resetTargets();
     
+    // Reset player to spawn position and orientation
+    const spawnX = this.scene.me.room_coord_x;
+    const spawnZ = this.scene.me.room_coord_z;
+    const spawnY = 0; // Floor level
+    const spawnYaw = (Math.PI / 2) * 3; // Always face same direction (270 degrees)
+    
+    this.controls.teleportTo(spawnX, spawnY, spawnZ, spawnYaw);
+    console.log(`[App] Player reset to spawn: (${spawnX}, ${spawnY}, ${spawnZ}), yaw: ${spawnYaw}`);
+    
     // In editor mode, don't generate default targets - custom scenario will be loaded separately
     if (!this.isEditorMode) {
       const useHalfSize = scenario.targetScale === 0.2;
-      this.scene.loadScenario(scenario.targetCount, useHalfSize);
+      // Pass player orientation to target generation
+      this.scene.loadScenario(scenario.targetCount, useHalfSize, spawnYaw);
       
       // Sync targets array after generation (TargetManager updates scene.targets)
       this.targets = this.scene.targets;

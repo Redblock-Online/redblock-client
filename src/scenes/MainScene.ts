@@ -210,8 +210,9 @@ export default class MainScene extends THREE.Scene {
    * Load scenario with optimized target generation
    * @param targetCount - Number of targets to spawn
    * @param halfSize - Use half-size targets (0.2 scale)
+   * @param playerYaw - Player's yaw rotation in radians (targets spawn in front of player)
    */
-  public loadScenario(targetCount: number, halfSize: boolean = false) {
+  public loadScenario(targetCount: number, halfSize: boolean = false, playerYaw?: number) {
     const amount = Math.max(1, Math.floor(targetCount));
     const scale = halfSize ? 0.2 : 0.4;
     
@@ -223,7 +224,9 @@ export default class MainScene extends THREE.Scene {
       amount,
       this.me.room_coord_x,
       this.me.room_coord_z,
-      scale
+      scale,
+      undefined,
+      playerYaw
     );
     
     // Update legacy targets array for compatibility with existing code

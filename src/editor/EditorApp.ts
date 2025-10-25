@@ -24,6 +24,7 @@ import {
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { ComponentMemberTransform, SavedComponent } from "./componentsStore";
+import { DEFAULT_RANDOM_STATIC_CONFIG, DEFAULT_MOVING_CONFIG, type GeneratorConfig } from "./types/generatorConfig";
 import { loadComponents } from "./componentsStore";
 import type {
   EditorBlock,
@@ -75,6 +76,8 @@ export default class EditorApp {
   
   // Flag to disable keyboard shortcuts when user is typing in an input
   private isTyping = false;
+  // Flag to prevent dragging when selecting a generator target
+  private isSelectingGeneratorTarget = false;
   private readonly camera: PerspectiveCamera;
   private readonly controls: OrbitControls;
   private readonly raycaster = new Raycaster();
@@ -355,6 +358,20 @@ export default class EditorApp {
   }
 
   /**
+   * Set generator target selection mode - prevents dragging when selecting a target
+   */
+  public setSelectingGeneratorTarget(selecting: boolean): void {
+    this.isSelectingGeneratorTarget = selecting;
+  }
+
+  /**
+   * Check if currently selecting a generator target
+   */
+  public isSelectingGenerator(): boolean {
+    return this.isSelectingGeneratorTarget;
+  }
+
+  /**
    * Validate scene and update alerts
    */
   public validateScene(): void {
@@ -433,6 +450,81 @@ export default class EditorApp {
     return blocks.some((block) => block.mesh.userData.isSpawnPoint === true);
   }
 
+  public placeRandomTargetGeneratorAt(clientX: number, clientY: number): EditorBlock | null {
+    const point = this.intersectGround(clientX, clientY);
+    if (!point) {
+      return null;
+    }
+
+    // Create a generator marker (cube with distinct appearance)
+    const generator = this.blocks.createBlock({
+      position: point.setY(0.5),
+      scale: new Vector3(0.6, 0.6, 0.6),
+    });
+    
+    // Mark as generator in userData
+    generator.mesh.userData.isGenerator = true;
+    generator.mesh.userData.generatorType = "randomStatic";
+    generator.generatorConfig = { ...DEFAULT_RANDOM_STATIC_CONFIG };
+    generator.mesh.userData.generatorConfig = generator.generatorConfig;
+    
+    // Give it a distinct color (pink/magenta for generators)
+    const mesh = generator.mesh as Mesh;
+    if (mesh.material) {
+      const material = mesh.material as MeshStandardMaterial;
+      material.color.set(0xff4dff); // Pink/magenta color
+      material.emissive = new Color(0xff4dff);
+      material.emissiveIntensity = 0.2;
+    }
+    
+    this.clearMovementState();
+    this.selection.setSelectionSingle(generator);
+    return generator;
+  }
+
+  public placeMovingTargetGeneratorAt(clientX: number, clientY: number): EditorBlock | null {
+    const point = this.intersectGround(clientX, clientY);
+    if (!point) {
+      return null;
+    }
+
+    // Create a generator marker (cube with distinct appearance)
+    const generator = this.blocks.createBlock({
+      position: point.setY(0.5),
+      scale: new Vector3(0.6, 0.6, 0.6),
+    });
+    
+    // Mark as generator in userData
+    generator.mesh.userData.isGenerator = true;
+    generator.mesh.userData.generatorType = "moving";
+    generator.generatorConfig = { ...DEFAULT_MOVING_CONFIG };
+    generator.mesh.userData.generatorConfig = generator.generatorConfig;
+    
+    // Give it a distinct color (cyan/blue for moving generators)
+    const mesh = generator.mesh as Mesh;
+    if (mesh.material) {
+      const material = mesh.material as MeshStandardMaterial;
+      material.color.set(0x00ddff); // Cyan color for moving targets
+      material.emissive = new Color(0x00ddff);
+      material.emissiveIntensity = 0.2;
+    }
+    
+    this.clearMovementState();
+    this.selection.setSelectionSingle(generator);
+    return generator;
+  }
+
+  public updateGeneratorConfig(blockId: string, config: GeneratorConfig): void {
+    const block = this.blocks.getBlock(blockId);
+    if (block && block.mesh.userData.isGenerator) {
+      block.generatorConfig = config;
+      block.mesh.userData.generatorConfig = config;
+      // Config updated successfully
+    } else {
+      console.warn(`[EditorApp] Cannot update generator config - block not found or not a generator:`, blockId);
+    }
+  }
+
   public createBlock(options: {
     position: Vector3;
     rotation?: Euler;
@@ -445,6 +537,8 @@ export default class EditorApp {
 
   public removeBlock(id: string): boolean {
     const block = this.blocks.getBlock(id);
+    console.log('[EditorApp] removeBlock called for:', id);
+    console.trace('[EditorApp] removeBlock stack trace');
     if (block) {
       this.components.handleBlockRemoved(block);
     }
@@ -830,11 +924,21 @@ export default class EditorApp {
 
     if (block.mesh instanceof Mesh) {
       const isSpawnPoint = block.mesh.userData.isSpawnPoint === true;
+      const isGenerator = block.mesh.userData.isGenerator === true;
+      
+      // Debug log for generators
+      if (isGenerator && block.generatorConfig) {
+        console.log(`[EditorApp] Serializing generator ${block.id}:`, block.generatorConfig);
+      }
+      
       return {
         type: "block",
         transform: this.toSerializedTransform(block.mesh, "world"),
-        isSpawnPoint: isSpawnPoint || undefined,
+        id: block.id, // Include ID for generator referencing
         ...(block.name && { name: block.name }),
+        ...(isSpawnPoint && { isSpawnPoint: true }),
+        ...(isGenerator && { isGenerator: true }),
+        ...(isGenerator && block.generatorConfig && { generatorConfig: block.generatorConfig }),
       };
     }
 
@@ -876,10 +980,15 @@ export default class EditorApp {
 
     if (object instanceof Mesh) {
       const isSpawnPoint = object.userData.isSpawnPoint === true;
+      const isGenerator = object.userData.isGenerator === true;
+      const generatorConfig = object.userData.generatorConfig;
+      
       return {
         type: "block",
         transform: this.toSerializedTransform(object, space),
-        isSpawnPoint: isSpawnPoint || undefined,
+        ...(isSpawnPoint && { isSpawnPoint: true }),
+        ...(isGenerator && { isGenerator: true }),
+        ...(isGenerator && generatorConfig && { generatorConfig }),
       };
     }
 
@@ -920,6 +1029,33 @@ export default class EditorApp {
             rotation: transform.rotation,
             scale: transform.scale,
           });
+        } else if (node.isGenerator && node.generatorConfig) {
+          // Restore generator by creating a block and marking it as generator
+          block = this.createBlock({
+            position: transform.position,
+            rotation: transform.rotation,
+            scale: transform.scale,
+          });
+          
+          if (block) {
+            // Mark as generator
+            block.mesh.userData.isGenerator = true;
+            block.mesh.userData.generatorType = node.generatorConfig.type;
+            block.generatorConfig = node.generatorConfig;
+            block.mesh.userData.generatorConfig = node.generatorConfig;
+            
+            // Set generator appearance
+            const material = (block.mesh as Mesh).material as MeshStandardMaterial;
+            if (node.generatorConfig.type === "randomStatic") {
+              material.color.set(0xff00ff); // Magenta for random static
+              material.emissive = new Color(0xff00ff);
+              material.emissiveIntensity = 0.2;
+            } else if (node.generatorConfig.type === "moving") {
+              material.color.set(0x00ddff); // Cyan for moving
+              material.emissive = new Color(0x00ddff);
+              material.emissiveIntensity = 0.2;
+            }
+          }
         } else {
           block = this.createBlock({
             position: transform.position,
@@ -1016,6 +1152,12 @@ export default class EditorApp {
         scale: { ...node.transform.scale },
       },
       children: node.children ? node.children.map((child) => this.cloneSerializedNode(child)) : undefined,
+      // Preserve all optional properties
+      ...(node.id && { id: node.id }),
+      ...(node.name && { name: node.name }),
+      ...(node.isSpawnPoint && { isSpawnPoint: node.isSpawnPoint }),
+      ...(node.isGenerator && { isGenerator: node.isGenerator }),
+      ...(node.generatorConfig && { generatorConfig: JSON.parse(JSON.stringify(node.generatorConfig)) }),
     };
   }
 

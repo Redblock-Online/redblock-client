@@ -1,8 +1,11 @@
 import type { Euler, LineSegments, Object3D, Vector3 } from "three";
+import type { ComponentCategory } from "./components/CategoryFilter";
+import type { GeneratorConfig } from "./types/generatorConfig";
 
 export type EditorItem = {
   id: string;
   label: string;
+  category: ComponentCategory;
 };
 
 export type EditorBlock = {
@@ -10,6 +13,7 @@ export type EditorBlock = {
   name?: string; // Optional custom display name
   mesh: Object3D;
   outline?: LineSegments;
+  generatorConfig?: GeneratorConfig; // Configuration for target generators
 };
 
 export type EditorSelection = EditorBlock | EditorBlock[] | null;
@@ -37,8 +41,11 @@ export type SerializedTransform = {
 export type SerializedNode = {
   type: "block" | "component" | "group";
   transform: SerializedTransform;
+  id?: string; // Block ID for referencing (especially for generators)
   componentId?: string;
   children?: SerializedNode[];
   isSpawnPoint?: boolean;
+  isGenerator?: boolean; // Is this a target generator?
+  generatorConfig?: GeneratorConfig; // Configuration for target generators
   name?: string; // Custom display name for the block
 };

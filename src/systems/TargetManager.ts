@@ -1,5 +1,10 @@
 import * as THREE from "three";
 import Target from "@/objects/Target";
+import {
+  ITargetGenerator,
+  TargetGenerationConfig,
+  RandomStaticGenerator,
+} from "@/systems/generators";
 
 /**
  * TargetManager - Manages target lifecycle with efficient pooling and generation
@@ -29,9 +34,15 @@ export default class TargetManager {
   private readonly maxPoolSize = 100;
   private readonly minPoolSize = 20;
   
-  constructor(scene: THREE.Scene) {
+  // Generator system
+  private currentGenerator: ITargetGenerator;
+  private generatorTargets = new Map<ITargetGenerator, Set<Target>>();
+  
+  constructor(scene: THREE.Scene, generator?: ITargetGenerator) {
     this.scene = scene;
+    this.currentGenerator = generator || new RandomStaticGenerator();
     this.initializePool();
+    console.log(`[TargetManager] Using generator: ${this.currentGenerator.getName()}`);
   }
   
   /**
@@ -50,90 +61,96 @@ export default class TargetManager {
   }
   
   /**
-   * Generate targets in a spawning area
+   * Set the current generator strategy
+   */
+  public setGenerator(generator: ITargetGenerator) {
+    this.currentGenerator = generator;
+    console.log(`[TargetManager] Switched to generator: ${generator.getName()}`);
+  }
+  
+  /**
+   * Get the current generator
+   */
+  public getGenerator(): ITargetGenerator {
+    return this.currentGenerator;
+  }
+  
+  /**
+   * Generate targets using the current generator strategy
    * @param count - Number of targets to spawn
    * @param roomX - Room center X coordinate
    * @param roomZ - Room center Z coordinate
    * @param scale - Target scale (0.2 for small, 0.4 for normal)
+   * @param generator - Optional generator to use (overrides current)
+   * @param playerYaw - Player's yaw rotation in radians (targets spawn in front of player)
    * @returns Array of successfully spawned targets
    */
   public generateTargets(
     count: number,
     roomX: number,
     roomZ: number,
-    scale: number = 0.4
+    scale: number = 0.4,
+    generator?: ITargetGenerator,
+    playerYaw?: number
   ): Target[] {
     const startStats = this.getStats();
-    const spawned: Target[] = [];
+    const useGenerator = generator || this.currentGenerator;
     
-    // Define spawn area (in front of player)
-    const spawnArea = {
-      xMin: roomX + 4,
-      xMax: roomX + 8,
-      yMin: -1.5,
-      yMax: 1.5,
-      zMin: roomZ - 3,
-      zMax: roomZ + 3
+    const config: TargetGenerationConfig = {
+      count,
+      roomX,
+      roomZ,
+      scale,
+      playerYaw,
     };
     
-    // First target is always shootable
-    let firstTarget: Target | null = null;
+    // Use generator to create targets
+    const result = useGenerator.generate(
+      config,
+      () => this.acquireTarget(),
+      (target, scale) => this.checkCollision(target, scale)
+    );
     
-    for (let i = 0; i < count; i++) {
-      const target = this.spawnSingleTarget(spawnArea, scale, i === 0);
-      
-      if (target) {
-        spawned.push(target);
-        if (i === 0) {
-          firstTarget = target;
-        }
-      } else {
-        console.warn(`[TargetManager] Failed to spawn target ${i + 1}/${count}`);
-      }
+    // Activate all generated targets
+    for (const target of result.targets) {
+      this.activateTarget(target, scale, false);
     }
     
-    const endStats = this.getStats();
-    console.log(`[TargetManager] Generated ${spawned.length}/${count} targets | Pool: ${startStats.total}→${endStats.total} | Active: ${endStats.active} | Inactive: ${endStats.inactive}`);
+    // Make first target shootable
+    if (result.targets.length > 0) {
+      result.targets[0].makeShootable();
+    }
     
-    return spawned;
+    // Track which generator owns these targets
+    if (!this.generatorTargets.has(useGenerator)) {
+      this.generatorTargets.set(useGenerator, new Set());
+    }
+    const generatorSet = this.generatorTargets.get(useGenerator)!;
+    result.targets.forEach(t => generatorSet.add(t));
+    
+    const endStats = this.getStats();
+    console.log(`[TargetManager] ${result.message} | Pool: ${startStats.total}→${endStats.total} | Active: ${endStats.active}`);
+    
+    return result.targets;
   }
   
   /**
-   * Spawn a single target in the given area
+   * Update targets (for moving targets)
+   * Should be called every frame
    */
-  private spawnSingleTarget(
-    area: { xMin: number; xMax: number; yMin: number; yMax: number; zMin: number; zMax: number },
-    scale: number,
-    shootable: boolean
-  ): Target | null {
-    const maxAttempts = 50;
-    let target: Target | null = null;
-    
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      // Get or create target from pool
-      target = this.acquireTarget();
-      if (!target) return null;
-      
-      // Generate random position
-      const x = area.xMin + Math.random() * (area.xMax - area.xMin);
-      const y = area.yMin + Math.random() * (area.yMax - area.yMin);
-      const z = area.zMin + Math.random() * (area.zMax - area.zMin);
-      
-      target.position.set(x, y, z);
-      
-      // Check collision with active targets
-      if (!this.checkCollision(target, scale)) {
-        // Success - activate target
-        this.activateTarget(target, scale, shootable);
-        return target;
+  public update(deltaTime: number) {
+    // Update each generator's targets if it supports movement
+    for (const [generator, targets] of this.generatorTargets) {
+      if (generator.isMoving() && generator.update) {
+        const targetArray = Array.from(targets).filter(t => this.activeTargets.has(t));
+        generator.update(deltaTime, targetArray);
+        
+        // Update spatial grid for moved targets
+        for (const target of targetArray) {
+          this.updateSpatialGrid(target);
+        }
       }
-      
-      // Collision detected - return to inactive WITHOUT deactivation
-      // (target was never activated, so just put it back)
-      this.inactiveTargets.add(target);
     }
-    
-    return null;
   }
   
   /**
@@ -216,6 +233,17 @@ export default class TargetManager {
     target.visible = false;
     target.shootable = false;
     target.animating = false;
+    
+    // Remove from generator tracking
+    for (const [generator, targets] of this.generatorTargets) {
+      if (targets.has(target)) {
+        targets.delete(target);
+        // Clean up generator-specific data if needed
+        if ('cleanupTarget' in generator && typeof generator.cleanupTarget === 'function') {
+          generator.cleanupTarget(target);
+        }
+      }
+    }
     
     // Move to inactive set
     this.activeTargets.delete(target);
@@ -339,6 +367,16 @@ export default class TargetManager {
         this.spatialGrid.delete(key);
       }
     }
+  }
+  
+  /**
+   * Update spatial grid position for a moved target
+   */
+  private updateSpatialGrid(target: Target) {
+    // Remove from old cell
+    this.removeFromSpatialGrid(target);
+    // Add to new cell
+    this.addToSpatialGrid(target);
   }
   
   /**

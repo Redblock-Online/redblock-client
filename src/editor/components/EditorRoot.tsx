@@ -26,6 +26,7 @@ import {
 import type { SerializedScenario } from "../scenarioStore";
 import type { Alert } from "../core/AlertManager";
 import { AlertIcon } from "./AlertIcon";
+import { CategoryFilter, type ComponentCategory } from "./CategoryFilter";
 
 type VectorState = { x: number; y: number; z: number };
 type ClipboardPayload = {
@@ -34,8 +35,10 @@ type ClipboardPayload = {
 };
 
 const builtinItems: EditorItem[] = [
-  { id: "block", label: "Block" },
-  { id: "spawn", label: "Spawn Point" },
+  { id: "block", label: "Block", category: "primitive" },
+  { id: "randomTargetGen", label: "Random Target Generator", category: "target" },
+  { id: "movingTargetGen", label: "Moving Target Generator", category: "target" },
+  { id: "spawn", label: "Spawn Point", category: "gameLogic" },
 ];
 
 export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
@@ -49,6 +52,25 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const [positionState, setPositionState] = useState<VectorState>({ x: 0, y: 0, z: 0 });
   const [scaleState, setScaleState] = useState<VectorState>({ x: 1, y: 1, z: 1 });
   const [rotationState, setRotationState] = useState<VectorState>({ x: 0, y: 0, z: 0 });
+  
+  // Generator selection mode for event linking
+  const [generatorSelectionMode, setGeneratorSelectionMode] = useState<{
+    active: boolean;
+    eventId: string;
+    sourceGeneratorId: string;
+  } | null>(null);
+  const generatorSelectionModeRef = useRef<{
+    active: boolean;
+    eventId: string;
+    sourceGeneratorId: string;
+  } | null>(null);
+  
+  // Keep ref in sync with state and notify editor
+  useEffect(() => {
+    generatorSelectionModeRef.current = generatorSelectionMode;
+    // Notify editor to prevent dragging during generator selection
+    editor.setSelectingGeneratorTarget(!!generatorSelectionMode);
+  }, [generatorSelectionMode, editor]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [showSidebar, setShowSidebar] = useState(true);
   const [showInspector, setShowInspector] = useState(true);
@@ -73,6 +95,9 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const [isGameActive, setIsGameActive] = useState(false);
   const [gameScenario, setGameScenario] = useState<SerializedScenario | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [selectedCategories, setSelectedCategories] = useState<Set<ComponentCategory>>(
+    new Set(["primitive", "target", "gameLogic", "myComponents"])
+  );
 
   const markUnsaved = useCallback(() => {
     if (!unsavedChangesRef.current) {
@@ -509,9 +534,30 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const items: EditorItem[] = useMemo(() => {
     return [
       ...builtinItems,
-      ...components.map((c) => ({ id: `component:${c.id}`, label: c.label })),
+      ...components.map((c) => ({ 
+        id: `component:${c.id}`, 
+        label: c.label,
+        category: c.category ?? "myComponents" // User components default to "myComponents"
+      })),
     ];
   }, [components]);
+
+  // Filtered items based on selected categories
+  const filteredItems: EditorItem[] = useMemo(() => {
+    return items.filter((item) => selectedCategories.has(item.category));
+  }, [items, selectedCategories]);
+
+  const handleToggleCategory = useCallback((category: ComponentCategory) => {
+    setSelectedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  }, []);
 
   // Whether a component edit session is active. Must be declared before effects that depend on it.
   const editingActive = !!editor.getEditingComponentId();
@@ -563,6 +609,83 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
 
   useEffect(() => {
     return editor.addSelectionListener((block) => {
+      const currentMode = generatorSelectionModeRef.current;
+      console.log('[EditorRoot] Selection listener triggered, block:', Array.isArray(block) ? 'multiple' : block?.id);
+      console.log('[EditorRoot] Generator selection mode active:', !!currentMode);
+      
+      // Handle generator selection mode
+      if (currentMode) {
+        console.log('[EditorRoot] In generator selection mode, source:', currentMode.sourceGeneratorId);
+        // In selection mode, ignore all selection changes except valid generator clicks
+        if (block && !Array.isArray(block)) {
+          const isGenerator = block.mesh.userData?.isGenerator === true;
+          console.log('[EditorRoot] Clicked block is generator:', isGenerator);
+          console.log('[EditorRoot] Clicked block ID:', block.id);
+          if (isGenerator && block.id !== currentMode.sourceGeneratorId) {
+            console.log('[EditorRoot] Valid generator selected! Linking...');
+            // User selected a valid generator - link it to the event
+            const sourceBlock = editor.getBlock(currentMode.sourceGeneratorId);
+            if (sourceBlock && sourceBlock.generatorConfig) {
+              const updatedConfig = { ...sourceBlock.generatorConfig };
+              if (updatedConfig.events) {
+                updatedConfig.events = {
+                  ...updatedConfig.events,
+                  onComplete: updatedConfig.events.onComplete.map(event => 
+                    event.id === currentMode.eventId && event.type === "startGenerator"
+                      ? { ...event, targetGeneratorId: block.id }
+                      : event
+                  ),
+                };
+                editor.updateGeneratorConfig(currentMode.sourceGeneratorId, updatedConfig);
+                markUnsaved();
+                console.log('[EditorRoot] Config updated, re-selecting source block');
+              }
+            }
+            
+            // Clear alert
+            editor.alerts.clearAll();
+            
+            // Re-select the source block to show updated config
+            // Use setTimeout to let the current selection event finish
+            setTimeout(() => {
+              const freshSourceBlock = editor.getBlock(currentMode.sourceGeneratorId);
+              if (freshSourceBlock) {
+                console.log('[EditorRoot] Re-selecting source block:', freshSourceBlock.id);
+                editor.setSelectionByIds([currentMode.sourceGeneratorId]);
+              }
+              // Exit selection mode AFTER re-selecting to prevent accidental deletion
+              setGeneratorSelectionMode(null);
+            }, 0);
+          } else if (!isGenerator) {
+            // User selected a non-generator - show warning but don't change selection
+            editor.alerts.clearAll();
+            editor.alerts.publish(
+              `gen-select-error-${Date.now()}`,
+              "warning",
+              "Please select a Target Generator block"
+            );
+            setTimeout(() => {
+              editor.alerts.clearAll();
+            }, 3000);
+          } else if (block.id === currentMode.sourceGeneratorId) {
+            // User clicked the same generator - cancel selection mode
+            setGeneratorSelectionMode(null);
+            editor.alerts.clearAll();
+            editor.alerts.publish(
+              `gen-select-cancel-${Date.now()}`,
+              "info",
+              "Selection cancelled"
+            );
+            setTimeout(() => {
+              editor.alerts.clearAll();
+            }, 2000);
+          }
+        }
+        // IMPORTANT: Always return early when in selection mode to prevent any inspector updates
+        return;
+      }
+      
+      // Normal selection behavior (not in generator selection mode)
       setSelection(block);
       const t = editor.getSelectionTransform();
       // When entering component edit mode, selection becomes multiple and getSelectionTransform() returns null.
@@ -573,7 +696,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       // Check if there's a spawn point
       setHasSpawnPoint(editor.hasSpawnPoint());
     });
-  }, [editor, applyTransformToState, editingActive]);
+  }, [editor, applyTransformToState, editingActive, markUnsaved]);
 
   // NOTE: Event handling (pointer, keyboard) is now done by InputRouter in EditorApp
   // We only need to handle drag/drop from the palette
@@ -603,6 +726,10 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       let placed: EditorBlock | null = null;
       if (data === "block") {
         placed = editor.placeBlockAt(event.clientX, event.clientY);
+      } else if (data === "randomTargetGen") {
+        placed = editor.placeRandomTargetGeneratorAt(event.clientX, event.clientY);
+      } else if (data === "movingTargetGen") {
+        placed = editor.placeMovingTargetGeneratorAt(event.clientX, event.clientY);
       } else if (data === "spawn") {
         placed = editor.placeSpawnAt(event.clientX, event.clientY);
       } else if (data.startsWith("component:")) {
@@ -680,10 +807,21 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     const created = editor.instantiateSerializedNodes(payload.nodes, payload.componentIds, offset);
     if (created.length > 0) {
       editor.setSelectionByIds(created.map((block) => block.id));
+      // Add each pasted block to history so undo works
+      // Serialize the created blocks to preserve all their data (including generator config)
+      const createdIds = created.map((block) => block.id);
+      const serializedPayload = editor.serializeBlocksByIds(createdIds);
+      serializedPayload.nodes.forEach((node, index) => {
+        const block = created[index];
+        const transform = editor.getTransformsForIds([block.id])[0]?.transform;
+        if (transform) {
+          pushHistory({ type: "add", id: block.id, transform, node });
+        }
+      });
       panelAutoSavePendingRef.current = false;
       autoSaveScenario();
     }
-  }, [autoSaveScenario, editor]);
+  }, [autoSaveScenario, editor, pushHistory]);
 
   const renameSelection = useCallback((id: string, newName: string) => {
     if (!editor) return;
@@ -788,15 +926,30 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         return;
       }
 
-      // Delete
+      // Delete (but not when in generator selection mode)
       if ((event.key === "Delete" || event.key === "Backspace") && (selection || editor.getSelectionArray().length > 0)) {
+        // Don't delete when in generator selection mode
+        if (generatorSelectionModeRef.current) {
+          return;
+        }
         event.preventDefault();
         deleteSelection();
         return;
       }
 
-      // Escape to clear selection
+      // Escape to clear selection or cancel generator selection mode
       if (event.key === "Escape" && !transformMode) {
+        // If in generator selection mode, cancel it
+        if (generatorSelectionModeRef.current) {
+          setGeneratorSelectionMode(null);
+          editor.alerts.clearAll();
+          // Re-select the source generator
+          const sourceBlock = editor.getBlock(generatorSelectionModeRef.current.sourceGeneratorId);
+          if (sourceBlock) {
+            editor.setSelectionByIds([generatorSelectionModeRef.current.sourceGeneratorId]);
+          }
+          return;
+        }
         setActiveItem(null);
         editor.clearSelection();
         return;
@@ -1099,22 +1252,30 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         {/* Editor Content */}
         <div className="relative flex flex-1 gap-2 overflow-hidden px-2 pb-2 pt-2">
               {showSidebar && (
-                <aside className="relative z-10 flex w-64 flex-col gap-2 rounded border border-[#1a1a1a] bg-[#383838] p-3 pointer-events-auto overflow-auto">
-          <div className="text-[11px] text-[#999999] mb-1">Components</div>
-          <ItemMenu
-            items={items}
-            activeItem={activeItem}
-            onItemSelect={setActiveItem}
-            onItemDragStart={(itemId) => {
-              const item = items.find((entry) => entry.id === itemId) ?? null;
-              setActiveItem(item);
-            }}
-            disabledItems={hasSpawnPoint ? ["spawn"] : []}
-          />
+                <aside className="relative z-10 flex w-64 flex-col rounded border border-[#1a1a1a] bg-[#383838] pointer-events-auto overflow-auto">
+          <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2 border-b border-[#1a1a1a]">
+            <div className="text-[11px] text-[#999999] font-medium">Components</div>
+            <CategoryFilter
+              selectedCategories={selectedCategories}
+              onToggleCategory={handleToggleCategory}
+            />
+          </div>
+          <div className="flex-1 overflow-auto px-3 pb-3 pt-2">
+            <ItemMenu
+              items={filteredItems}
+              activeItem={activeItem}
+              onItemSelect={setActiveItem}
+              onItemDragStart={(itemId) => {
+                const item = filteredItems.find((entry) => entry.id === itemId) ?? null;
+                setActiveItem(item);
+              }}
+              disabledItems={hasSpawnPoint ? ["spawn"] : []}
+            />
+          </div>
           {activeItem && activeItem.id.startsWith("component:") ? (
-            <div className="mt-4 flex flex-col gap-2">
+            <div className="border-t border-[#1a1a1a] px-3 py-2">
               <button
-                className="h-7 rounded border border-[#1a1a1a] bg-[#ef4444] text-[11px] text-white transition hover:bg-[#dc2626]"
+                className="w-full h-7 rounded border border-[#1a1a1a] bg-[#ef4444] text-[11px] text-white transition hover:bg-[#dc2626]"
                 onClick={() => {
                   const id = activeItem.id.slice("component:".length);
                   const def = components.find((entry) => entry.id === id);
@@ -1228,6 +1389,42 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             componentEditing={isEditingComponent}
             onDeleteSelection={deleteSelection}
             onRenameSelection={renameSelection}
+            onGeneratorConfigChange={(blockId, config) => {
+              editor.updateGeneratorConfig(blockId, config);
+              markUnsaved();
+              // Force re-render by creating new selection object reference
+              const currentSelection = editor.getSelection();
+              if (currentSelection) {
+                // Create a shallow copy to force React to detect the change
+                setSelection({ ...currentSelection });
+              }
+            }}
+            onRequestGeneratorSelection={(eventId) => {
+              console.log('[EditorRoot] onRequestGeneratorSelection called with eventId:', eventId);
+              console.log('[EditorRoot] Current selection:', selection);
+              // Enter generator selection mode
+              if (selection && !Array.isArray(selection)) {
+                console.log('[EditorRoot] Entering generator selection mode');
+                setGeneratorSelectionMode({
+                  active: true,
+                  eventId,
+                  sourceGeneratorId: selection.id,
+                });
+                // Show visual feedback
+                editor.alerts.publish(
+                  `gen-select-${Date.now()}`,
+                  "info",
+                  "Click on a Target Generator to link it"
+                );
+                console.log('[EditorRoot] Alert published');
+                // Auto-clear after 5 seconds
+                setTimeout(() => {
+                  editor.alerts.clearAll();
+                }, 5000);
+              } else {
+                console.warn('[EditorRoot] Cannot enter selection mode - no valid selection');
+              }
+            }}
             setTyping={setTyping}
           />
         </aside>

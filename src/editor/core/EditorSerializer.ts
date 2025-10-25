@@ -40,6 +40,13 @@ export class EditorSerializer {
     }
 
     if (block.mesh instanceof Group) {
+      // Check if this group is actually a generator (shouldn't be, but check anyway)
+      const isGenerator = block.mesh.userData.isGenerator === true;
+      
+      if (isGenerator) {
+        console.warn("[EditorSerializer] Generator is a Group, should be Mesh!", block.id);
+      }
+      
       const children: SerializedNode[] = [];
       for (const child of block.mesh.children) {
         const serializedChild = this.serializeObject(child, usedComponents, "local");
@@ -56,12 +63,26 @@ export class EditorSerializer {
     }
 
     if (block.mesh instanceof Mesh) {
+      const isSpawnPoint = block.mesh.userData.isSpawnPoint === true;
+      const isGenerator = block.mesh.userData.isGenerator === true;
+      
+      console.log(`[EditorSerializer] Serializing Mesh block ${block.id}:`, {
+        isSpawnPoint,
+        isGenerator,
+        hasGeneratorConfig: !!block.generatorConfig,
+        generatorConfig: block.generatorConfig,
+        userData: block.mesh.userData
+      });
+      
       const node = {
         type: "block" as const,
         transform: this.toSerializedTransform(block.mesh, "world"),
         ...(block.name && { name: block.name }),
+        ...(isSpawnPoint && { isSpawnPoint: true }),
+        ...(isGenerator && { isGenerator: true }),
+        ...(isGenerator && block.generatorConfig && { generatorConfig: block.generatorConfig }),
       };
-      console.log("[EditorSerializer] Block node:", node);
+      console.log("[EditorSerializer] Block node result:", node);
       return node;
     }
 
@@ -98,9 +119,15 @@ export class EditorSerializer {
     }
 
     if (object instanceof Mesh) {
+      const isSpawnPoint = object.userData.isSpawnPoint === true;
+      const isGenerator = object.userData.isGenerator === true;
+      const generatorConfig = object.userData.generatorConfig;
       return {
         type: "block",
         transform: this.toSerializedTransform(object, space),
+        ...(isSpawnPoint && { isSpawnPoint: true }),
+        ...(isGenerator && { isGenerator: true }),
+        ...(isGenerator && generatorConfig && { generatorConfig }),
       };
     }
 

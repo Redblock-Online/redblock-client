@@ -3,6 +3,8 @@ import { useState } from "react";
 import type { EditorSelection } from "../types";
 import { Group } from "three";
 import { AxisInput } from "./AxisInput";
+import { GeneratorConfigPanel } from "./GeneratorConfigPanel";
+import type { GeneratorConfig } from "../types/generatorConfig";
 
 type VectorState = { x: number; y: number; z: number };
 
@@ -21,6 +23,8 @@ type PropertiesPanelProps = {
   componentEditing?: boolean;
   onDeleteSelection?: () => void;
   onRenameSelection?: (id: string, newName: string) => void;
+  onGeneratorConfigChange?: (blockId: string, config: GeneratorConfig) => void;
+  onRequestGeneratorSelection?: (eventId: string) => void;
   setTyping?: (typing: boolean) => void;
 };
 
@@ -39,6 +43,8 @@ export function PropertiesPanel({
   componentEditing,
   onDeleteSelection,
   onRenameSelection,
+  onGeneratorConfigChange,
+  onRequestGeneratorSelection,
   setTyping,
 }: PropertiesPanelProps): ReactElement {
   const [isEditingName, setIsEditingName] = useState(false);
@@ -101,9 +107,11 @@ export function PropertiesPanel({
   }
 
   // Single selection UI
-  // Determine if selection is a component or group
+  // Determine if selection is a component, group, or generator
   const isComponent = selection.mesh instanceof Group && selection.mesh.userData?.componentId;
   const isGroup = selection.mesh instanceof Group && !selection.mesh.userData?.componentId;
+  const isGenerator = selection.mesh.userData?.isGenerator === true;
+  const generatorConfig = selection.generatorConfig;
 
   return (
     <div className="flex h-full flex-col gap-3 text-[11px] text-[#cccccc]">
@@ -281,6 +289,17 @@ export function PropertiesPanel({
           ))}
         </div>
       </section>
+
+      {/* Generator Configuration Panel */}
+      {isGenerator && generatorConfig && onGeneratorConfigChange && (
+        <GeneratorConfigPanel
+          key={`${selection.id}-${generatorConfig.targetCount}-${generatorConfig.targetScale}`}
+          config={generatorConfig}
+          onChange={(newConfig) => onGeneratorConfigChange(selection.id, newConfig)}
+          onRequestGeneratorSelection={onRequestGeneratorSelection}
+          setTyping={setTyping}
+        />
+      )}
     </div>
   );
 }
