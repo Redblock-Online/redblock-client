@@ -54,6 +54,8 @@ type GraphicsSettings = {
   vsync: boolean;
   targetFPS: number;
   pixelRatio: number;
+  fxaa: boolean;
+  smaa: boolean;
 };
 
 const DEFAULT_GAME_SETTINGS: GameSettings = {
@@ -106,6 +108,8 @@ const DEFAULT_GRAPHICS_SETTINGS: GraphicsSettings = {
   vsync: true,
   targetFPS: detectMonitorRefreshRate(), // Auto-detect monitor refresh rate
   pixelRatio: 1.0,
+  fxaa: true,
+  smaa: true,
 };
 
 const FPS_OPTIONS = [
@@ -142,11 +146,13 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   const [controlsHeight, setControlsHeight] = useState(0);
   const [gameHeight, setGameHeight] = useState(0);
   const [audioHeight, setAudioHeight] = useState(0);
+  const [videoHeight, setVideoHeight] = useState(0);
   const [otherTabsHeight, setOtherTabsHeight] = useState(198);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const controlsContentRef = useRef<HTMLDivElement>(null);
   const gameContentRef = useRef<HTMLDivElement>(null);
   const audioContentRef = useRef<HTMLDivElement>(null);
+  const videoContentRef = useRef<HTMLDivElement>(null);
   const otherTabsContentRef = useRef<HTMLDivElement>(null);
   const resetConfirmRef = useRef<HTMLDivElement>(null);
   // Hover cooldown to avoid spamming hover sounds (ms)
@@ -356,7 +362,11 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
         const height = audioContentRef.current.scrollHeight;
         setAudioHeight(height);
         console.log("Audio height set to:", height);
-      } else if (activeTab !== "controls" && activeTab !== "game" && activeTab !== "audio" && otherTabsContentRef.current) {
+      } else if (activeTab === "video" && videoContentRef.current) {
+        const height = videoContentRef.current.scrollHeight;
+        setVideoHeight(height);
+        console.log("Video height set to:", height);
+      } else if (activeTab !== "controls" && activeTab !== "game" && activeTab !== "audio" && activeTab !== "video" && otherTabsContentRef.current) {
         const height = otherTabsContentRef.current.scrollHeight;
         setOtherTabsHeight(height);
         console.log("Other tabs height set to:", height);
@@ -400,6 +410,18 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       return () => clearTimeout(timer);
     }
   }, [audioSettings, activeTab, visible]);
+
+  // Recalculate video height when graphics settings change
+  useEffect(() => {
+    if (activeTab === "video" && videoContentRef.current && visible) {
+      const timer = setTimeout(() => {
+        const height = videoContentRef.current?.scrollHeight || 0;
+        setVideoHeight(height);
+        console.log("Video height recalculated:", height);
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [graphicsSettings, activeTab, visible]);
 
   // Scroll reset confirmation into view when it appears
   useEffect(() => {
@@ -571,6 +593,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   const controlsDisplayHeight = computeDisplayHeight(controlsHeight, TAB_PANEL_MAX_HEIGHT);
   const gameDisplayHeight = computeDisplayHeight(gameHeight, TAB_PANEL_MAX_HEIGHT);
   const audioDisplayHeight = computeDisplayHeight(audioHeight, 300);
+  const videoDisplayHeight = computeDisplayHeight(videoHeight, 300);
   const otherDisplayHeight = computeDisplayHeight(otherTabsHeight, 198);
 
   const activeRawHeight =
@@ -580,6 +603,8 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       ? gameHeight
       : activeTab === "audio"
       ? audioHeight
+      : activeTab === "video"
+      ? videoHeight
       : otherTabsHeight;
 
   const activeScrollHeight =
@@ -591,6 +616,8 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       ? controlsDisplayHeight
       : activeTab === "game"
       ? gameDisplayHeight
+      : activeTab === "video"
+      ? videoDisplayHeight
       : otherDisplayHeight;
 
   const containerHeight =
@@ -600,6 +627,8 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       ? `${gameDisplayHeight}px`
       : activeTab === "audio"
       ? `${audioDisplayHeight}px`
+      : activeTab === "video"
+      ? `${videoDisplayHeight}px`
       : `${otherDisplayHeight}px`;
 
   const containerOverflowY = activeScrollHeight > TAB_PANEL_MAX_HEIGHT ? "auto" : "hidden";
@@ -960,6 +989,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
 
           {/* Video/Graphics tab content */}
           <div
+            ref={videoContentRef}
             className={`transition-opacity duration-300 ${
               activeTab === "video" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
             }`}
@@ -989,6 +1019,24 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 onChange={(value) => updateGraphicsSetting("pixelRatio", value / 100)}
               />
               
+              <div className="border-t-[3px] border-black/20 my-2" />
+              
+              <div className="px-4 py-2 border-[3px] border-black/20 bg-white/30">
+                <p className="font-mono text-[10px] uppercase opacity-70 font-bold mb-1">Antialiasing</p>
+              </div>
+              
+              <ToggleInput
+                label="FXAA (Fast)"
+                value={graphicsSettings.fxaa}
+                onChange={(value) => updateGraphicsSetting("fxaa", value)}
+              />
+              
+              <ToggleInput
+                label="SMAA (High Quality)"
+                value={graphicsSettings.smaa}
+                onChange={(value) => updateGraphicsSetting("smaa", value)}
+              />
+              
               <div className="mt-3 border-[3px] border-black bg-white/50 p-3">
                 <p className="font-mono text-[10px] uppercase opacity-70 leading-relaxed">
                   <strong>FPS Limiter</strong> reduces GPU usage and prevents screen tearing.
@@ -996,6 +1044,10 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                   <strong>Auto-detected:</strong> {detectMonitorRefreshRate()}Hz monitor refresh rate.
                   <br />
                   <strong>Render Scale</strong> affects visual quality and performance.
+                  <br />
+                  <strong>FXAA</strong> is fast but lower quality. <strong>SMAA</strong> is slower but much better quality.
+                  <br />
+                  Native MSAA is always enabled for best results.
                 </p>
               </div>
             </div>

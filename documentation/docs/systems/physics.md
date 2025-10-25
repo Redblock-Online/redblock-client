@@ -454,6 +454,5 @@ blocks.forEach(block => {
 
 ## Next Steps
 
-- [Controls System](/docs/systems/controls) - How controls use physics
 - [App Class](/docs/core-concepts/app) - Physics integration in game loop
 - [Performance](/docs/performance/optimization) - Physics optimization tips

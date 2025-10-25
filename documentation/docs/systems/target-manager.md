@@ -493,6 +493,5 @@ class App {
 
 ## Next Steps
 
-- [Target Class](/docs/api/target) - Target object API
 - [Performance](/docs/performance/optimization) - More optimization techniques
 - [App Class](/docs/core-concepts/app) - How App uses TargetManager

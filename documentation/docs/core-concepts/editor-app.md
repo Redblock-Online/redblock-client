@@ -493,4 +493,3 @@ block.mesh.userData.generatorConfig = config;
 
 - [Component System](/docs/editor/components) - Creating reusable prefabs
 - [Generator System](/docs/editor/generators) - Target spawn configuration
-- [Scenario Format](/docs/editor/scenarios) - Import/export details
