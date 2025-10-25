@@ -481,6 +481,11 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             label: showInspector ? "Hide Inspector (I)" : "Show Inspector (I)", 
             action: () => setShowInspector(prev => !prev) 
           },
+          ...(showControls ? [] : [{ 
+            id: "view-show-controls", 
+            label: "Controls", 
+            action: () => setShowControls(true) 
+          }]),
         ],
       },
       {
@@ -489,7 +494,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         items: [{ id: "components-refresh", label: "Refresh list", action: handleRefreshComponentsMenu }],
       },
     ],
-    [handleLoadScenario, handleNewScenario, handleRefreshComponentsMenu, handleSaveCurrentScenario, handleSaveScenarioAs, hasUnsavedChanges, showSidebar, showInspector],
+    [handleLoadScenario, handleNewScenario, handleRefreshComponentsMenu, handleSaveCurrentScenario, handleSaveScenarioAs, hasUnsavedChanges, showSidebar, showInspector, showControls],
   );
 
   const activeMenu = useMemo(() => {
@@ -1173,30 +1178,6 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
               </div>
             )}
             
-            {/* Show controls button when controls are hidden */}
-            {!showControls && (
-              <button
-                onClick={() => setShowControls(true)}
-                className="absolute left-4 top-4 w-8 h-8 flex items-center justify-center border border-[#1a1a1a] bg-[#323232] hover:bg-[#1a1a1a] hover:text-white transition-all duration-200 z-10 rounded pointer-events-auto"
-                aria-label="Mostrar controles"
-              >
-                <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  width="20" 
-                  height="20" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                  strokeWidth="2"
-                  className="text-[#cccccc]"
-                >
-                  <path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0-18 0m9-3h.01"/>
-                  <path d="M11 12h1v4h1"/>
-                </svg>
-              </button>
-            )}
             
             {activeItem ? (
               <div className="absolute bottom-4 left-1/2 w-max -translate-x-1/2 rounded border border-[#1a1a1a] bg-[#323232]/95 px-4 py-2 text-[13px] text-[#cccccc]">
