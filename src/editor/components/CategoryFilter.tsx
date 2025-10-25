@@ -10,7 +10,7 @@ export type CategoryOption = {
 };
 
 export const CATEGORY_OPTIONS: CategoryOption[] = [
-  { id: "primitive", label: "Primitivo", color: "#4772b3" },
+  { id: "primitive", label: "Primitive", color: "#4772b3" },
   { id: "target", label: "Target", color: "#ff4dff" },
   { id: "gameLogic", label: "Game Logic", color: "#ffa500" },
   { id: "myComponents", label: "My Components", color: "#9b5cff" },

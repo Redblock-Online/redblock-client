@@ -36,6 +36,9 @@ function processBlockRecursively(
     const isEnabled = config.enabled !== false; // Default to true if undefined
     const isVisible = config.visible !== false; // Default to true if undefined
     
+    console.log(`[Bootstrap] Generator enabled check: config.enabled=${config.enabled}, isEnabled=${isEnabled}`);
+    console.log(`[Bootstrap] Generator visible check: config.visible=${config.visible}, isVisible=${isVisible}`);
+    
     // If not enabled, skip generation but store metadata for later activation
     if (!isEnabled) {
       console.log(`[Bootstrap] Generator is disabled, skipping target generation`);

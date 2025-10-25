@@ -36,7 +36,10 @@ export function GeneratorConfigPanel({ config, onChange, onRequestGeneratorSelec
           <input
             type="checkbox"
             checked={config.enabled}
-            onChange={(e) => onChange({ ...config, enabled: e.target.checked })}
+            onChange={(e) => {
+              console.log(`[GeneratorConfigPanel] Enabled checkbox changed to: ${e.target.checked}`);
+              onChange({ ...config, enabled: e.target.checked });
+            }}
             className="w-4 h-4 rounded border-[#3a3a3a] bg-[#2b2b2b] text-[#4772b3] focus:ring-[#4772b3] focus:ring-offset-0 cursor-pointer"
           />
           <span className="text-[11px] text-[#cccccc]">Enabled</span>

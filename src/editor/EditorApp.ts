@@ -516,11 +516,12 @@ export default class EditorApp {
   // }
 
   public updateGeneratorConfig(blockId: string, config: GeneratorConfig): void {
+    console.log(`[EditorApp] updateGeneratorConfig called for ${blockId}:`, config);
     const block = this.blocks.getBlock(blockId);
     if (block && block.mesh.userData.isGenerator) {
       block.generatorConfig = config;
       block.mesh.userData.generatorConfig = config;
-      // Config updated successfully
+      console.log(`[EditorApp] Generator config updated successfully. enabled=${config.enabled}, visible=${config.visible}`);
     } else {
       console.warn(`[EditorApp] Cannot update generator config - block not found or not a generator:`, blockId);
     }
