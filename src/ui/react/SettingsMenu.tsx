@@ -50,6 +50,12 @@ type GameSettings = {
   showHints: boolean;
 };
 
+type GraphicsSettings = {
+  vsync: boolean;
+  targetFPS: number;
+  pixelRatio: number;
+};
+
 const DEFAULT_GAME_SETTINGS: GameSettings = {
   fov: 90,
   showFps: false,
@@ -82,6 +88,35 @@ const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   uiVolume: 0.8,
   musicCategory: "calm",
 };
+
+// Function to detect monitor refresh rate (same logic as Loop.ts)
+const detectMonitorRefreshRate = (): number => {
+  if (typeof window !== 'undefined' && window.screen) {
+    // @ts-ignore - screen.refreshRate is not in all type definitions
+    const screenRefreshRate = window.screen.refreshRate;
+    if (screenRefreshRate && screenRefreshRate > 0) {
+      return Math.round(screenRefreshRate);
+    }
+  }
+  // Fallback to 60Hz if detection fails
+  return 60;
+};
+
+const DEFAULT_GRAPHICS_SETTINGS: GraphicsSettings = {
+  vsync: true,
+  targetFPS: detectMonitorRefreshRate(), // Auto-detect monitor refresh rate
+  pixelRatio: 1.0,
+};
+
+const FPS_OPTIONS = [
+  { value: 30, label: "30 FPS" },
+  { value: 60, label: "60 FPS" },
+  { value: 75, label: "75 FPS" },
+  { value: 120, label: "120 FPS" },
+  { value: 144, label: "144 FPS" },
+  { value: 240, label: "240 FPS" },
+  { value: 0, label: "Unlimited" },
+];
 
 const TAB_LABELS: Record<Tab, string> = {
   game: "GAME",
@@ -145,6 +180,18 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       }
     }
     return DEFAULT_GAME_SETTINGS;
+  });
+
+  const [graphicsSettings, setGraphicsSettings] = useState<GraphicsSettings>(() => {
+    const saved = localStorage.getItem("graphicsSettings");
+    if (saved) {
+      try {
+        return { ...DEFAULT_GRAPHICS_SETTINGS, ...JSON.parse(saved) };
+      } catch {
+        return DEFAULT_GRAPHICS_SETTINGS;
+      }
+    }
+    return DEFAULT_GRAPHICS_SETTINGS;
   });
 
   const [audioSettings, setAudioSettings] = useState<AudioSettings>(() => {
@@ -430,6 +477,12 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   }, [gameSettings]);
 
   useEffect(() => {
+    localStorage.setItem("graphicsSettings", JSON.stringify(graphicsSettings));
+    // Dispatch custom event so Loop can react
+    window.dispatchEvent(new CustomEvent("graphicsSettingsChanged", { detail: graphicsSettings }));
+  }, [graphicsSettings]);
+
+  useEffect(() => {
     // Update AudioManager when audio settings change
     const audio = AudioManager.getInstance();
     audio.setMasterVolume(audioSettings.masterVolume);
@@ -479,6 +532,10 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
     setAudioSettings((prev) => ({ ...prev, [key]: value }));
   };
 
+  const updateGraphicsSetting = <K extends keyof GraphicsSettings>(key: K, value: GraphicsSettings[K]) => {
+    setGraphicsSettings((prev) => ({ ...prev, [key]: value }));
+  };
+
   const setMusicCategory = (category: MusicCategory) => {
     setAudioSettings((prev) => (prev.musicCategory === category ? prev : { ...prev, musicCategory: category }));
   };
@@ -501,7 +558,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
 
   if (!visible) return null;
 
-  const tabs: Tab[] = ["game", "controls", "audio"];
+  const tabs: Tab[] = ["game", "controls", "audio", "video"];
   const scaleValue = hudScale / 100;
 
   const computeDisplayHeight = (height: number, fallback: number) => {
@@ -724,14 +781,20 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
           >
             <div className="flex flex-col gap-2">
               <SliderInput
-                label="FOV"
+                label="World FOV"
                 value={gameSettings.fov}
                 min={60}
-                max={120}
+                max={90}
                 step={1}
                 unit="°"
                 onChange={(value) => updateGameSetting("fov", value)}
               />
+              
+              <div className="px-4 py-2 border-[3px] border-black/20 bg-white/30">
+                <p className="font-mono text-[10px] uppercase opacity-70 leading-relaxed">
+                  <strong>World FOV:</strong> 60-90° (balanced view).
+                </p>
+              </div>
               <ToggleInput
                 label="Show FPS"
                 value={gameSettings.showFps}
@@ -895,10 +958,53 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
             </div>
           </div>
 
+          {/* Video/Graphics tab content */}
+          <div
+            className={`transition-opacity duration-300 ${
+              activeTab === "video" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
+            }`}
+          >
+            <div className="flex flex-col gap-2">
+              <SelectInput
+                label="FPS Limiter"
+                value={graphicsSettings.targetFPS.toString()}
+                options={FPS_OPTIONS.map(opt => ({ 
+                  value: opt.value.toString(), 
+                  label: opt.label 
+                }))}
+                onChange={(value) => {
+                  const fps = parseInt(value);
+                  updateGraphicsSetting("targetFPS", fps);
+                  updateGraphicsSetting("vsync", fps > 0);
+                }}
+              />
+              
+              <SliderInput
+                label="Render Scale"
+                value={Math.round(graphicsSettings.pixelRatio * 100)}
+                min={50}
+                max={150}
+                step={10}
+                unit="%"
+                onChange={(value) => updateGraphicsSetting("pixelRatio", value / 100)}
+              />
+              
+              <div className="mt-3 border-[3px] border-black bg-white/50 p-3">
+                <p className="font-mono text-[10px] uppercase opacity-70 leading-relaxed">
+                  <strong>FPS Limiter</strong> reduces GPU usage and prevents screen tearing.
+                  <br />
+                  <strong>Auto-detected:</strong> {detectMonitorRefreshRate()}Hz monitor refresh rate.
+                  <br />
+                  <strong>Render Scale</strong> affects visual quality and performance.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Other tabs content */}
           <div
             className={`transition-opacity duration-300 ${
-              activeTab !== "controls" && activeTab !== "game" && activeTab !== "audio" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
+              activeTab !== "controls" && activeTab !== "game" && activeTab !== "audio" && activeTab !== "video" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
             }`}
           >
             <div className="flex items-center justify-center min-h-[150px]">

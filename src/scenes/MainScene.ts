@@ -220,10 +220,14 @@ export default class MainScene extends THREE.Scene {
     this.targetManager.resetAllTargets();
     
     // Generate new targets using optimized manager
+    // Use me coordinates if available, otherwise default to (0, 0)
+    const roomX = this.me?.room_coord_x ?? 0;
+    const roomZ = this.me?.room_coord_z ?? 0;
+    
     const newTargets = this.targetManager.generateTargets(
       amount,
-      this.me.room_coord_x,
-      this.me.room_coord_z,
+      roomX,
+      roomZ,
       scale,
       undefined,
       playerYaw

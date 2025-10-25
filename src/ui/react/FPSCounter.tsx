@@ -30,30 +30,19 @@ export default function FPSCounter() {
 
     window.addEventListener("gameSettingsChanged", handleSettingsChange);
 
-    // FPS calculation
-    let lastTime = performance.now();
-    let frames = 0;
-    let fpsInterval: number;
-
-    const calculateFPS = () => {
-      frames++;
-      const currentTime = performance.now();
-      const delta = currentTime - lastTime;
-
-      if (delta >= 1000) {
-        setFps(Math.round((frames * 1000) / delta));
-        frames = 0;
-        lastTime = currentTime;
+    // Listen for FPS updates from the game loop
+    const handleFPSUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail && customEvent.detail.fps !== undefined) {
+        setFps(customEvent.detail.fps);
       }
-
-      fpsInterval = requestAnimationFrame(calculateFPS);
     };
 
-    fpsInterval = requestAnimationFrame(calculateFPS);
+    window.addEventListener("fpsUpdate", handleFPSUpdate);
 
     return () => {
       window.removeEventListener("gameSettingsChanged", handleSettingsChange);
-      cancelAnimationFrame(fpsInterval);
+      window.removeEventListener("fpsUpdate", handleFPSUpdate);
     };
   }, []);
 

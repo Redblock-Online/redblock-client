@@ -161,11 +161,22 @@ export default class App {
     this.camera.instance.rotation.set(0, (Math.PI / 2) * 3, 0);
 
     this.pistol = new Pistol(this.camera.instance, (loadedPistol) => {
+      // Add pistol to main camera (will adjust position based on FOV)
       this.camera.instance.add(loadedPistol);
       this.pistol = loadedPistol;
       this.pistol.setScene(this.scene);
     });
-    this.loop = new Loop(this.renderer.instance,this.scene,this.camera.instance,this.controls,this.pistol,this.collisionSystem);
+    this.loop = new Loop(this.renderer.instance,this.scene,this.camera.instance,this.controls,this.pistol,this.collisionSystem,this.camera);
+    
+    // Listen for graphics settings changes
+    window.addEventListener("graphicsSettingsChanged", ((e: CustomEvent) => {
+      const settings = e.detail;
+      if (settings.targetFPS !== undefined) {
+        this.loop.setTargetFPS(settings.targetFPS);
+        console.log(`[App] VSync updated: ${settings.vsync ? settings.targetFPS + ' FPS' : 'Unlimited'}`);
+      }
+    }) as EventListener);
+    
     // Bind events
     this.canvas.addEventListener("mousedown", this.onMouseDown);
     this.canvas.addEventListener("click", this.onClickForPointerLock);
@@ -1238,8 +1249,9 @@ export default class App {
     this.resetTargets();
     
     // Reset player to spawn position and orientation
-    const spawnX = this.scene.me.room_coord_x;
-    const spawnZ = this.scene.me.room_coord_z;
+    // Use scene.me if available, otherwise use default spawn (0, 0, 0)
+    const spawnX = this.scene.me?.room_coord_x ?? 0;
+    const spawnZ = this.scene.me?.room_coord_z ?? 0;
     const spawnY = 0; // Floor level
     const spawnYaw = (Math.PI / 2) * 3; // Always face same direction (270 degrees)
     
