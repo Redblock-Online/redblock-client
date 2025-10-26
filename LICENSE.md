@@ -1,4 +1,4 @@
-Redblock Community License (RCL)
+# Redblock Community License (RCL)
 Version 1.0 — based on the MIT License
 
 Copyright (c) 2025 Freddy Javier Saez Ávila
