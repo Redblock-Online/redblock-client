@@ -11,7 +11,13 @@ export function EditorOverlays({ activeItem, editingActive, transformLabel }: Ed
   return (
     <main className="pointer-events-none relative flex-1">
       <div className="pointer-events-none absolute inset-0">
-        <div className=" left-4 top-4 flex max-w-md flex-col gap-1.5 rounded border border-[#1a1a1a] bg-[#323232]/95 px-3 py-2.5 text-[11px] text-[#cccccc]">
+        <div className="absolute left-4 top-4 flex max-w-md flex-col gap-1.5 rounded border border-[#1a1a1a] bg-[#323232]/95 px-3 py-2.5 text-[11px] text-[#cccccc]">
+          {/* Cruz blanca en la esquina superior */}
+          <div className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-white">
+              <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </div>
           <span className="text-[10px] text-[#999999] mb-0.5">
             Controls
           </span>
