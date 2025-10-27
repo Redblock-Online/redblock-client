@@ -37,9 +37,11 @@ export type TimerController = {
 export default function TimerDisplay({
   bindController,
   interval = 100,
+  hudScale = 100,
 }: {
   bindController: (ctrl: TimerController) => void;
   interval?: number;
+  hudScale?: number;
 }) {
   const [running, setRunning] = useState(false);
   const [text, setText] = useState("0.00s");
@@ -120,8 +122,14 @@ export default function TimerDisplay({
     };
   }, [running, interval, computeElapsedSeconds]);
 
+  const scaleValue = hudScale / 100;
+
   return (
-    <div id="timer" className="absolute top-5 left-5 text-[32px]  pointer-events-none z-10 select-none">
+    <div 
+      id="timer" 
+      className="absolute top-5 left-5 text-[32px] pointer-events-none z-10 select-none hidden"
+      style={{ transform: `scale(${scaleValue})`, transformOrigin: 'top left' }}
+    >
       {text}
       {hintState.kind === "lines" ? (
         <div className="mt-2 text-[18px] leading-snug">

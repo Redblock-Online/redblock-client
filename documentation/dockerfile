@@ -1,0 +1,11 @@
+# Build
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# Serve
+EXPOSE 3002
+CMD ["npx", "docusaurus", "start", "--port", "3002", "--host", "0.0.0.0"]

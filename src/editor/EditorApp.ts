@@ -24,6 +24,7 @@ import {
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { ComponentMemberTransform, SavedComponent } from "./componentsStore";
+import { DEFAULT_RANDOM_STATIC_CONFIG, DEFAULT_MOVING_CONFIG, type GeneratorConfig } from "./types/generatorConfig";
 import { loadComponents } from "./componentsStore";
 import type {
   EditorBlock,
@@ -40,9 +41,12 @@ import { ComponentManager } from "./core/ComponentManager";
 import type { SerializedScenario } from "./scenarioStore";
 import { EditorModeManager } from "./core/EditorModeManager";
 import { InputRouter } from "./core/InputRouter";
+import { EditorSerializer } from "./core/EditorSerializer";
+import { AlertManager } from "./core/AlertManager";
 import { DragHandler } from "./core/handlers/DragHandler";
 import { TransformHandler } from "./core/handlers/TransformHandler";
 import { SelectionHandler } from "./core/handlers/SelectionHandler";
+import { createSpawnPointMesh } from "./core/blockFactory";
 
 const COMPONENT_MASTER_OUTLINE_COLOR = 0x9b5cff;
 const COMPONENT_INSTANCE_OUTLINE_COLOR = 0xff4dff;
@@ -69,20 +73,22 @@ export default class EditorApp {
   private readonly canvas: HTMLCanvasElement;
   private readonly renderer: WebGLRenderer;
   private readonly scene: Scene;
+  
+  // Flag to disable keyboard shortcuts when user is typing in an input
+  private isTyping = false;
+  // Flag to prevent dragging when selecting a generator target
+  private isSelectingGeneratorTarget = false;
   private readonly camera: PerspectiveCamera;
   private readonly controls: OrbitControls;
   private readonly raycaster = new Raycaster();
   private readonly pointer = new Vector2();
-  private readonly groundPlane = new Mesh(
-    new BoxGeometry(200, 0.1, 200),
-    new MeshStandardMaterial({ color: new Color(0xe5e7eb) }),
-  );
 
   private readonly blocks: BlockStore;
   private readonly selection: SelectionManager;
   private readonly groups: GroupManager;
   private readonly movement: MovementController;
   private readonly components: ComponentManager;
+  public readonly alerts: AlertManager;
   private readonly pointerUpListeners = new Set<PointerUpListener>();
   private readonly dragCommitListeners = new Set<(changes: DragCommitEntry[]) => void>();
 
@@ -119,7 +125,7 @@ export default class EditorApp {
     this.renderer.outputColorSpace = SRGBColorSpace;
 
     this.scene = new Scene();
-    this.scene.background = new Color(0xffffff);
+    this.scene.background = new Color(0x3d3d3d); // Blender-style dark gray background
 
     this.camera = new PerspectiveCamera(60, 1, 0.1, 1000);
     this.camera.position.set(8, 10, 14);
@@ -146,6 +152,7 @@ export default class EditorApp {
     this.groups = new GroupManager(this.scene, this.blocks, this.selection);
     this.movement = new MovementController(this.camera, this.controls);
     this.components = new ComponentManager(this.blocks, this.selection, this.groups);
+    this.alerts = new AlertManager();
 
     // Initialize new mode system
     this.modeManager = new EditorModeManager();
@@ -161,6 +168,7 @@ export default class EditorApp {
       this.dragHandler,
       this.transformHandler,
       this.selectionHandler,
+      this,
     );
 
     // Setup callbacks
@@ -316,6 +324,95 @@ export default class EditorApp {
   public clearMovementState(): void {
     this.movement.clearState();
   }
+  
+  /**
+   * Disable editor controls (for when game preview is active)
+   */
+  public disableControls(): void {
+    this.controls.enabled = false;
+    this.movement.disable();
+    console.log("[EditorApp] Controls and movement disabled");
+  }
+  
+  /**
+   * Enable editor controls (for when returning from game preview)
+   */
+  public enableControls(): void {
+    this.controls.enabled = true;
+    this.movement.enable();
+    console.log("[EditorApp] Controls and movement enabled");
+  }
+  
+  /**
+   * Set typing state - disables keyboard shortcuts when user is typing in inputs
+   */
+  public setTyping(typing: boolean): void {
+    this.isTyping = typing;
+  }
+  
+  /**
+   * Check if user is currently typing
+   */
+  public isUserTyping(): boolean {
+    return this.isTyping;
+  }
+
+  /**
+   * Set generator target selection mode - prevents dragging when selecting a target
+   */
+  public setSelectingGeneratorTarget(selecting: boolean): void {
+    this.isSelectingGeneratorTarget = selecting;
+  }
+
+  /**
+   * Check if currently selecting a generator target
+   */
+  public isSelectingGenerator(): boolean {
+    return this.isSelectingGeneratorTarget;
+  }
+
+  /**
+   * Validate scene and update alerts
+   */
+  public validateScene(): void {
+    // Find spawn point
+    const spawnPoint = this.blocks.getAllBlocks().find(block => 
+      block.mesh.userData.isSpawnPoint === true
+    );
+
+    if (spawnPoint) {
+      // Check if there's a floor beneath the spawn point
+      const spawnPos = new Vector3();
+      spawnPoint.mesh.getWorldPosition(spawnPos);
+      
+      // Raycast downward from spawn point
+      const raycaster = new Raycaster();
+      raycaster.set(spawnPos, new Vector3(0, -1, 0));
+      
+      // Get all meshes except the spawn point itself
+      const meshes = this.blocks.getAllBlocks()
+        .filter(b => b.id !== spawnPoint.id)
+        .map(b => b.mesh);
+      
+      const intersects = raycaster.intersectObjects(meshes, true);
+      
+      // Check if there's a floor within reasonable distance (10 units)
+      const hasFloor = intersects.length > 0 && intersects[0].distance < 10;
+      
+      if (!hasFloor) {
+        this.alerts.publish(
+          "spawn-no-floor",
+          "warning",
+          "Spawn point has no floor beneath it. Players will fall into the void."
+        );
+      } else {
+        this.alerts.clear("spawn-no-floor");
+      }
+    } else {
+      // No spawn point - could add another alert here if needed
+      this.alerts.clear("spawn-no-floor");
+    }
+  }
 
   public placeBlockAt(clientX: number, clientY: number): EditorBlock | null {
     const point = this.intersectGround(clientX, clientY);
@@ -330,6 +427,106 @@ export default class EditorApp {
     return block;
   }
 
+  public placeSpawnAt(clientX: number, clientY: number): EditorBlock | null {
+    // Check if a spawn point already exists
+    if (this.hasSpawnPoint()) {
+      console.warn("Only one spawn point is allowed");
+      return null;
+    }
+
+    const point = this.intersectGround(clientX, clientY);
+    if (!point) {
+      return null;
+    }
+
+    const spawn = this.blocks.createSpawnPoint({ position: point.setY(0.5) });
+    this.clearMovementState();
+    this.selection.setSelectionSingle(spawn);
+    return spawn;
+  }
+
+  public hasSpawnPoint(): boolean {
+    const blocks = this.blocks.getAllBlocks();
+    return blocks.some((block) => block.mesh.userData.isSpawnPoint === true);
+  }
+
+  public placeRandomTargetGeneratorAt(clientX: number, clientY: number): EditorBlock | null {
+    const point = this.intersectGround(clientX, clientY);
+    if (!point) {
+      return null;
+    }
+
+    // Create a generator marker (cube with distinct appearance)
+    const generator = this.blocks.createBlock({
+      position: point.setY(0.5),
+      scale: new Vector3(0.6, 0.6, 0.6),
+    });
+    
+    // Mark as generator in userData
+    generator.mesh.userData.isGenerator = true;
+    generator.mesh.userData.generatorType = "randomStatic";
+    generator.generatorConfig = { ...DEFAULT_RANDOM_STATIC_CONFIG };
+    generator.mesh.userData.generatorConfig = generator.generatorConfig;
+    
+    // Give it a distinct color (pink/magenta for generators)
+    const mesh = generator.mesh as Mesh;
+    if (mesh.material) {
+      const material = mesh.material as MeshStandardMaterial;
+      material.color.set(0xff4dff); // Pink/magenta color
+      material.emissive = new Color(0xff4dff);
+      material.emissiveIntensity = 0.2;
+    }
+    
+    this.clearMovementState();
+    this.selection.setSelectionSingle(generator);
+    return generator;
+  }
+
+  // COMMENTED OUT: Moving Target Generator - Not implemented yet
+  // public placeMovingTargetGeneratorAt(clientX: number, clientY: number): EditorBlock | null {
+  //   const point = this.intersectGround(clientX, clientY);
+  //   if (!point) {
+  //     return null;
+  //   }
+
+  //   // Create a generator marker (cube with distinct appearance)
+  //   const generator = this.blocks.createBlock({
+  //     position: point.setY(0.5),
+  //     scale: new Vector3(0.6, 0.6, 0.6),
+  //   });
+  //   
+  //   // Mark as generator in userData
+  //   generator.mesh.userData.isGenerator = true;
+  //   generator.mesh.userData.generatorType = "moving";
+  //   generator.generatorConfig = { ...DEFAULT_MOVING_CONFIG };
+  //   generator.mesh.userData.generatorConfig = generator.generatorConfig;
+  //   
+  //   // Give it a distinct color (cyan/blue for moving generators)
+  //   const mesh = generator.mesh as Mesh;
+  //   if (mesh.material) {
+  //     const material = mesh.material as MeshStandardMaterial;
+  //     material.color.set(0x00ddff); // Cyan color for moving targets
+  //     material.emissive = new Color(0x00ddff);
+  //     material.emissiveIntensity = 0.2;
+  //   }
+  //   
+  //   this.clearMovementState();
+  //   this.selection.setSelectionSingle(generator);
+  //   return generator;
+  // }
+
+  public updateGeneratorConfig(blockId: string, config: GeneratorConfig): void {
+    console.log(`[EditorApp] updateGeneratorConfig called for ${blockId}:`, config);
+    const block = this.blocks.getBlock(blockId);
+    if (block && block.mesh.userData.isGenerator) {
+      block.generatorConfig = config;
+      block.mesh.userData.generatorConfig = config;
+      console.log(`[EditorApp] Generator config updated successfully. enabled=${config.enabled}, visible=${config.visible}`);
+    } else {
+      console.warn(`[EditorApp] Cannot update generator config - block not found or not a generator:`, blockId);
+    }
+  }
+
   public createBlock(options: {
     position: Vector3;
     rotation?: Euler;
@@ -342,6 +539,8 @@ export default class EditorApp {
 
   public removeBlock(id: string): boolean {
     const block = this.blocks.getBlock(id);
+    console.log('[EditorApp] removeBlock called for:', id);
+    console.trace('[EditorApp] removeBlock stack trace');
     if (block) {
       this.components.handleBlockRemoved(block);
     }
@@ -351,6 +550,10 @@ export default class EditorApp {
 
   public getBlock(id: string): EditorBlock | undefined {
     return this.blocks.getBlock(id);
+  }
+  
+  public renameBlock(oldId: string, newId: string): boolean {
+    return this.blocks.renameBlock(oldId, newId);
   }
 
   public applyTransform(id: string, transform: SelectionTransform): boolean {
@@ -368,6 +571,53 @@ export default class EditorApp {
     }
     this.components.syncActiveComponentEdits();
     return true;
+  }
+
+  /**
+   * Select all blocks whose screen projection falls within the given rectangle
+   */
+  public selectBlocksInRect(bounds: { left: number; top: number; right: number; bottom: number }, additive: boolean): void {
+    const blocksInRect: EditorBlock[] = [];
+    
+    // Project each block's position to screen space
+    for (const block of this.blocks.getAllBlocks()) {
+      const worldPos = new Vector3();
+      block.mesh.getWorldPosition(worldPos);
+      
+      // Project to screen space
+      const screenPos = worldPos.clone().project(this.camera);
+      
+      // Convert from NDC (-1 to 1) to screen coordinates
+      const canvas = this.canvas;
+      const rect = canvas.getBoundingClientRect();
+      const x = (screenPos.x * 0.5 + 0.5) * rect.width + rect.left;
+      const y = (-(screenPos.y) * 0.5 + 0.5) * rect.height + rect.top;
+      
+      // Check if within selection bounds
+      if (x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom) {
+        // Also check if in front of camera
+        if (screenPos.z < 1) {
+          blocksInRect.push(block);
+        }
+      }
+    }
+    
+    if (blocksInRect.length > 0) {
+      if (additive) {
+        // Add to existing selection
+        const currentArray = this.selection.getSelectionArray();
+        const combined = [...currentArray, ...blocksInRect];
+        // Remove duplicates
+        const unique = Array.from(new Map(combined.map(b => [b.id, b])).values());
+        this.selection.setSelectionByIds(unique.map(b => b.id));
+      } else {
+        // Replace selection
+        this.selection.setSelectionByIds(blocksInRect.map(b => b.id));
+      }
+    } else if (!additive) {
+      // Clear selection if nothing found and not additive
+      this.selection.clearSelection();
+    }
   }
 
   public pickBlock(clientX: number, clientY: number, additive: boolean = false): EditorBlock | null {
@@ -654,6 +904,7 @@ export default class EditorApp {
         type: "component",
         componentId,
         transform: this.toSerializedTransform(block.mesh, "world"),
+        ...(block.name && { name: block.name }),
       };
     }
 
@@ -669,13 +920,27 @@ export default class EditorApp {
         type: "group",
         transform: this.toSerializedTransform(block.mesh, "world"),
         children,
+        ...(block.name && { name: block.name }),
       };
     }
 
     if (block.mesh instanceof Mesh) {
+      const isSpawnPoint = block.mesh.userData.isSpawnPoint === true;
+      const isGenerator = block.mesh.userData.isGenerator === true;
+      
+      // Debug log for generators
+      if (isGenerator && block.generatorConfig) {
+        console.log(`[EditorApp] Serializing generator ${block.id}:`, block.generatorConfig);
+      }
+      
       return {
         type: "block",
         transform: this.toSerializedTransform(block.mesh, "world"),
+        id: block.id, // Include ID for generator referencing
+        ...(block.name && { name: block.name }),
+        ...(isSpawnPoint && { isSpawnPoint: true }),
+        ...(isGenerator && { isGenerator: true }),
+        ...(isGenerator && block.generatorConfig && { generatorConfig: block.generatorConfig }),
       };
     }
 
@@ -716,9 +981,16 @@ export default class EditorApp {
     }
 
     if (object instanceof Mesh) {
+      const isSpawnPoint = object.userData.isSpawnPoint === true;
+      const isGenerator = object.userData.isGenerator === true;
+      const generatorConfig = object.userData.generatorConfig;
+      
       return {
         type: "block",
         transform: this.toSerializedTransform(object, space),
+        ...(isSpawnPoint && { isSpawnPoint: true }),
+        ...(isGenerator && { isGenerator: true }),
+        ...(isGenerator && generatorConfig && { generatorConfig }),
       };
     }
 
@@ -748,14 +1020,52 @@ export default class EditorApp {
   }
 
   private instantiateRootNode(node: SerializedNode, componentMap: Map<string, SavedComponent>): EditorBlock | null {
+    let block: EditorBlock | null = null;
+    
     switch (node.type) {
       case "block": {
         const transform = this.transformFromSerialized(node.transform);
-        return this.createBlock({
-          position: transform.position,
-          rotation: transform.rotation,
-          scale: transform.scale,
-        });
+        if (node.isSpawnPoint) {
+          block = this.blocks.createSpawnPoint({
+            position: transform.position,
+            rotation: transform.rotation,
+            scale: transform.scale,
+          });
+        } else if (node.isGenerator && node.generatorConfig) {
+          // Restore generator by creating a block and marking it as generator
+          block = this.createBlock({
+            position: transform.position,
+            rotation: transform.rotation,
+            scale: transform.scale,
+          });
+          
+          if (block) {
+            // Mark as generator
+            block.mesh.userData.isGenerator = true;
+            block.mesh.userData.generatorType = node.generatorConfig.type;
+            block.generatorConfig = node.generatorConfig;
+            block.mesh.userData.generatorConfig = node.generatorConfig;
+            
+            // Set generator appearance
+            const material = (block.mesh as Mesh).material as MeshStandardMaterial;
+            if (node.generatorConfig.type === "randomStatic") {
+              material.color.set(0xff00ff); // Magenta for random static
+              material.emissive = new Color(0xff00ff);
+              material.emissiveIntensity = 0.2;
+            } else if (node.generatorConfig.type === "moving") {
+              material.color.set(0x00ddff); // Cyan for moving
+              material.emissive = new Color(0x00ddff);
+              material.emissiveIntensity = 0.2;
+            }
+          }
+        } else {
+          block = this.createBlock({
+            position: transform.position,
+            rotation: transform.rotation,
+            scale: transform.scale,
+          });
+        }
+        break;
       }
       case "component": {
         if (!node.componentId) {
@@ -766,17 +1076,24 @@ export default class EditorApp {
           return null;
         }
         const transform = this.transformFromSerialized(node.transform);
-        return this.components.instantiateComponent(definition, transform);
+        block = this.components.instantiateComponent(definition, transform);
+        break;
       }
       case "group": {
         const group = this.buildGroupFromNode(node, componentMap);
         if (group) {
-          return this.blocks.registerGroup(group);
+          block = this.blocks.registerGroup(group);
         }
-        return null;
+        break;
       }
     }
-    return null;
+    
+    // Assign custom name if present
+    if (block && node.name) {
+      block.name = node.name;
+    }
+    
+    return block;
   }
 
   private buildGroupFromNode(node: SerializedNode, componentMap: Map<string, SavedComponent>): Group | null {
@@ -798,7 +1115,9 @@ export default class EditorApp {
   private buildChildObject(child: SerializedNode, componentMap: Map<string, SavedComponent>): Object3D | null {
     switch (child.type) {
       case "block": {
-        const mesh = this.blocks.createPrimitiveBlockMesh();
+        const mesh = child.isSpawnPoint 
+          ? createSpawnPointMesh() 
+          : this.blocks.createPrimitiveBlockMesh();
         this.applySerializedTransform(mesh, child.transform);
         return mesh;
       }
@@ -835,6 +1154,12 @@ export default class EditorApp {
         scale: { ...node.transform.scale },
       },
       children: node.children ? node.children.map((child) => this.cloneSerializedNode(child)) : undefined,
+      // Preserve all optional properties
+      ...(node.id && { id: node.id }),
+      ...(node.name && { name: node.name }),
+      ...(node.isSpawnPoint && { isSpawnPoint: node.isSpawnPoint }),
+      ...(node.isGenerator && { isGenerator: node.isGenerator }),
+      ...(node.generatorConfig && { generatorConfig: JSON.parse(JSON.stringify(node.generatorConfig)) }),
     };
   }
 
@@ -866,9 +1191,6 @@ export default class EditorApp {
     const directional = new DirectionalLight(0xffffff, 0.8);
     directional.position.set(10, 12, 6);
 
-    this.groundPlane.receiveShadow = true;
-    this.groundPlane.position.set(0, -0.05, 0);
-    this.groundPlane.visible = true;
 
     const grid = new GridHelper(200, 40, 0x000000, 0x505050);
     const gridMaterial = grid.material as LineBasicMaterial;

@@ -13,30 +13,26 @@ import {
   Group,
   PerspectiveCamera,
   Scene,
-  SRGBColorSpace,
   Box3,
   Vector3,
-  WebGLRenderer,
+  SphereGeometry,
 } from "three";
 import type { EditorItem } from "../types";
 import { getComponent } from "../componentsStore";
+import SharedPreviewRenderer from "./SharedPreviewRenderer";
 
 type BlockPreviewProps = { item: EditorItem };
 
 export function BlockPreview({ item }: BlockPreviewProps): ReactElement {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      return;
-    }
-    const renderer = new WebGLRenderer({ canvas, alpha: true, antialias: true });
-    const width = canvas.clientWidth || 96;
-    const height = canvas.clientHeight || 96;
+    // Use shared renderer
+    const renderer = SharedPreviewRenderer.acquire();
+    const width = 96;
+    const height = 96;
     renderer.setSize(width, height, false);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.outputColorSpace = SRGBColorSpace;
+    renderer.setPixelRatio(1); // Use 1 for preview to save memory
 
     const scene = new Scene();
     const camera = new PerspectiveCamera(35, width / height, 0.01, 100);
@@ -68,6 +64,19 @@ export function BlockPreview({ item }: BlockPreviewProps): ReactElement {
       return { mesh, geometry, material, edgesGeom, edgeMat };
     };
 
+    const createSpawnPoint = () => {
+      const geometry = new SphereGeometry(0.5, 16, 16);
+      const material = new MeshStandardMaterial({
+        color: new Color(0x00ffff), // Cyan
+        metalness: 0.3,
+        roughness: 0.4,
+        emissive: new Color(0x00ffff),
+        emissiveIntensity: 0.2,
+      });
+      const mesh = new Mesh(geometry, material);
+      return { mesh, geometry, material };
+    };
+
     const disposables: Array<{ dispose: () => void }> = [];
 
     const id = item.id;
@@ -79,6 +88,40 @@ export function BlockPreview({ item }: BlockPreviewProps): ReactElement {
         { dispose: () => material.dispose() },
         { dispose: () => edgesGeom.dispose() },
         { dispose: () => edgeMat.dispose() },
+      );
+    } else if (id === "randomTargetGen") {
+      const { mesh, geometry, material, edgesGeom, edgeMat } = createCube();
+      mesh.scale.set(0.6, 0.6, 0.6);
+      material.color.set(0xff4dff); // Pink/magenta color
+      material.emissive = new Color(0xff4dff);
+      material.emissiveIntensity = 0.2;
+      group.add(mesh);
+      disposables.push(
+        { dispose: () => geometry.dispose() },
+        { dispose: () => material.dispose() },
+        { dispose: () => edgesGeom.dispose() },
+        { dispose: () => edgeMat.dispose() },
+      );
+    // COMMENTED OUT: Moving Target Generator - Not implemented yet
+    // } else if (id === "movingTargetGen") {
+    //   const { mesh, geometry, material, edgesGeom, edgeMat } = createCube();
+    //   mesh.scale.set(0.6, 0.6, 0.6);
+    //   material.color.set(0x00ddff); // Cyan color
+    //   material.emissive = new Color(0x00ddff);
+    //   material.emissiveIntensity = 0.2;
+    //   group.add(mesh);
+    //   disposables.push(
+    //     { dispose: () => geometry.dispose() },
+    //     { dispose: () => material.dispose() },
+    //     { dispose: () => edgesGeom.dispose() },
+    //     { dispose: () => edgeMat.dispose() },
+    //   );
+    } else if (id === "spawn") {
+      const { mesh, geometry, material } = createSpawnPoint();
+      group.add(mesh);
+      disposables.push(
+        { dispose: () => geometry.dispose() },
+        { dispose: () => material.dispose() },
       );
     } else if (id.startsWith("component:")) {
       const compId = id.slice("component:".length);
@@ -135,21 +178,23 @@ export function BlockPreview({ item }: BlockPreviewProps): ReactElement {
     camera.lookAt(center);
     camera.updateProjectionMatrix();
 
-    let frame = 0;
-    const animate = () => {
-      group.rotation.y += 0.02;
-      group.rotation.x = 0.6;
-      renderer.render(scene, camera);
-      frame = requestAnimationFrame(animate);
-    };
-    animate();
+    // Render once to get the image
+    group.rotation.y = 0.5;
+    group.rotation.x = 0.6;
+    renderer.render(scene, camera);
+    
+    // Get image data from renderer
+    const imageData = renderer.domElement.toDataURL('image/png');
+    
+    // Set image source
+    if (imageRef.current) {
+      imageRef.current.src = imageData;
+    }
 
-    return () => {
-      cancelAnimationFrame(frame);
-      for (const d of disposables) d.dispose();
-      renderer.dispose();
-    };
+    // Cleanup
+    for (const d of disposables) d.dispose();
+    SharedPreviewRenderer.release();
   }, [item]);
 
-  return <canvas ref={canvasRef} className="h-24 w-24" />;
+  return <img ref={imageRef} className="h-24 w-24" alt={item.label} />;
 }

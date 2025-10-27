@@ -20,18 +20,6 @@ export default function IGBadge({ started }: IGBadgeProps) {
     }
   }, [started]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "F1") {
-        e.preventDefault();
-        setVisible((prev) => !prev);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
   return (
     <a 
       href="https://instagram.com/redblock.online" 

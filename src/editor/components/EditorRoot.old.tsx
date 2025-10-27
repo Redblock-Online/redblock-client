@@ -33,7 +33,7 @@ type ClipboardPayload = {
 };
 
 const builtinItems: EditorItem[] = [
-  { id: "block", label: "Block" },
+  { id: "block", label: "Block", category: "primitive" },
 ];
 
 export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
@@ -331,6 +331,26 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     [activeScenarioName, clearUnsaved, refreshScenarios, scenarioRecords, setActiveScenarioName],
   );
 
+  const handleDownloadScenario = useCallback((scenario: StoredScenario) => {
+    // Create a blob with the scenario data
+    const jsonString = JSON.stringify(scenario.data, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    
+    // Create a download link
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${scenario.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.rbonline`;
+    
+    // Trigger download
+    document.body.appendChild(link);
+    link.click();
+    
+    // Cleanup
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, []);
+
   const handleCancelDeleteComponent = useCallback(() => {
     setComponentPendingDelete(null);
   }, []);
@@ -445,7 +465,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const items: EditorItem[] = useMemo(() => {
     return [
       ...builtinItems,
-      ...components.map((c) => ({ id: `component:${c.id}`, label: c.label })),
+      ...components.map((c) => ({ id: `component:${c.id}`, label: c.label, category: c.category ?? "myComponents" })),
     ];
   }, [components]);
 
@@ -1114,6 +1134,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       onClose={() => setIsScenarioModalOpen(false)}
       onSelectScenario={handleSelectScenario}
       onDeleteScenario={handleDeleteScenario}
+      onDownloadScenario={handleDownloadScenario}
       onImportFiles={handleImportScenarioFiles}
     />
     <ComponentDeleteModal

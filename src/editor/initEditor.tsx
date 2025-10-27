@@ -38,7 +38,7 @@ export function initEditor(): void {
   }
 
   document.body.classList.remove("bg-[#f8f8f8]");
-  document.body.classList.add("bg-[#161616]", "text-white");
+  document.body.classList.add("bg-[#2b2b2b]", "text-white");
 
   const canvas: HTMLCanvasElement = editorCanvas;
 
@@ -52,7 +52,7 @@ export function initEditor(): void {
   canvas.style.height = "100%";
   canvas.style.display = "block";
   canvas.style.pointerEvents = "auto";
-  canvas.style.zIndex = "0";
+  canvas.style.zIndex = "1"; // Above background but below UI panels (z-10)
   
   /* Codex please, don't change the nex line */
   uiRoot.classList.add("absolute", "inset-0", "pointer-events-none");
@@ -60,6 +60,12 @@ export function initEditor(): void {
   if (!editorAppSingleton) {
     editorAppSingleton = new EditorApp(canvas);
     editorAppSingleton.start();
+
+    // Expose editor globally for debugging
+    if (typeof window !== "undefined") {
+      (window as Window & { editor?: typeof editorAppSingleton }).editor = editorAppSingleton;
+      console.log("[Editor] Editor exposed globally as window.editor");
+    }
 
     try {
       const autosave = findScenarioByName(AUTO_SAVE_SCENARIO_NAME);

@@ -1,5 +1,7 @@
+import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type SetStateAction } from "react";
 import { Euler, Group, Vector3, Object3D, Quaternion as ThreeQuaternion } from "three";
+import { FaPlay, FaStop } from "react-icons/fa";
 import EditorApp from "../EditorApp";
 import type { EditorBlock, EditorSelection, SelectionTransform, SerializedNode } from "../types";
 import type { EditorItem } from "../types";
@@ -12,6 +14,7 @@ import type { TransformMode, AxisConstraint } from "../core/EditorModeManager";
 import { ScenarioModal } from "./ScenarioModal";
 import { Portal } from "./Portal";
 import { ComponentDeleteModal } from "./ComponentDeleteModal";
+import { GameTab } from "./GameTab";
 import {
   AUTO_SAVE_SCENARIO_NAME,
   listScenarios,
@@ -21,6 +24,9 @@ import {
   type StoredScenario,
 } from "../scenarioStore";
 import type { SerializedScenario } from "../scenarioStore";
+import type { Alert } from "../core/AlertManager";
+import { AlertIcon } from "./AlertIcon";
+import { CategoryFilter, type ComponentCategory } from "./CategoryFilter";
 
 type VectorState = { x: number; y: number; z: number };
 type ClipboardPayload = {
@@ -29,7 +35,11 @@ type ClipboardPayload = {
 };
 
 const builtinItems: EditorItem[] = [
-  { id: "block", label: "Block" },
+  { id: "block", label: "Block", category: "primitive" },
+  { id: "randomTargetGen", label: "Random Target Generator", category: "target" },
+  // COMMENTED OUT: Moving Target Generator - Not implemented yet
+  // { id: "movingTargetGen", label: "Moving Target Generator", category: "target" },
+  { id: "spawn", label: "Spawn Point", category: "gameLogic" },
 ];
 
 export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
@@ -43,6 +53,29 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const [positionState, setPositionState] = useState<VectorState>({ x: 0, y: 0, z: 0 });
   const [scaleState, setScaleState] = useState<VectorState>({ x: 1, y: 1, z: 1 });
   const [rotationState, setRotationState] = useState<VectorState>({ x: 0, y: 0, z: 0 });
+  
+  // Generator selection mode for event linking
+  const [generatorSelectionMode, setGeneratorSelectionMode] = useState<{
+    active: boolean;
+    eventId: string;
+    sourceGeneratorId: string;
+  } | null>(null);
+  const generatorSelectionModeRef = useRef<{
+    active: boolean;
+    eventId: string;
+    sourceGeneratorId: string;
+  } | null>(null);
+  
+  // Keep ref in sync with state and notify editor
+  useEffect(() => {
+    generatorSelectionModeRef.current = generatorSelectionMode;
+    // Notify editor to prevent dragging during generator selection
+    editor.setSelectingGeneratorTarget(!!generatorSelectionMode);
+  }, [generatorSelectionMode, editor]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [showInspector, setShowInspector] = useState(true);
+  const [showControls, setShowControls] = useState(true);
 
   const selectedItemRef = useRef<EditorItem | null>(null);
 
@@ -60,6 +93,13 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const pasteOffsetRef = useRef(0);
   const unsavedChangesRef = useRef(false);
   const [componentPendingDelete, setComponentPendingDelete] = useState<{ id: string; label: string } | null>(null);
+  const [hasSpawnPoint, setHasSpawnPoint] = useState(false);
+  const [isGameActive, setIsGameActive] = useState(false);
+  const [gameScenario, setGameScenario] = useState<SerializedScenario | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [selectedCategories, setSelectedCategories] = useState<Set<ComponentCategory>>(
+    new Set(["primitive", "target", "gameLogic", "myComponents"])
+  );
 
   const markUnsaved = useCallback(() => {
     if (!unsavedChangesRef.current) {
@@ -90,11 +130,54 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     }
   }, [editor, refreshScenarios]);
 
+  // Subscribe to alerts
+  useEffect(() => {
+    const unsubscribe = editor.alerts.addListener((newAlerts) => {
+      setAlerts(newAlerts);
+    });
+    
+    // Initial validation
+    editor.validateScene();
+    
+    return unsubscribe;
+  }, [editor]);
+
+  // Keyboard shortcuts for toggling panels
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Ignore if user is typing in an input
+      if (editor.isUserTyping()) return;
+      
+      // Ignore if any modifier keys are pressed
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      
+      switch (event.key.toLowerCase()) {
+        case "b":
+          event.preventDefault();
+          setShowSidebar(prev => !prev);
+          break;
+        case "i":
+          event.preventDefault();
+          setShowInspector(prev => !prev);
+          break;
+        case "c":
+          event.preventDefault();
+          setShowControls(prev => !prev);
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [editor]);
+
   const autoSaveScenario = useCallback(() => {
     if (typeof window === "undefined") {
       return;
     }
     markUnsaved();
+    // Validate scene when auto-saving
+    editor.validateScene();
     if (autoSaveTimeoutRef.current !== null) {
       window.clearTimeout(autoSaveTimeoutRef.current);
     }
@@ -327,6 +410,26 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     [activeScenarioName, clearUnsaved, refreshScenarios, scenarioRecords, setActiveScenarioName],
   );
 
+  const handleDownloadScenario = useCallback((scenario: StoredScenario) => {
+    // Create a blob with the scenario data
+    const jsonString = JSON.stringify(scenario.data, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    
+    // Create a download link
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${scenario.name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.rbonline`;
+    
+    // Trigger download
+    document.body.appendChild(link);
+    link.click();
+    
+    // Cleanup
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, []);
+
   const handleCancelDeleteComponent = useCallback(() => {
     setComponentPendingDelete(null);
   }, []);
@@ -402,12 +505,33 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         ],
       },
       {
+        id: "view",
+        label: "View",
+        items: [
+          { 
+            id: "view-toggle-sidebar", 
+            label: showSidebar ? "Hide Components (B)" : "Show Components (B)", 
+            action: () => setShowSidebar(prev => !prev) 
+          },
+          { 
+            id: "view-toggle-inspector", 
+            label: showInspector ? "Hide Inspector (I)" : "Show Inspector (I)", 
+            action: () => setShowInspector(prev => !prev) 
+          },
+          { 
+            id: "view-toggle-controls", 
+            label: showControls ? "Hide Controls (C)" : "Show Controls (C)", 
+            action: () => setShowControls(prev => !prev) 
+          },
+        ],
+      },
+      {
         id: "components",
         label: "Components",
         items: [{ id: "components-refresh", label: "Refresh list", action: handleRefreshComponentsMenu }],
       },
     ],
-    [handleLoadScenario, handleNewScenario, handleRefreshComponentsMenu, handleSaveCurrentScenario, handleSaveScenarioAs, hasUnsavedChanges],
+    [handleLoadScenario, handleNewScenario, handleRefreshComponentsMenu, handleSaveCurrentScenario, handleSaveScenarioAs, hasUnsavedChanges, showSidebar, showInspector, showControls],
   );
 
   const activeMenu = useMemo(() => {
@@ -441,9 +565,30 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const items: EditorItem[] = useMemo(() => {
     return [
       ...builtinItems,
-      ...components.map((c) => ({ id: `component:${c.id}`, label: c.label })),
+      ...components.map((c) => ({ 
+        id: `component:${c.id}`, 
+        label: c.label,
+        category: c.category ?? "myComponents" // User components default to "myComponents"
+      })),
     ];
   }, [components]);
+
+  // Filtered items based on selected categories
+  const filteredItems: EditorItem[] = useMemo(() => {
+    return items.filter((item) => selectedCategories.has(item.category));
+  }, [items, selectedCategories]);
+
+  const handleToggleCategory = useCallback((category: ComponentCategory) => {
+    setSelectedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  }, []);
 
   // Whether a component edit session is active. Must be declared before effects that depend on it.
   const editingActive = !!editor.getEditingComponentId();
@@ -495,6 +640,83 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
 
   useEffect(() => {
     return editor.addSelectionListener((block) => {
+      const currentMode = generatorSelectionModeRef.current;
+      console.log('[EditorRoot] Selection listener triggered, block:', Array.isArray(block) ? 'multiple' : block?.id);
+      console.log('[EditorRoot] Generator selection mode active:', !!currentMode);
+      
+      // Handle generator selection mode
+      if (currentMode) {
+        console.log('[EditorRoot] In generator selection mode, source:', currentMode.sourceGeneratorId);
+        // In selection mode, ignore all selection changes except valid generator clicks
+        if (block && !Array.isArray(block)) {
+          const isGenerator = block.mesh.userData?.isGenerator === true;
+          console.log('[EditorRoot] Clicked block is generator:', isGenerator);
+          console.log('[EditorRoot] Clicked block ID:', block.id);
+          if (isGenerator && block.id !== currentMode.sourceGeneratorId) {
+            console.log('[EditorRoot] Valid generator selected! Linking...');
+            // User selected a valid generator - link it to the event
+            const sourceBlock = editor.getBlock(currentMode.sourceGeneratorId);
+            if (sourceBlock && sourceBlock.generatorConfig) {
+              const updatedConfig = { ...sourceBlock.generatorConfig };
+              if (updatedConfig.events) {
+                updatedConfig.events = {
+                  ...updatedConfig.events,
+                  onComplete: updatedConfig.events.onComplete.map(event => 
+                    event.id === currentMode.eventId && event.type === "startGenerator"
+                      ? { ...event, targetGeneratorId: block.id }
+                      : event
+                  ),
+                };
+                editor.updateGeneratorConfig(currentMode.sourceGeneratorId, updatedConfig);
+                markUnsaved();
+                console.log('[EditorRoot] Config updated, re-selecting source block');
+              }
+            }
+            
+            // Clear alert
+            editor.alerts.clearAll();
+            
+            // Re-select the source block to show updated config
+            // Use setTimeout to let the current selection event finish
+            setTimeout(() => {
+              const freshSourceBlock = editor.getBlock(currentMode.sourceGeneratorId);
+              if (freshSourceBlock) {
+                console.log('[EditorRoot] Re-selecting source block:', freshSourceBlock.id);
+                editor.setSelectionByIds([currentMode.sourceGeneratorId]);
+              }
+              // Exit selection mode AFTER re-selecting to prevent accidental deletion
+              setGeneratorSelectionMode(null);
+            }, 0);
+          } else if (!isGenerator) {
+            // User selected a non-generator - show warning but don't change selection
+            editor.alerts.clearAll();
+            editor.alerts.publish(
+              `gen-select-error-${Date.now()}`,
+              "warning",
+              "Please select a Target Generator block"
+            );
+            setTimeout(() => {
+              editor.alerts.clearAll();
+            }, 3000);
+          } else if (block.id === currentMode.sourceGeneratorId) {
+            // User clicked the same generator - cancel selection mode
+            setGeneratorSelectionMode(null);
+            editor.alerts.clearAll();
+            editor.alerts.publish(
+              `gen-select-cancel-${Date.now()}`,
+              "info",
+              "Selection cancelled"
+            );
+            setTimeout(() => {
+              editor.alerts.clearAll();
+            }, 2000);
+          }
+        }
+        // IMPORTANT: Always return early when in selection mode to prevent any inspector updates
+        return;
+      }
+      
+      // Normal selection behavior (not in generator selection mode)
       setSelection(block);
       const t = editor.getSelectionTransform();
       // When entering component edit mode, selection becomes multiple and getSelectionTransform() returns null.
@@ -502,8 +724,10 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       if (t || !editingActive) {
         applyTransformToState(t);
       }
+      // Check if there's a spawn point
+      setHasSpawnPoint(editor.hasSpawnPoint());
     });
-  }, [editor, applyTransformToState, editingActive]);
+  }, [editor, applyTransformToState, editingActive, markUnsaved]);
 
   // NOTE: Event handling (pointer, keyboard) is now done by InputRouter in EditorApp
   // We only need to handle drag/drop from the palette
@@ -533,6 +757,14 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       let placed: EditorBlock | null = null;
       if (data === "block") {
         placed = editor.placeBlockAt(event.clientX, event.clientY);
+      } else if (data === "randomTargetGen") {
+        placed = editor.placeRandomTargetGeneratorAt(event.clientX, event.clientY);
+      } else if (data === "movingTargetGen") {
+        // COMMENTED OUT: Moving Target Generator - Not implemented yet
+        // placed = editor.placeMovingTargetGeneratorAt(event.clientX, event.clientY);
+        console.warn('[EditorRoot] Moving Target Generator not implemented yet');
+      } else if (data === "spawn") {
+        placed = editor.placeSpawnAt(event.clientX, event.clientY);
       } else if (data.startsWith("component:")) {
         const id = data.slice("component:".length);
         const def = getComponent(id);
@@ -546,6 +778,8 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
           pushHistory({ type: "add", id: placed.id, transform: t });
         }
         autoSaveScenario();
+        // Update spawn point status
+        setHasSpawnPoint(editor.hasSpawnPoint());
       }
       setActiveItem(builtinItems[0]);
       editor.clearMovementState?.();
@@ -606,10 +840,41 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     const created = editor.instantiateSerializedNodes(payload.nodes, payload.componentIds, offset);
     if (created.length > 0) {
       editor.setSelectionByIds(created.map((block) => block.id));
+      // Add each pasted block to history so undo works
+      // Serialize the created blocks to preserve all their data (including generator config)
+      const createdIds = created.map((block) => block.id);
+      const serializedPayload = editor.serializeBlocksByIds(createdIds);
+      serializedPayload.nodes.forEach((node, index) => {
+        const block = created[index];
+        const transform = editor.getTransformsForIds([block.id])[0]?.transform;
+        if (transform) {
+          pushHistory({ type: "add", id: block.id, transform, node });
+        }
+      });
       panelAutoSavePendingRef.current = false;
       autoSaveScenario();
     }
-  }, [autoSaveScenario, editor]);
+  }, [autoSaveScenario, editor, pushHistory]);
+
+  const renameSelection = useCallback((id: string, newName: string) => {
+    if (!editor) return;
+    
+    const success = editor.renameBlock(id, newName);
+    if (success) {
+      // Force re-render to show new name
+      const block = editor.getBlock(id);
+      if (block) {
+        setSelection({ ...block });
+      }
+      markUnsaved();
+    }
+  }, [editor, markUnsaved]);
+  
+  const setTyping = useCallback((typing: boolean) => {
+    if (editor) {
+      editor.setTyping(typing);
+    }
+  }, [editor]);
 
   const deleteSelection = useCallback(() => {
     const currentSelection = selection
@@ -644,6 +909,8 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     pasteOffsetRef.current = 0;
     panelAutoSavePendingRef.current = false;
     autoSaveScenario();
+    // Update spawn point status
+    setHasSpawnPoint(editor.hasSpawnPoint());
   }, [autoSaveScenario, editor, pushHistory, selection]);
 
   // NOTE: Keyboard handling is now done by InputRouter in EditorApp
@@ -692,15 +959,30 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         return;
       }
 
-      // Delete
+      // Delete (but not when in generator selection mode)
       if ((event.key === "Delete" || event.key === "Backspace") && (selection || editor.getSelectionArray().length > 0)) {
+        // Don't delete when in generator selection mode
+        if (generatorSelectionModeRef.current) {
+          return;
+        }
         event.preventDefault();
         deleteSelection();
         return;
       }
 
-      // Escape to clear selection
+      // Escape to clear selection or cancel generator selection mode
       if (event.key === "Escape" && !transformMode) {
+        // If in generator selection mode, cancel it
+        if (generatorSelectionModeRef.current) {
+          setGeneratorSelectionMode(null);
+          editor.alerts.clearAll();
+          // Re-select the source generator
+          const sourceBlock = editor.getBlock(generatorSelectionModeRef.current.sourceGeneratorId);
+          if (sourceBlock) {
+            editor.setSelectionByIds([generatorSelectionModeRef.current.sourceGeneratorId]);
+          }
+          return;
+        }
         setActiveItem(null);
         editor.clearSelection();
         return;
@@ -823,13 +1105,74 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     return selectedComponentId ? editor.isComponentEditing(selectedComponentId) : false;
   }, [editor, selectedComponentId]);
 
+  const handleStartGame = useCallback(() => {
+    if (!hasSpawnPoint || isTransitioning) return;
+    
+    setIsTransitioning(true);
+    
+    // Save current scenario
+    const scenario = editor.exportScenario(activeScenarioName);
+    console.log("[EditorRoot] Exported scenario:", scenario);
+    console.log("[EditorRoot] Scenario blocks:", scenario.blocks);
+    console.log("[EditorRoot] Number of blocks:", scenario.blocks.length);
+    saveScenario(activeScenarioName, scenario);
+    
+    // Switch to game and load the scenario
+    setGameScenario(scenario);
+    setIsGameActive(true);
+    
+    // Allow transitions after a delay
+    setTimeout(() => setIsTransitioning(false), 1000);
+  }, [activeScenarioName, editor, hasSpawnPoint, isTransitioning]);
+
+  const handleStopGame = useCallback(() => {
+    if (isTransitioning) return;
+    
+    setIsTransitioning(true);
+    setGameScenario(null);
+    setIsGameActive(false);
+    
+    // Allow transitions after a delay
+    setTimeout(() => setIsTransitioning(false), 500);
+  }, [isTransitioning]);
+
+  // Hide editor canvas when in game mode
+  useEffect(() => {
+    const editorCanvas = document.getElementById("editor-canvas");
+    if (editorCanvas instanceof HTMLCanvasElement) {
+      if (isGameActive) {
+        editorCanvas.style.display = "none";
+        editorCanvas.style.pointerEvents = "none";
+        // Disable editor controls to prevent camera movement
+        if (editor) {
+          editor.disableControls();
+        }
+      } else {
+        editorCanvas.style.display = "block";
+        editorCanvas.style.pointerEvents = "auto";
+        // Re-enable editor controls when returning from game
+        if (editor) {
+          editor.enableControls();
+        }
+      }
+    }
+  }, [isGameActive, editor]);
+
   return (
     <>
-      <div className={`absolute inset-0 z-50 flex flex-col text-rb-text`}>
-        <header className={`relative z-50 flex h-14 items-center justify-between border-b border-rb-border bg-white px-6 outline outline-3 outline-rb-border pointer-events-auto`}>
+      <div className="absolute inset-0 flex flex-col text-[#cccccc]">
+        {/* Header - Hidden during play mode */}
+        {!isGameActive && (
+          <header className="relative z-50 flex h-12 items-center justify-between border-b border-[#1a1a1a] bg-[#323232] px-4 pointer-events-auto">
         <div className="flex items-center gap-6">
-          <div className="text-xs uppercase tracking-widest text-rb-muted">World Builder</div>
-          <nav className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-rb-muted">
+          <Image
+            src="/logo.png"
+            alt="Redblock logo"
+            width={498}
+            height={410}
+            className="h-8 w-auto"
+          />
+          <nav className="flex items-center gap-0.5 text-[11px] text-[#cccccc]">
             {menuGroups.map((menu) => (
               <div key={menu.id} className="relative">
                 <button
@@ -837,8 +1180,10 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
                     menuAnchors.current[menu.id] = node;
                   }}
                   type="button"
-                  className={`rounded px-3 py-1 transition ${
-                    openMenuId === menu.id ? "bg-black text-white" : "text-rb-muted hover:text-rb-text"
+                  className={`rounded px-3 py-1.5 text-[11px] transition ${
+                    openMenuId === menu.id
+                      ? "bg-[#4772b3] text-white"
+                      : "text-[#cccccc] hover:bg-[#404040]"
                   }`}
                   onClick={() => {
                     if (openMenuId === menu.id) {
@@ -855,19 +1200,56 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             ))}
           </nav>
         </div>
-        <div className="flex flex-col items-end text-right">
-          <div className="text-xs text-rb-muted">
-            Scenario: <span className="font-semibold text-rb-text">{activeScenarioName}</span>
-            {hasUnsavedChanges ? <span className="ml-1 text-rb-text">*</span> : null}
+        <div className="flex items-center gap-4">
+          <AlertIcon alerts={alerts} />
+          {!isGameActive ? (
+            <button
+              onClick={handleStartGame}
+              disabled={!hasSpawnPoint || isTransitioning}
+              className={`flex h-8 items-center gap-2 rounded border border-[#1a1a1a] px-4 text-[11px] transition ${
+                hasSpawnPoint && !isTransitioning
+                  ? "bg-[#4772b3] text-white hover:bg-[#5a8fd6]"
+                  : "bg-[#2b2b2b] text-[#666666] cursor-not-allowed"
+              }`}
+              title={!hasSpawnPoint ? "Add a Spawn Point to start the game" : isTransitioning ? "Loading..." : "Start the game"}
+            >
+              <FaPlay className="text-sm" />
+              {isTransitioning ? "Loading..." : "Play"}
+            </button>
+          ) : (
+            <button
+              onClick={handleStopGame}
+              disabled={isTransitioning}
+              className={`flex h-8 items-center gap-2 rounded border border-[#1a1a1a] px-4 text-[11px] text-white transition ${
+                isTransitioning
+                  ? "bg-[#2b2b2b] cursor-not-allowed"
+                  : "bg-[#ef4444] hover:bg-[#dc2626]"
+              }`}
+              title={isTransitioning ? "Loading..." : "Stop the game"}
+            >
+              <FaStop className="text-sm" />
+              {isTransitioning ? "Loading..." : "Stop"}
+            </button>
+          )}
+          <div className="flex flex-col items-end text-right">
+            <div className="text-[11px] text-[#999999]">
+              Scenario:{" "}
+              <span className="text-[11px] text-[#cccccc]">
+                {activeScenarioName}
+              </span>
+              {hasUnsavedChanges ? <span className="ml-1 text-[#cccccc]">*</span> : null}
+            </div>
+            <div className="text-[12px] font-medium text-[#cccccc]">{title}</div>
           </div>
-          <div className="text-sm font-semibold text-rb-text">{title}</div>
         </div>
         </header>
+        )}
+        
         {openMenuId && activeMenu && menuPosition ? (
           <Portal>
             <div className="fixed inset-0 z-[900]" onMouseDown={closeMenus}>
               <div
-                className="absolute min-w-[160px] rounded border border-rb-border bg-white shadow-lg"
+                className="absolute min-w-[180px] overflow-hidden rounded border border-[#1a1a1a] bg-[#323232] shadow-lg"
                 style={{ left: menuPosition.left, top: menuPosition.top, minWidth: Math.max(menuPosition.width, 160) }}
                 onMouseDown={(event) => event.stopPropagation()}
               >
@@ -877,8 +1259,10 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
                     <button
                       key={item.id}
                       type="button"
-                      className={`block w-full px-4 py-2 text-left text-[11px] uppercase tracking-[0.3em] transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                        disabled ? "text-rb-muted" : "text-rb-muted hover:bg-black hover:text-white"
+                      className={`block w-full px-3 py-1.5 text-left text-[11px] transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                        disabled
+                          ? "text-[#666666]"
+                          : "text-[#cccccc] hover:bg-[#4772b3] hover:text-white"
                       }`}
                       onClick={() => {
                         if (disabled) {
@@ -897,22 +1281,34 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             </div>
           </Portal>
         ) : null}
-        <div className="flex flex-1 overflow-hidden ">
-        <aside className={`relative z-50 flex w-64 flex-col border-r border-rb-border bg-rb-panel p-4 outline outline-3 outline-rb-border pointer-events-auto overflow-auto`}>
-          <div className="mb-4 text-xs uppercase text-rb-muted">Components</div>
-          <ItemMenu
-            items={items}
-            activeItem={activeItem}
-            onItemSelect={setActiveItem}
-            onItemDragStart={(itemId) => {
-              const item = items.find((entry) => entry.id === itemId) ?? null;
-              setActiveItem(item);
-            }}
-          />
+        
+        {/* Editor Content */}
+        <div className="relative flex flex-1 gap-2 overflow-hidden px-2 pb-2 pt-2">
+              {showSidebar && (
+                <aside className="relative z-10 flex w-64 flex-col rounded border border-[#1a1a1a] bg-[#383838] pointer-events-auto overflow-auto">
+          <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2 border-b border-[#1a1a1a]">
+            <div className="text-[11px] text-[#999999] font-medium">Components</div>
+            <CategoryFilter
+              selectedCategories={selectedCategories}
+              onToggleCategory={handleToggleCategory}
+            />
+          </div>
+          <div className="flex-1 overflow-auto px-3 pb-3 pt-2">
+            <ItemMenu
+              items={filteredItems}
+              activeItem={activeItem}
+              onItemSelect={setActiveItem}
+              onItemDragStart={(itemId) => {
+                const item = filteredItems.find((entry) => entry.id === itemId) ?? null;
+                setActiveItem(item);
+              }}
+              disabledItems={hasSpawnPoint ? ["spawn"] : []}
+            />
+          </div>
           {activeItem && activeItem.id.startsWith("component:") ? (
-            <div className="mt-4 flex flex-col gap-2">
+            <div className="border-t border-[#1a1a1a] px-3 py-2">
               <button
-                className="h-9 rounded border border-rb-border bg-white px-3 text-xs font-semibold uppercase tracking-widest text-rb-text hover:bg-black hover:text-white"
+                className="w-full h-7 rounded border border-[#1a1a1a] bg-[#ef4444] text-[11px] text-white transition hover:bg-[#dc2626]"
                 onClick={() => {
                   const id = activeItem.id.slice("component:".length);
                   const def = components.find((entry) => entry.id === id);
@@ -924,35 +1320,57 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             </div>
           ) : null}
         </aside>
+              )}
         <main className="pointer-events-none relative flex-1">
           <div className="pointer-events-none absolute inset-0">
-            <div className="absolute left-6 top-6 flex flex-col gap-1 rounded border border-rb-border bg-white/80 px-3 py-2 text-xs text-rb-muted shadow-sm outline outline-3 outline-rb-border">
-              <span>Orbit with right click · Pan with Shift + right click · Zoom with scroll</span>
-              <span>Select with left click · Move (G) · Rotate (R) · Scale (F) · constrain with X / Y / Z</span>
-              <span>Move camera with WASD</span>
-              {transformLabel ? (
-                <span className="mt-1 rounded border border-rb-border bg-rb-panel px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-rb-muted outline outline-3 outline-rb-border">
-                  {transformLabel}
+            {showControls && (
+              <div className="absolute left-4 top-4 flex max-w-md flex-col gap-1.5 rounded border border-[#1a1a1a] bg-[#323232]/95 px-3 py-2.5 text-[11px] text-[#cccccc]">
+                {/* Cruz blanca en la esquina superior */}
+                <button 
+                  className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center hover:bg-[#404040] rounded transition-colors pointer-events-auto"
+                  onClick={() => setShowControls(false)}
+                  title="Cerrar controles"
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-white">
+                    <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </button>
+                <span className="text-[10px] text-[#999999] mb-0.5">
+                  Controls
                 </span>
-              ) : null}
-            </div>
+                <span className="leading-relaxed text-[10px]">
+                  Orbit with right click · Pan with Shift + right click · Zoom with scroll
+                </span>
+                <span className="leading-relaxed text-[10px]">
+                  Select with left click · Move (G) · Rotate (R) · Scale (F) · constrain with X / Y / Z
+                </span>
+                <span className="leading-relaxed text-[10px]">Move camera with WASD</span>
+                <span className="leading-relaxed text-[10px]">Toggle Components (B) · Toggle Inspector (I) · Toggle Controls (C)</span>
+                {transformLabel ? (
+                  <span className="mt-1 w-fit rounded border border-[#1a1a1a] bg-[#4772b3] px-2.5 py-1 text-[10px] text-white">
+                    {transformLabel}
+                  </span>
+                ) : null}
+              </div>
+            )}
             {activeItem ? (
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded border border-rb-border bg-white/90 px-4 py-2 text-xs text-rb-muted outline outline-3 outline-rb-border">
+              <div className="absolute bottom-4 left-1/2 w-max -translate-x-1/2 rounded border border-[#1a1a1a] bg-[#323232]/95 px-4 py-2 text-[11px] text-[#cccccc]">
                 Drag the {activeItem.label.toLowerCase()} from the components panel onto the canvas to place it
               </div>
             ) : null}
             {editingActive ? (
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded border border-rb-border bg-black/80 px-4 py-2 text-xs font-semibold text-white outline outline-3 outline-rb-border z-20">
+              <div className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 rounded border border-[#1a1a1a] bg-[#4772b3] px-4 py-2 text-[11px] text-white">
                 Press Enter to finish editing the component
               </div>
             ) : null}
           </div>
         </main>
-        <aside
-          className={`relative z-50 w-72 border-l border-rb-border bg-rb-panel p-4 transition-opacity outline outline-3 outline-rb-border overflow-auto ${
-            inspectorVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-40"
-          }`}
-        >
+        {showInspector && (
+          <aside
+            className={`relative z-10 w-72 rounded border border-[#1a1a1a] bg-[#383838] p-3 transition-opacity overflow-auto ${
+              inspectorVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-40"
+            }`}
+          >
           <PropertiesPanel
             selection={selection}
             positionState={positionState}
@@ -1015,16 +1433,65 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             } : undefined}
             componentEditing={isEditingComponent}
             onDeleteSelection={deleteSelection}
+            onRenameSelection={renameSelection}
+            onGeneratorConfigChange={(blockId, config) => {
+              editor.updateGeneratorConfig(blockId, config);
+              markUnsaved();
+              // Force re-render by creating new selection object reference
+              const currentSelection = editor.getSelection();
+              if (currentSelection) {
+                // Create a shallow copy to force React to detect the change
+                setSelection({ ...currentSelection });
+              }
+            }}
+            onRequestGeneratorSelection={(eventId) => {
+              console.log('[EditorRoot] onRequestGeneratorSelection called with eventId:', eventId);
+              console.log('[EditorRoot] Current selection:', selection);
+              // Enter generator selection mode
+              if (selection && !Array.isArray(selection)) {
+                console.log('[EditorRoot] Entering generator selection mode');
+                setGeneratorSelectionMode({
+                  active: true,
+                  eventId,
+                  sourceGeneratorId: selection.id,
+                });
+                // Show visual feedback
+                editor.alerts.publish(
+                  `gen-select-${Date.now()}`,
+                  "info",
+                  "Click on a Target Generator to link it"
+                );
+                console.log('[EditorRoot] Alert published');
+                // Auto-clear after 5 seconds
+                setTimeout(() => {
+                  editor.alerts.clearAll();
+                }, 5000);
+              } else {
+                console.warn('[EditorRoot] Cannot enter selection mode - no valid selection');
+              }
+            }}
+            setTyping={setTyping}
           />
         </aside>
+        )}
+        </div>
+
+        {/* Game Overlay - Full screen */}
+        <div className={`absolute inset-0 z-40 pointer-events-auto ${!isGameActive ? 'hidden' : ''}`}>
+          <GameTab 
+            scenario={gameScenario} 
+            isActive={isGameActive} 
+            onStop={handleStopGame} 
+          />
+        </div>
       </div>
-    </div>
     <ScenarioModal
       open={isScenarioModalOpen}
       scenarios={scenarioRecords}
       onClose={() => setIsScenarioModalOpen(false)}
       onSelectScenario={handleSelectScenario}
       onDeleteScenario={handleDeleteScenario}
+      onDownloadScenario={handleDownloadScenario}
       onImportFiles={handleImportScenarioFiles}
     />
     <ComponentDeleteModal

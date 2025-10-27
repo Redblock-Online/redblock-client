@@ -2,6 +2,7 @@ import { PerspectiveCamera, Vector3 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 
 export class MovementController {
+  private enabled = true;
   private readonly state = {
     forward: false,
     back: false,
@@ -20,6 +21,11 @@ export class MovementController {
   ) {}
 
   public handleKeyChange(event: KeyboardEvent): boolean {
+    // Ignore all key events when disabled (e.g., during game preview)
+    if (!this.enabled) {
+      return false;
+    }
+    
     const target = event.target as HTMLElement | null;
     if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
       return false;
@@ -71,9 +77,19 @@ export class MovementController {
     this.state.left = false;
     this.state.right = false;
   }
+  
+  public disable(): void {
+    this.enabled = false;
+    this.clearState();
+  }
+  
+  public enable(): void {
+    this.enabled = true;
+  }
 
   public update(deltaSeconds: number): void {
-    if (deltaSeconds <= 0) {
+    // Don't update when disabled
+    if (!this.enabled || deltaSeconds <= 0) {
       return;
     }
 
@@ -82,17 +98,17 @@ export class MovementController {
       return;
     }
 
+    // Get camera's forward direction (includes vertical component for free-look movement)
     this.camera.getWorldDirection(this.forward);
-    this.forward.y = 0;
-    if (this.forward.lengthSq() === 0) {
-      return;
-    }
     this.forward.normalize();
 
+    // Calculate right vector perpendicular to camera forward and world up
     this.right.crossVectors(this.forward, this.worldUp);
-    this.right.y = 0;
     if (this.right.lengthSq() > 0) {
       this.right.normalize();
+    } else {
+      // Fallback when looking straight up/down
+      this.right.set(1, 0, 0);
     }
 
     this.offset.set(0, 0, 0);

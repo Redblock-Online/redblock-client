@@ -1,4 +1,7 @@
+import Image from "next/image";
 import type { ReactElement } from "react";
+import { AlertIcon } from "./AlertIcon";
+import type { Alert } from "../core/AlertManager";
 
 interface MenuGroup {
   id: string;
@@ -15,6 +18,7 @@ interface EditorHeaderProps {
   menuAnchors: React.MutableRefObject<Record<string, HTMLButtonElement | null>>;
   onMenuClick: (menuId: string) => void;
   closeMenus: () => void;
+  alerts: Alert[];
 }
 
 export function EditorHeader({
@@ -26,12 +30,19 @@ export function EditorHeader({
   menuAnchors,
   onMenuClick,
   closeMenus,
+  alerts,
 }: EditorHeaderProps): ReactElement {
   return (
-    <header className="relative z-50 flex h-14 items-center justify-between border-b border-rb-border bg-white px-6 outline outline-3 outline-rb-border pointer-events-auto">
+    <header className="relative z-50 flex h-12 items-center justify-between border-b border-[#1a1a1a] bg-[#323232] px-4 pointer-events-auto">
       <div className="flex items-center gap-6">
-        <div className="text-xs uppercase tracking-widest text-rb-muted">World Builder</div>
-        <nav className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-rb-muted">
+        <Image
+          src="/logo.png"
+          alt="Redblock logo"
+          width={498}
+          height={410}
+          className="h-8 w-auto"
+        />
+        <nav className="flex items-center gap-0.5 text-[11px] text-[#cccccc]">
           {menuGroups.map((menu) => (
             <div key={menu.id} className="relative">
               <button
@@ -39,8 +50,10 @@ export function EditorHeader({
                   menuAnchors.current[menu.id] = node;
                 }}
                 type="button"
-                className={`rounded px-3 py-1 transition ${
-                  openMenuId === menu.id ? "bg-black text-white" : "text-rb-muted hover:text-rb-text"
+                className={`rounded px-3 py-1.5 text-[11px] transition ${
+                  openMenuId === menu.id
+                    ? "bg-[#4772b3] text-white"
+                    : "text-[#cccccc] hover:bg-[#404040]"
                 }`}
                 onClick={() => {
                   if (openMenuId === menu.id) {
@@ -56,12 +69,20 @@ export function EditorHeader({
           ))}
         </nav>
       </div>
-      <div className="flex flex-col items-end text-right">
-        <div className="text-xs text-rb-muted">
-          Scenario: <span className="font-semibold text-rb-text">{activeScenarioName}</span>
-          {hasUnsavedChanges ? <span className="ml-1 text-rb-text">*</span> : null}
+      <div className="flex items-center gap-4">
+        <AlertIcon alerts={alerts} />
+        <div className="flex flex-col items-end text-right">
+          <div className="text-[11px] text-[#999999]">
+            Scenario:{" "}
+            <span className="text-[11px] text-[#cccccc]">
+              {activeScenarioName}
+            </span>
+            {hasUnsavedChanges ? <span className="ml-1 text-[#cccccc]">*</span> : null}
+          </div>
+          <div className="text-[12px] font-medium text-[#cccccc]">
+            {title}
+          </div>
         </div>
-        <div className="text-sm font-semibold text-rb-text">{title}</div>
       </div>
     </header>
   );

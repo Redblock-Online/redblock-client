@@ -1,81 +1,325 @@
-**Redblock Client — Agents Guide**
+# Agent Instructions for Documentation
 
-This document helps contributors and AI agents work effectively in this repo. It reflects current tooling and conventions used by the Three.js + Next.js + React TypeScript client.
+This file contains instructions for AI agents to properly document the Redblock project.
 
-**Project Overview**
-- **Stack:** Next.js (App Router), TypeScript (strict), Three.js, React UI.
-- **Entrypoints:** `app/page.tsx` (game), `app/editor/page.tsx` (editor), bootstrappers in `src/next/`.
-- **Aliases:** `@/*` → `src/*` (see `tsconfig.json:paths`).
-- **Scripts:** `npm run dev`, `npm run build`, `npm start` (see `package.json`).
+## Documentation Guidelines
 
-**Run Commands**
-- **Install:** `npm install`
-- **Dev server:** `npm run dev` (serves on `localhost:3000` by default)
-- **Build:** `npm run build` (Next.js production build)
-- **Preview build:** `npm start`
+### 1. Documentation Location
 
-**Dev Environment**
-- **Node:** Use a recent LTS (≥ 23). Prefer `nvm` to match local dev.
-- **Editor:** Enable TypeScript strict checks. Respect path alias `@/*`.
-- **Next.js:** App Router + React 19 client components. Use client-only modules for DOM APIs.
-- **Env vars:** `NEXT_PUBLIC_WS_SERVER` overrides the default WebSocket URL in `src/utils/ws/WSManager.ts`.
+All documentation should be added to `/documentation/docs/` following this structure:
 
-**Codebase Map**
-- `src/core/` — engine wrappers (`Camera`, `Renderer`, `Loop`, `App`).
-- `src/scenes/` — Three.js scenes (game world and neighbors interpolation).
-- `src/systems/` — movement/controls and related logic.
-- `src/objects/` — 3D entities (`Cube`, `Pistol`, generators).
-- `src/ui/react/` — React UI (Start screen, Timer, hints, badges) mounted at `#ui-root`.
-- `public/` — static assets (images, icons, models).
+```
+documentation/docs/
+├── intro.md                    # Project introduction
+├── architecture/
+│   └── overview.md            # System architecture
+├── core-concepts/
+│   ├── app.md                 # App class documentation
+│   ├── editor-app.md          # EditorApp class documentation
+│   └── game-loop.md           # Game loop and lifecycle
+├── systems/
+│   ├── physics.md             # Physics system
+│   ├── audio.md               # Audio system
+│   ├── target-manager.md      # Target management
+│   └── networking.md          # WebSocket/multiplayer
+├── editor/
+│   ├── getting-started.md     # Editor basics
+│   ├── generators.md          # Target generators
+│   ├── events.md              # Event system
+│   └── components.md          # Component system
+├── api/
+│   ├── app.md                 # App API reference
+│   ├── editor-app.md          # EditorApp API reference
+│   ├── physics-system.md      # PhysicsSystem API
+│   ├── audio-manager.md       # AudioManager API
+│   └── target-manager.md      # TargetManager API
+└── performance/
+    ├── optimization.md        # Performance optimization
+    └── best-practices.md      # Best practices
+```
 
-**Conventions**
-- **TypeScript:** keep types explicit; avoid `any`. Strict mode is on.
-- **Imports:** prefer `@/...` absolute paths over deep relatives.
-- **UI:** React components own DOM; game logic should not query UI nodes directly. Use the `UIController` bridge in `src/ui/react/mountUI.tsx`.
-- **Pointer lock:** only request on canvas clicks (see `src/core/App.ts`).
-- **Sensitivity:** read from `localStorage` and react to `#sensitivityRange` updates (delegated input listener in controls).
-- **Networking:** WS throttled to ~20Hz; see `src/utils/ws/WSManager.ts` and `ControlsWithMovement.checkChanges()`.
+### 2. Documentation Format
 
-**React UI Architecture**
-- Root is mounted in `#ui-root`; see `src/ui/react/mountUI.tsx` and `src/ui/react/UIRoot.tsx`.
-- The game calls `app.startGame(level)` via the UI `onStart` callback.
-- The timer is a React component exposing `start/stop/reset` through `UIController.timer`.
+Use Markdown with the following frontmatter:
 
-**Performance Tips**
-- Limit allocations in the render loop; reuse vectors and raycasters.
-- Keep network updates quantized and thresholded; don’t lower rate caps casually.
-- When modifying post-processing, ensure pass order remains: Render → Outline → FXAA (`src/core/Renderer.ts`).
+```markdown
+---
+sidebar_position: 1
+title: Document Title
+---
 
-**Testing**
-- No test suite is configured yet. If you add tests, prefer Vitest.
-- Suggested setup: `npm i -D vitest @testing-library/react @testing-library/user-event jsdom` and wire a custom Next-compatible `vitest.config.ts`.
-- Keep unit tests close to the code under `src/**/__tests__`.
+# Document Title
 
-**Linting & Formatting**
-- ESLint is configured via `next lint`. If you introduce Prettier, scope changes to config + minimal autofix; avoid large reformat-only PRs.
+Brief introduction paragraph.
 
-**PR Guidelines**
-- **Title:** `[client] <short, imperative title>`
-- **Diff hygiene:** keep PRs focused; avoid unrelated refactors.
-- **Checks:** ensure type-check (`tsc --noEmit`) is clean and app runs.
-- **Describe:** include rationale, screenshots (UI), and notes on performance/network impacts.
+## Section 1
 
-**Agent Workflow**
-- **Plan:** outline 2–6 concrete steps before large changes.
-- **Search:** prefer `rg` to find files/symbols; open files in ≤250-line chunks.
-- **Edit:** use patch-based edits; keep changes minimal and aligned with the style.
-- **Validate:** run locally if possible; for non-interactive tasks, add small sanity checks.
-- **Coordinate:** if a change touches both React UI and game logic, define the interface (callbacks/bridges) first.
+Content...
 
-**Common Tasks**
-- **Add UI component:** create under `src/ui/react/...`, export from an index if shared, mount via `UIRoot`.
-- **Hook game to UI:** extend `UIController` in `src/ui/react/mountUI.tsx` and call from `src/core/App.ts`.
-- **New scene/system:** prefer small classes in `src/scenes/` or `src/systems/`, injected via `App`/`Loop`.
-- **Assets:** place in `public/` and reference by relative URL.
+## Section 2
 
-**Troubleshooting**
-- Pointer lock grabs outside canvas: ensure listeners are bound to `canvas` only or some buttons in the ui (see `App` constructor).
-- Sensitivity not applying: confirm `localStorage.mouseSensitivity` and `input` event reaches document.
-- Neighbors stutter: check WS rate/throttling and interpolation in `MainScene.update()`.
+Content...
+```
 
-For any larger changes, propose the interface first (short plan), then implement in small, verifiable steps.
+### 3. Code Documentation Standards
+
+#### Class Documentation
+
+```typescript
+/**
+ * Brief description of the class.
+ * 
+ * @example
+ * ```typescript
+ * const app = new App(ui, { disableServer: true });
+ * app.start();
+ * ```
+ * 
+ * @remarks
+ * Additional context or important notes.
+ */
+export class ClassName {
+  /**
+   * Description of the property.
+   * 
+   * @default defaultValue
+   */
+  public propertyName: Type;
+
+  /**
+   * Description of the method.
+   * 
+   * @param paramName - Description of parameter
+   * @returns Description of return value
+   * 
+   * @throws {ErrorType} When error occurs
+   * 
+   * @example
+   * ```typescript
+   * instance.methodName(value);
+   * ```
+   */
+  public methodName(paramName: Type): ReturnType {
+    // Implementation
+  }
+}
+```
+
+#### Function Documentation
+
+```typescript
+/**
+ * Brief description of the function.
+ * 
+ * @param param1 - Description of first parameter
+ * @param param2 - Description of second parameter
+ * @returns Description of return value
+ * 
+ * @example
+ * ```typescript
+ * const result = functionName(value1, value2);
+ * ```
+ */
+export function functionName(param1: Type1, param2: Type2): ReturnType {
+  // Implementation
+}
+```
+
+### 4. Documentation Sections to Include
+
+For each major class or system, document:
+
+1. **Overview**: What it does and why it exists
+2. **Architecture**: How it fits into the system
+3. **Key Concepts**: Important concepts to understand
+4. **API Reference**: All public methods and properties
+5. **Examples**: Common use cases with code
+6. **Best Practices**: How to use it effectively
+7. **Performance**: Performance considerations
+8. **Troubleshooting**: Common issues and solutions
+
+### 5. Specific Documentation Tasks
+
+#### Core Systems
+
+- **App.ts**: Document game lifecycle, initialization, and main loop
+- **EditorApp.ts**: Document editor functionality and scenario management
+- **PhysicsSystem.ts**: Document collision detection and character controller
+- **AudioManager.ts**: Document multi-channel audio and spatial sound
+- **TargetManager.ts**: Document object pooling and target lifecycle
+
+#### Editor Systems
+
+- **Target Generators**: Document RandomStaticGenerator and event system
+- **Block System**: Document block placement and manipulation
+- **Component System**: Document component creation and usage
+- **Scenario System**: Document import/export and storage
+
+#### UI Components
+
+- **EditorRoot**: Document editor UI structure
+- **PropertiesPanel**: Document property editing
+- **GeneratorConfigPanel**: Document generator configuration
+- **EventConfigPanel**: Document event configuration
+
+### 6. Documentation Update Workflow
+
+When making changes to code:
+
+1. **Update JSDoc comments** in the source code
+2. **Update relevant .md files** in `/documentation/docs/`
+3. **Add examples** if introducing new features
+4. **Update API reference** if changing public APIs
+5. **Add migration guides** if breaking changes
+
+### 7. Running Documentation
+
+To preview documentation locally:
+
+```bash
+cd documentation
+npm start
+```
+
+To build documentation:
+
+```bash
+cd documentation
+npm run build
+```
+
+### 8. Documentation Style Guide
+
+#### Writing Style
+
+- Use **present tense**: "The system manages..." not "The system will manage..."
+- Use **active voice**: "The App initializes..." not "The App is initialized..."
+- Be **concise**: Remove unnecessary words
+- Be **specific**: Use exact names and values
+- Use **code examples**: Show, don't just tell
+
+#### Code Examples
+
+- Always include **working code** that can be copy-pasted
+- Add **comments** to explain non-obvious parts
+- Show **common use cases** first
+- Include **error handling** when relevant
+
+#### Diagrams
+
+Use Mermaid for diagrams:
+
+```markdown
+\`\`\`mermaid
+graph TD
+    A[User Input] --> B[Controls]
+    B --> C[App]
+    C --> D[Physics System]
+    D --> E[Renderer]
+\`\`\`
+```
+
+### 9. Priority Documentation Areas
+
+High priority (document first):
+
+1. **App.ts** - Core game class
+2. **EditorApp.ts** - Core editor class
+3. **PhysicsSystem.ts** - Physics engine
+4. **AudioManager.ts** - Audio system
+5. **TargetManager.ts** - Target management
+6. **Generator System** - Target generators and events
+
+Medium priority:
+
+1. **UI Components** - React components
+2. **Utility Functions** - Helper functions
+3. **Configuration** - Config files
+
+Low priority:
+
+1. **Internal helpers** - Private utility functions
+2. **Legacy code** - Deprecated features
+
+### 10. Examples of Good Documentation
+
+See these files for examples:
+
+- `/documentation/docs/intro.md` - Good introduction
+- `/documentation/docs/architecture/overview.md` - Good architecture doc
+- `/docs/AUDIO_SYSTEM.md` - Good technical documentation (migrate to Docusaurus)
+
+### 11. Automated Documentation
+
+Consider using:
+
+- **TypeDoc** for API reference generation
+- **Storybook** for UI component documentation
+- **JSDoc** for inline code documentation
+
+### 12. Documentation Checklist
+
+Before considering documentation complete:
+
+- [ ] All public APIs are documented
+- [ ] All major systems have overview docs
+- [ ] Code examples are tested and working
+- [ ] Diagrams are clear and accurate
+- [ ] Links between docs are working
+- [ ] Sidebar navigation is logical
+- [ ] Search works for key terms
+- [ ] Mobile view is readable
+
+## Agent-Specific Instructions
+
+### When Adding New Features
+
+1. Add JSDoc comments to all new public APIs
+2. Create or update relevant documentation page
+3. Add code examples
+4. Update architecture diagrams if needed
+5. Add to API reference
+
+### When Fixing Bugs
+
+1. Update documentation if behavior changed
+2. Add troubleshooting section if common issue
+3. Update examples if they were incorrect
+
+### When Refactoring
+
+1. Update all affected documentation
+2. Add migration guide if breaking changes
+3. Update architecture diagrams
+4. Deprecate old documentation
+
+### When Reviewing Code
+
+1. Check that JSDoc comments exist
+2. Verify documentation is accurate
+3. Ensure examples work
+4. Check for broken links
+
+## Documentation Maintenance
+
+### Regular Tasks
+
+- **Weekly**: Review and update outdated docs
+- **Monthly**: Check for broken links
+- **Per Release**: Update version-specific docs
+- **Per Major Release**: Update migration guides
+
+### Quality Metrics
+
+- All public APIs have JSDoc comments
+- All major systems have overview docs
+- All features have examples
+- Documentation builds without errors
+- No broken internal links
+
+## Resources
+
+- [Docusaurus Documentation](https://docusaurus.io/docs)
+- [JSDoc Documentation](https://jsdoc.app/)
+- [TypeDoc Documentation](https://typedoc.org/)
+- [Markdown Guide](https://www.markdownguide.org/)

@@ -33,6 +33,7 @@ const isEditorRoute =
   ui = mountUI({
     onStart: (scenarioId: string) => app!.startGame(scenarioId),
     onPauseChange: (paused: boolean) => app!.setPaused(paused),
+    onExit: () => app!.stopMusic(),
   });
 
   app.attachUI(ui);

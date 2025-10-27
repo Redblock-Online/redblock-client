@@ -11,6 +11,7 @@ export default class Cube extends THREE.Group {
   public scenarioPortal: "next" | "prev" | null;
   public cubeMesh: THREE.Mesh;
   public outlineMesh: THREE.Mesh;
+  private activeTweens: gsap.core.Tween[] = [];
   constructor(
     randomColor: boolean = false,
     isTarget: boolean = false,
@@ -20,9 +21,14 @@ export default class Cube extends THREE.Group {
     super();
 
     const geometry = new THREE.BoxGeometry(1, 1, 1);
+    // Mejorar la geometría para evitar problemas de renderizado
+    geometry.computeVertexNormals();
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
 
-    const material = new THREE.MeshToonMaterial({
+    const material = new THREE.MeshBasicMaterial({
       color: randomColor ? Math.random() * 0xffffff : 0xffffff,
+      side: THREE.DoubleSide
     });
     material.transparent = true;
     this.cubeMesh = new THREE.Mesh(geometry, material);
@@ -61,7 +67,7 @@ export default class Cube extends THREE.Group {
     this.layers.enable(1);
 
     const cubeMaterial = this.cubeMesh
-      .material as THREE.MeshToonMaterial | THREE.MeshBasicMaterial;
+      .material as THREE.MeshBasicMaterial;
     cubeMaterial.color.set(color);
   }
 
@@ -72,27 +78,33 @@ export default class Cube extends THREE.Group {
     this.shootable = false;
     this.shootableActivatedAt = null;
 
+    // Kill any existing tweens
+    this.activeTweens.forEach(t => t.kill());
+    this.activeTweens = [];
+
     const cubeMaterial = this.cubeMesh.material as THREE.Material;
     const outlineMaterial = this.outlineMesh.material as THREE.Material;
-    gsap.to(cubeMaterial, {
+    
+    this.activeTweens.push(gsap.to(cubeMaterial, {
       opacity: 0,
       duration,
       ease: "power3.in",
-    });
-    gsap.to(outlineMaterial, {
+    }));
+    
+    this.activeTweens.push(gsap.to(outlineMaterial, {
       opacity: 0,
       duration,
       ease: "power3.in",
-    });
+    }));
 
-    gsap.to(this.rotation, {
+    this.activeTweens.push(gsap.to(this.rotation, {
       x: Math.PI * 4,
       y: Math.PI * 8,
       duration,
       ease: "power3.in",
-    });
+    }));
 
-    gsap.to(this.scale, {
+    this.activeTweens.push(gsap.to(this.scale, {
       x: 0,
       y: 0,
       z: 0,
@@ -101,9 +113,13 @@ export default class Cube extends THREE.Group {
       onComplete: () => {
         this.visible = false;
         this.animating = false;
+        
+        // Don't remove from scene - cubes are reused
+        // Just mark as invisible so they can appear again
+        
         if (callback) callback();
       },
-    });
+    }));
   }
   public appearFromVoid(callback?: () => void) {
     if (this.animating) return;
@@ -113,30 +129,35 @@ export default class Cube extends THREE.Group {
     this.scale.set(0, 0, 0);
     this.rotation.set(Math.PI * 2, Math.PI * 4, 0);
 
+    // Kill any existing tweens
+    this.activeTweens.forEach(t => t.kill());
+    this.activeTweens = [];
+
     const cubeMaterial = this.cubeMesh.material as THREE.Material;
     const outlineMaterial = this.outlineMesh.material as THREE.Material;
     cubeMaterial.opacity = 0;
     outlineMaterial.opacity = 0;
 
-    gsap.to(cubeMaterial, {
+    this.activeTweens.push(gsap.to(cubeMaterial, {
       opacity: 1,
       duration,
       ease: "back.out(2)",
-    });
-    gsap.to(outlineMaterial, {
+    }));
+    
+    this.activeTweens.push(gsap.to(outlineMaterial, {
       opacity: 1,
       duration,
       ease: "back.out(2)",
-    });
+    }));
 
-    gsap.to(this.rotation, {
+    this.activeTweens.push(gsap.to(this.rotation, {
       x: 0,
       y: 0,
       duration,
       ease: "power2.out",
-    });
+    }));
 
-    gsap.to(this.scale, {
+    this.activeTweens.push(gsap.to(this.scale, {
       x: this.baseScale,
       y: this.baseScale,
       z: this.baseScale,
@@ -146,6 +167,6 @@ export default class Cube extends THREE.Group {
         this.animating = false;
         if (callback) callback();
       },
-    });
+    }));
   }
 }

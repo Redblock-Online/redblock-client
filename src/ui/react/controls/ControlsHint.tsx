@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 
 interface ControlsHintProps {
   started: boolean;
+  hudScale?: number;
 }
 
-export default function ControlsHint({ started }: ControlsHintProps) {
+export default function ControlsHint({ started, hudScale = 100 }: ControlsHintProps) {
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
@@ -30,6 +31,8 @@ export default function ControlsHint({ started }: ControlsHintProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  const scaleValue = hudScale / 100;
+
   return (
     <>
       <img
@@ -37,9 +40,13 @@ export default function ControlsHint({ started }: ControlsHintProps) {
         className={`absolute bottom-5 left-5 w-[300px] pointer-events-none select-none transition-opacity duration-1000 ${
           visible ? "opacity-100" : "opacity-0"
         }`}
+        style={{ transform: `scale(${scaleValue})`, transformOrigin: 'bottom left' }}
       />
       {started && !visible && (
-        <div className="absolute bottom-2 left-5  text-[10px] text-black pointer-events-none select-none  px-2 py-1 rounded">
+        <div 
+          className="absolute bottom-2 left-5 text-[10px] text-black pointer-events-none select-none px-2 py-1 rounded"
+          style={{ transform: `scale(${scaleValue})`, transformOrigin: 'bottom left' }}
+        >
           Press F1 to show controls
         </div>
       )}

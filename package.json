@@ -44,9 +44,11 @@
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.1",
     "gsap": "^3.13.0",
     "lil-gui": "^0.20.0",
     "next": "15.0.4",
+    "prism-react-renderer": "^2.4.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-icons": "^5.5.0",

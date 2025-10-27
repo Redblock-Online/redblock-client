@@ -34,9 +34,18 @@ export class EditorScenarioManager {
     const usedComponentIds = new Set<string>();
     const serializedBlocks: SerializedNode[] = [];
     
-    for (const block of this.blocks.getAllBlocks()) {
+    const allBlocks = this.blocks.getAllBlocks();
+    console.log(`[EditorScenarioManager] Exporting scenario with ${allBlocks.length} blocks`);
+    
+    for (const block of allBlocks) {
+      console.log(`[EditorScenarioManager] Processing block ${block.id}, isGenerator: ${block.mesh.userData.isGenerator}`);
       const node = this.serializer.serializeEditorBlock(block, usedComponentIds);
-      if (node) serializedBlocks.push(node);
+      if (node) {
+        serializedBlocks.push(node);
+        console.log(`[EditorScenarioManager] Block ${block.id} serialized successfully`);
+      } else {
+        console.warn(`[EditorScenarioManager] Block ${block.id} returned null from serializer`);
+      }
     }
 
     const definitions = loadComponents().filter((component) => usedComponentIds.has(component.id));

@@ -25,34 +25,65 @@ export class EditorSerializer {
   }
 
   public serializeEditorBlock(block: EditorBlock, usedComponents: Set<string>): SerializedNode | null {
+    console.log("[EditorSerializer] Serializing block - id:", block.id, "name:", block.name);
     const componentId = this.components.getComponentIdForBlock(block);
     if (componentId) {
       usedComponents.add(componentId);
-      return {
-        type: "component",
+      const node = {
+        type: "component" as const,
         componentId,
         transform: this.toSerializedTransform(block.mesh, "world"),
+        ...(block.name && { name: block.name }),
       };
+      console.log("[EditorSerializer] Component node:", node);
+      return node;
     }
 
     if (block.mesh instanceof Group) {
+      // Check if this group is actually a generator (shouldn't be, but check anyway)
+      const isGenerator = block.mesh.userData.isGenerator === true;
+      
+      if (isGenerator) {
+        console.warn("[EditorSerializer] Generator is a Group, should be Mesh!", block.id);
+      }
+      
       const children: SerializedNode[] = [];
       for (const child of block.mesh.children) {
         const serializedChild = this.serializeObject(child, usedComponents, "local");
         if (serializedChild) children.push(serializedChild);
       }
-      return {
-        type: "group",
+      const node = {
+        type: "group" as const,
         transform: this.toSerializedTransform(block.mesh, "world"),
         children,
+        ...(block.name && { name: block.name }),
       };
+      console.log("[EditorSerializer] Group node:", node);
+      return node;
     }
 
     if (block.mesh instanceof Mesh) {
-      return {
-        type: "block",
+      const isSpawnPoint = block.mesh.userData.isSpawnPoint === true;
+      const isGenerator = block.mesh.userData.isGenerator === true;
+      
+      console.log(`[EditorSerializer] Serializing Mesh block ${block.id}:`, {
+        isSpawnPoint,
+        isGenerator,
+        hasGeneratorConfig: !!block.generatorConfig,
+        generatorConfig: block.generatorConfig,
+        userData: block.mesh.userData
+      });
+      
+      const node = {
+        type: "block" as const,
         transform: this.toSerializedTransform(block.mesh, "world"),
+        ...(block.name && { name: block.name }),
+        ...(isSpawnPoint && { isSpawnPoint: true }),
+        ...(isGenerator && { isGenerator: true }),
+        ...(isGenerator && block.generatorConfig && { generatorConfig: block.generatorConfig }),
       };
+      console.log("[EditorSerializer] Block node result:", node);
+      return node;
     }
 
     return null;
@@ -88,9 +119,15 @@ export class EditorSerializer {
     }
 
     if (object instanceof Mesh) {
+      const isSpawnPoint = object.userData.isSpawnPoint === true;
+      const isGenerator = object.userData.isGenerator === true;
+      const generatorConfig = object.userData.generatorConfig;
       return {
         type: "block",
         transform: this.toSerializedTransform(object, space),
+        ...(isSpawnPoint && { isSpawnPoint: true }),
+        ...(isGenerator && { isGenerator: true }),
+        ...(isGenerator && generatorConfig && { generatorConfig }),
       };
     }
 

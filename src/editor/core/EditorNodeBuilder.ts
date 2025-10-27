@@ -21,11 +21,31 @@ export class EditorNodeBuilder {
     switch (node.type) {
       case "block": {
         const transform = this.serializer.transformFromSerialized(node.transform);
-        return this.blocks.createBlock({
+        const block = this.blocks.createBlock({
           position: transform.position,
           rotation: transform.rotation,
           scale: transform.scale,
         });
+        
+        // Restore generator configuration
+        if (node.isGenerator && node.generatorConfig) {
+          block.mesh.userData.isGenerator = true;
+          block.generatorConfig = node.generatorConfig;
+          block.mesh.userData.generatorConfig = node.generatorConfig;
+          console.log('[EditorNodeBuilder] Restored generator config for block:', block.id, node.generatorConfig);
+        }
+        
+        // Mark as spawn point if needed
+        if (node.isSpawnPoint) {
+          block.mesh.userData.isSpawnPoint = true;
+        }
+        
+        // Restore custom name
+        if (node.name) {
+          block.name = node.name;
+        }
+        
+        return block;
       }
       case "component": {
         if (!node.componentId) return null;

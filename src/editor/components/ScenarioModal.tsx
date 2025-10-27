@@ -14,6 +14,7 @@ type ScenarioModalProps = {
   onClose: () => void;
   onSelectScenario: (scenario: StoredScenario) => void;
   onDeleteScenario: (id: string) => void;
+  onDownloadScenario: (scenario: StoredScenario) => void;
   onImportFiles: (files: FileList | File[]) => void;
 };
 
@@ -23,6 +24,7 @@ export function ScenarioModal({
   onClose,
   onSelectScenario,
   onDeleteScenario,
+  onDownloadScenario,
   onImportFiles,
 }: ScenarioModalProps): ReactElement | null {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -65,58 +67,79 @@ export function ScenarioModal({
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/60 px-6 py-12" onClick={onClose}>
+      <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-6 py-12" onClick={onClose}>
         <div
-          className="w-full max-w-3xl rounded-lg border border-rb-border bg-white shadow-xl outline outline-4 outline-rb-border"
+          className="w-full max-w-3xl rounded border border-[#1a1a1a] bg-[#383838] shadow-2xl"
           onClick={(event) => event.stopPropagation()}
         >
-        <header className="flex items-center justify-between border-b border-rb-border px-6 py-4">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.3em] text-rb-muted">Load Scenario</h2>
+        <header className="flex items-center justify-between border-b border-[#1a1a1a] px-4 py-3">
+          <h2 className="text-[12px] font-medium text-[#cccccc]">Load Scenario</h2>
           <button
             type="button"
-            className="h-8 w-8 rounded border border-transparent text-rb-muted transition hover:border-rb-border hover:text-rb-text"
+            className="h-8 w-8 rounded border border-transparent text-[#999999] transition hover:border-[#1a1a1a] hover:text-[#cccccc]"
             onClick={onClose}
             aria-label="Close"
           >
             ×
           </button>
         </header>
-        <div className="grid gap-6 px-6 py-6 md:grid-cols-[2fr,1fr]">
-          <section className="min-h-[220px] overflow-hidden rounded border border-rb-border">
-            <div className="flex items-center justify-between border-b border-rb-border bg-rb-panel px-4 py-3 text-xs uppercase tracking-widest text-rb-muted">
+        <div className="grid gap-4 px-4 py-4 md:grid-cols-[2fr,1fr]">
+          <section className="min-h-[220px] overflow-hidden rounded border border-[#1a1a1a]">
+            <div className="flex items-center justify-between border-b border-[#1a1a1a] bg-[#2b2b2b] px-3 py-2 text-[11px] text-[#999999]">
               <span>Saved Scenarios</span>
               <span>{scenarios.length}</span>
             </div>
             <div className="max-h-[320px] overflow-y-auto">
               {scenarios.length === 0 ? (
-                <div className="flex items-center justify-center px-4 py-12 text-xs text-rb-muted">
+                <div className="flex items-center justify-center px-4 py-12 text-[11px] text-[#666666]">
                   No scenarios saved yet.
                 </div>
               ) : (
-                <ul className="divide-y divide-rb-border">
+                <ul className="divide-y divide-[#1a1a1a]">
                   {scenarios.map((scenario) => (
-                    <li key={scenario.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                    <li key={scenario.id} className="flex items-center justify-between px-3 py-2.5 text-[11px] bg-[#2b2b2b] hover:bg-[#323232] transition">
                       <div className="flex flex-col">
-                        <span className="font-semibold text-rb-text">
+                        <span className="font-medium text-[#cccccc]">
                           {scenario.name}
                           {scenario.name === AUTO_SAVE_SCENARIO_NAME ? " (auto)" : ""}
                         </span>
-                        <span className="text-[11px] uppercase tracking-[0.2em] text-rb-muted">
+                        <span className="text-[10px] text-[#999999]">
                           {new Date(scenario.updatedAt).toLocaleString()}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          className="rounded border border-rb-border px-3 py-1 text-xs uppercase tracking-widest text-rb-text transition hover:bg-black hover:text-white"
+                          className="rounded border border-[#1a1a1a] bg-[#4772b3] px-3 py-1 text-[11px] text-white transition hover:bg-[#5a8fd6]"
                           onClick={() => onSelectScenario(scenario)}
                         >
                           Load
                         </button>
+                        <button
+                          type="button"
+                          className="rounded border border-[#1a1a1a] bg-[#2b2b2b] px-2 py-1 text-[11px] text-[#cccccc] transition hover:bg-[#353535] hover:text-white"
+                          onClick={() => onDownloadScenario(scenario)}
+                          title="Download scenario"
+                        >
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                          </svg>
+                        </button>
                         {scenario.name === AUTO_SAVE_SCENARIO_NAME ? null : (
                           <button
                             type="button"
-                            className="rounded border border-transparent px-3 py-1 text-xs uppercase tracking-widest text-rb-muted transition hover:border-rb-border hover:text-rb-text"
+                            className="rounded border border-transparent px-3 py-1 text-[11px] text-[#999999] transition hover:border-[#1a1a1a] hover:text-[#cccccc]"
                             onClick={() => onDeleteScenario(scenario.id)}
                           >
                             Delete
@@ -129,21 +152,21 @@ export function ScenarioModal({
               )}
             </div>
           </section>
-          <section className="flex flex-col items-center justify-center gap-4 rounded border border-dashed border-rb-border bg-rb-panel/70 px-4 py-6 text-center"
+          <section className="flex flex-col items-center justify-center gap-3 rounded border border-dashed border-[#1a1a1a] bg-[#2b2b2b] px-4 py-6 text-center"
             onDragOver={handleDragOver}
             onDrop={handleDrop}
           >
-            <p className="text-xs text-rb-muted">
+            <p className="text-[11px] text-[#999999]">
               Drop `.rbonline` files here to import scenarios
             </p>
             <button
               type="button"
-              className="rounded border border-rb-border bg-white px-4 py-2 text-xs uppercase tracking-widest text-rb-text transition hover:bg-black hover:text-white"
+              className="rounded border border-[#1a1a1a] bg-[#4772b3] px-4 py-2 text-[11px] text-white transition hover:bg-[#5a8fd6]"
               onClick={handleBrowseClick}
             >
               Browse Files
             </button>
-            <p className="text-[10px] uppercase tracking-[0.3em] text-rb-muted">Multiple files supported</p>
+            <p className="text-[10px] text-[#666666]">Multiple files supported</p>
             <input
               ref={fileInputRef}
               type="file"

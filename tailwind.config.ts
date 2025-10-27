@@ -21,8 +21,8 @@ export default {
       },
       keyframes: {
         float: {
-          '0%, 100%': { transform: 'translateY(0px) rotate(0deg)' },
-          '50%': { transform: 'translateY(-10px) rotate(5deg)' },
+          '0%, 100%': { transform: 'translate3d(0, 0, 0) rotate(0deg)' },
+          '50%': { transform: 'translate3d(0, -10px, 0) rotate(5deg)' },
         },
       },
       animation: {
