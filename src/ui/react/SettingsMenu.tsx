@@ -959,7 +959,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                         variant="outline"
                         motion="none"
                         className={`text-xs tracking-wider w-full ${
-                          selected ? "bg-[#111] text-white hover:text-white hover:border-white" : "bg-white text-gray-950"
+                          selected ? "bg-[#222] text-[#FFF] hover:text-white hover:border-white" : "bg-white text-gray-950"
                         }`}
                         onClick={() => setMusicCategory(category)}
                       >
