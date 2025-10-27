@@ -13,12 +13,18 @@ type Props = {
 export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
   const [showScenarioMenu, setShowScenarioMenu] = useState(false);
   const [savedScenarios, setSavedScenarios] = useState<StoredScenario[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     // Load saved scenarios from localStorage
     const scenarios = listScenarios();
     setSavedScenarios(scenarios);
   }, []);
+
+  // Filter scenarios based on search query
+  const filteredScenarios = savedScenarios.filter((scenario) =>
+    scenario.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const requestPointerLockOnCanvas = () => {
     const canvas = document.getElementById("canvas") as HTMLCanvasElement | null;
@@ -136,7 +142,7 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
                   variant="outline"
                   onClick={() => setShowScenarioMenu(true)}
                 >
-                  Load Scenario
+                  Load Scenarios  
                 </Button>
               </div>
               <Button size="lg" variant="outline" onClick={onSettings}>
@@ -147,42 +153,139 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
               </Button>
             </>
           ) : (
-            <>
-              <div className="flex flex-col gap-3 w-full max-w-md">
-                <h2 className="text-2xl font-bold text-center mb-2">Load Scenario</h2>
-                {savedScenarios.length === 0 ? (
-                  <p className="text-center opacity-65 py-8">
-                    No saved scenarios found.<br />
-                    Create one in the Editor!
-                  </p>
-                ) : (
-                  <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto">
-                    {savedScenarios.map((scenario) => (
+            <div className="fixed inset-0 bg-[radial-gradient(#fff,#fff)] z-50 flex flex-col">
+              {/* background grid overlay */}
+              <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_49%,#000_49%,#000_51%,transparent_51%),linear-gradient(0deg,transparent_49%,#000_49%,#000_51%,transparent_51%)] [background-size:80px_80px] opacity-10 z-[1]" />
+              
+              {/* Header */}
+              <div className="relative z-10 border-b-4 border-black bg-white p-6">
+                <div className="max-w-4xl mx-auto">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-3xl font-bold">Load Scenarios</h2>
+                    <div className="flex gap-3">
                       <Button
-                        key={scenario.id}
+                        size="lg"
+                        variant="primary"
+                        onClick={() => window.location.href = '/editor'}
+                        className="relative overflow-hidden group"
+                      >
+                        <span className="relative z-10 flex items-center gap-2">
+                          Create Scenario
+                        </span>
+                        <span className="absolute inset-0 bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 opacity-0 group-hover:opacity-20 transition-opacity duration-300"></span>
+                      </Button>
+                      <Button
                         size="lg"
                         variant="outline"
-                        onClick={() => onLoadScenarioClick(scenario)}
-                        className="justify-between"
+                        onClick={() => {
+                          setShowScenarioMenu(false);
+                          setSearchQuery("");
+                        }}
                       >
-                        <span>{scenario.name}</span>
-                        <span className="text-xs opacity-60">
-                          {new Date(scenario.updatedAt).toLocaleDateString()}
-                        </span>
+                        ← Back
                       </Button>
-                    ))}
+                    </div>
                   </div>
-                )}
-                <Button
-                  size="lg"
-                  variant="outline"
-                  onClick={() => setShowScenarioMenu(false)}
-                  className="mt-4"
-                >
-                  Back
-                </Button>
+                  
+                  {/* Search Bar */}
+                  <div className="relative">
+                    <div className="absolute left-5 top-1/2 -translate-y-1/2 text-xl pointer-events-none opacity-40">
+                      🔍
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Search scenarios..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-14 pr-12 py-3 text-lg border-4 border-black bg-white focus:outline-none focus:ring-4 focus:ring-black/20 transition-all duration-200"
+                      autoFocus
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery("")}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-xl opacity-50 hover:opacity-100 transition-opacity"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Results count */}
+                  <div className="mt-4 flex items-center gap-2">
+                    <div className="h-1 w-1 rounded-full bg-black/40"></div>
+                    <p className="text-sm font-medium opacity-60">
+                      {filteredScenarios.length} scenario{filteredScenarios.length !== 1 ? 's' : ''} found
+                    </p>
+                  </div>
+                </div>
               </div>
-            </>
+
+              {/* Scenarios List */}
+              <div className="relative z-10 flex-1 overflow-y-auto p-6">
+                <div className="max-w-4xl mx-auto">
+                  {savedScenarios.length === 0 ? (
+                    <div className="text-center py-20">
+                      <div className="text-5xl mb-4 opacity-20">📦</div>
+                      <p className="text-2xl font-bold opacity-70 mb-2">No saved scenarios found</p>
+                      <p className="text-lg opacity-50 mb-6">Create your first scenario in the Editor!</p>
+                      <Button
+                        size="lg"
+                        variant="primary"
+                        onClick={() => window.location.href = '/editor'}
+                      >
+                        🔨 Create Scenario
+                      </Button>
+                    </div>
+                  ) : filteredScenarios.length === 0 ? (
+                    <div className="text-center py-20">
+                      <div className="text-5xl mb-4 opacity-20">🔍</div>
+                      <p className="text-2xl font-bold opacity-70 mb-2">No scenarios match your search</p>
+                      <p className="text-lg opacity-50">Try a different search term</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {filteredScenarios.map((scenario) => (
+                        <button
+                          key={scenario.id}
+                          onClick={() => onLoadScenarioClick(scenario)}
+                          className="group relative border-4 border-black bg-white p-6 text-left hover:bg-black hover:text-white transition-colors duration-200"
+                        >
+                          <h3 className="text-xl font-bold mb-3 break-words">
+                            {scenario.name}
+                          </h3>
+                          
+                          <div className="space-y-1 text-sm">
+                            <div className="flex items-center gap-2 opacity-60 group-hover:opacity-80">
+                              <span>📅</span>
+                              <span>
+                                {new Date(scenario.updatedAt).toLocaleDateString('en-US', {
+                                  year: 'numeric',
+                                  month: 'short',
+                                  day: 'numeric'
+                                })}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 opacity-60 group-hover:opacity-80">
+                              <span>🕐</span>
+                              <span>
+                                {new Date(scenario.updatedAt).toLocaleTimeString('en-US', {
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          <div className="mt-4 text-xs opacity-40 group-hover:opacity-60">
+                            Click to load
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
         </div>
         <div className="absolute bottom-4  text-sm opacity-60">v0.2.0 alpha</div>
