@@ -1,0 +1,648 @@
+{
+  "version": 1,
+  "name": "First Scenario/Map/World",
+  "createdAt": "2025-10-27T20:07:36.286Z",
+  "blocks": [
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": 2.2651967042731456,
+          "y": 0,
+          "z": 0.5027573164931383
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 133.33,
+          "y": 1,
+          "z": 111.66
+        }
+      },
+      "id": "block-1"
+    },
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": 0.09189961656031942,
+          "y": 3.198300576690503,
+          "z": -0.8674039116823398
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      },
+      "id": "spawn-2",
+      "isSpawnPoint": true
+    },
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": 39.30413742471717,
+          "y": 2.5464948189302916,
+          "z": 2.9829059855069344
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.6,
+          "y": 0.6,
+          "z": 0.6
+        }
+      },
+      "id": "block-3",
+      "isGenerator": true,
+      "generatorConfig": {
+        "type": "randomStatic",
+        "targetCount": 5,
+        "targetScale": 0.4,
+        "enabled": true,
+        "visible": true,
+        "spawnBounds": {
+          "minX": -5,
+          "maxX": 5,
+          "minY": 0,
+          "maxY": 3,
+          "minZ": 2,
+          "maxZ": 10
+        },
+        "events": {
+          "onComplete": [
+            {
+              "id": "event-1761388055161-52cmifckf",
+              "type": "startGenerator",
+              "enabled": true,
+              "targetGeneratorId": "block-4"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": 39.09651322673508,
+          "y": 2.5464948189302916,
+          "z": -0.7464315400495649
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.6,
+          "y": 0.6,
+          "z": 0.6
+        }
+      },
+      "id": "block-4",
+      "isGenerator": true,
+      "generatorConfig": {
+        "type": "randomStatic",
+        "targetCount": 5,
+        "targetScale": 0.4,
+        "enabled": false,
+        "visible": true,
+        "spawnBounds": {
+          "minX": -5,
+          "maxX": 5,
+          "minY": 0,
+          "maxY": 3,
+          "minZ": 2,
+          "maxZ": 10
+        },
+        "events": {
+          "onComplete": [
+            {
+              "id": "event-1761388065476-s3dtyv2ig",
+              "type": "startGenerator",
+              "enabled": true,
+              "targetGeneratorId": "block-3"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": -4.850087126361988,
+          "y": -5.539961879107855,
+          "z": 17.476683238490068
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 5.3,
+          "y": 20.723,
+          "z": 5.3
+        }
+      },
+      "id": "block-5"
+    },
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": -10.205432255881732,
+          "y": 0.38184756730121583,
+          "z": 14.518557277824748
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 5.3,
+          "y": 5.3,
+          "z": 5.3
+        }
+      },
+      "id": "block-6"
+    },
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": 2.251149804394923,
+          "y": 2.23646921387867,
+          "z": 17.49547294482854
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 5.3,
+          "y": 5.3,
+          "z": 5.3
+        }
+      },
+      "id": "block-7"
+    },
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": -10.250324845923224,
+          "y": 1.3097282816667328,
+          "z": 20.020027644871217
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 5.3,
+          "y": 5.3,
+          "z": 5.3
+        }
+      },
+      "id": "block-8"
+    },
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": -1.807325771886969,
+          "y": 3.488441132810624,
+          "z": 27.23517264337346
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.6,
+          "y": 0.6,
+          "z": 0.6
+        }
+      },
+      "id": "block-9",
+      "isGenerator": true,
+      "generatorConfig": {
+        "type": "randomStatic",
+        "targetCount": 15,
+        "targetScale": 0.4,
+        "enabled": true,
+        "visible": true,
+        "spawnBounds": {
+          "minX": -5,
+          "maxX": 5,
+          "minY": 0,
+          "maxY": 3,
+          "minZ": 2,
+          "maxZ": 10
+        },
+        "events": {
+          "onComplete": [
+            {
+              "id": "event-1761388285155-kl38fuba6",
+              "type": "startGenerator",
+              "enabled": true,
+              "targetGeneratorId": "block-10"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": -3.9473893111265084,
+          "y": 3.488441132810624,
+          "z": 27.171165166897694
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.6,
+          "y": 0.6,
+          "z": 0.6
+        }
+      },
+      "id": "block-10",
+      "isGenerator": true,
+      "generatorConfig": {
+        "type": "randomStatic",
+        "targetCount": 15,
+        "targetScale": 0.4,
+        "enabled": false,
+        "visible": true,
+        "spawnBounds": {
+          "minX": -5,
+          "maxX": 5,
+          "minY": 0,
+          "maxY": 3,
+          "minZ": 2,
+          "maxZ": 10
+        },
+        "events": {
+          "onComplete": [
+            {
+              "id": "event-1761388291506-k9nmsrwbw",
+              "type": "startGenerator",
+              "enabled": true,
+              "targetGeneratorId": "block-9"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": 0.08171975570850587,
+          "y": 1.2903202862066774,
+          "z": -10.788716677148098
+        },
+        "rotation": {
+          "x": -3.141592653589793,
+          "y": -0.23659265358979317,
+          "z": -3.141592653589793
+        },
+        "scale": {
+          "x": 0.5999999999999995,
+          "y": 0.6,
+          "z": 0.5999999999999995
+        }
+      },
+      "id": "block-11",
+      "isGenerator": true,
+      "generatorConfig": {
+        "type": "randomStatic",
+        "targetCount": 3,
+        "targetScale": 0.6,
+        "enabled": false,
+        "visible": true,
+        "spawnBounds": {
+          "minX": -5,
+          "maxX": 5,
+          "minY": 0,
+          "maxY": 0,
+          "minZ": 0,
+          "maxZ": 0
+        },
+        "events": {
+          "onComplete": [
+            {
+              "id": "event-1761388628103-gftn9jrte",
+              "type": "startGenerator",
+              "enabled": true,
+              "targetGeneratorId": "block-13"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": -1.1750851885448113,
+          "y": 1.2533840138937862,
+          "z": -10.627314517030959
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.6,
+          "y": 0.6,
+          "z": 0.6
+        }
+      },
+      "id": "block-12",
+      "isGenerator": true,
+      "generatorConfig": {
+        "type": "randomStatic",
+        "targetCount": 3,
+        "targetScale": 0.6,
+        "enabled": true,
+        "visible": true,
+        "spawnBounds": {
+          "minX": -5,
+          "maxX": 5,
+          "minY": 0,
+          "maxY": 0,
+          "minZ": 0,
+          "maxZ": 0
+        },
+        "events": {
+          "onComplete": [
+            {
+              "id": "event-1761388640985-fiz6ybomn",
+              "type": "startGenerator",
+              "enabled": true,
+              "targetGeneratorId": "block-11"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": -0.6748928160231344,
+          "y": 1.2903202862066774,
+          "z": -31.346097359209065
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.6,
+          "y": 0.6,
+          "z": 0.6
+        }
+      },
+      "id": "block-13",
+      "isGenerator": true,
+      "generatorConfig": {
+        "type": "randomStatic",
+        "targetCount": 3,
+        "targetScale": 0.6,
+        "enabled": false,
+        "visible": true,
+        "spawnBounds": {
+          "minX": -10,
+          "maxX": 10,
+          "minY": 0,
+          "maxY": 0,
+          "minZ": 0,
+          "maxZ": 0
+        },
+        "events": {
+          "onComplete": [
+            {
+              "id": "event-1761388628103-gftn9jrte",
+              "type": "startGenerator",
+              "enabled": true,
+              "targetGeneratorId": "block-14"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": -1.9746295049335802,
+          "y": 1.2533840138937862,
+          "z": -31.222450625119176
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.6,
+          "y": 0.6,
+          "z": 0.6
+        }
+      },
+      "id": "block-14",
+      "isGenerator": true,
+      "generatorConfig": {
+        "type": "randomStatic",
+        "targetCount": 3,
+        "targetScale": 0.6,
+        "enabled": false,
+        "visible": true,
+        "spawnBounds": {
+          "minX": -10,
+          "maxX": 10,
+          "minY": 0,
+          "maxY": 0,
+          "minZ": 0,
+          "maxZ": 0
+        },
+        "events": {
+          "onComplete": [
+            {
+              "id": "event-1761388640985-fiz6ybomn",
+              "type": "startGenerator",
+              "enabled": true,
+              "targetGeneratorId": "block-16"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": -1.707067327382586,
+          "y": 1.2903202862066774,
+          "z": -46.96915701919368
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.6,
+          "y": 0.6,
+          "z": 0.6
+        }
+      },
+      "id": "block-15",
+      "isGenerator": true,
+      "generatorConfig": {
+        "type": "randomStatic",
+        "targetCount": 3,
+        "targetScale": 0.6,
+        "enabled": false,
+        "visible": true,
+        "spawnBounds": {
+          "minX": -15,
+          "maxX": 15,
+          "minY": 0,
+          "maxY": 0,
+          "minZ": 0,
+          "maxZ": 0
+        },
+        "events": {
+          "onComplete": [
+            {
+              "id": "event-1761388628103-gftn9jrte",
+              "type": "startGenerator",
+              "enabled": true,
+              "targetGeneratorId": "block-12"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": -2.9776217973540646,
+          "y": 1.2533840138937862,
+          "z": -46.83321940060396
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 0.6,
+          "y": 0.6,
+          "z": 0.6
+        }
+      },
+      "id": "block-16",
+      "isGenerator": true,
+      "generatorConfig": {
+        "type": "randomStatic",
+        "targetCount": 3,
+        "targetScale": 0.6,
+        "enabled": false,
+        "visible": true,
+        "spawnBounds": {
+          "minX": -15,
+          "maxX": 15,
+          "minY": 0,
+          "maxY": 0,
+          "minZ": 0,
+          "maxZ": 0
+        },
+        "events": {
+          "onComplete": [
+            {
+              "id": "event-1761388640985-fiz6ybomn",
+              "type": "startGenerator",
+              "enabled": true,
+              "targetGeneratorId": "block-15"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": -15.784145044227053,
+          "y": -0.5579164274738438,
+          "z": 16.720016282546098
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 5.3,
+          "y": 5.3,
+          "z": 5.3
+        }
+      },
+      "id": "block-17"
+    },
+    {
+      "type": "block",
+      "transform": {
+        "position": {
+          "x": -21.259910413531184,
+          "y": -1.1496526588956497,
+          "z": 18.220016282546098
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 5.3,
+          "y": 5.3,
+          "z": 5.3
+        }
+      },
+      "id": "block-18"
+    }
+  ],
+  "componentDefinitions": [],
+  "fileName": "First-Scenario-Map-World-2025-10-27T20-07-36-287Z.rbonline"
+}

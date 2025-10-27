@@ -14,6 +14,89 @@ export interface GameInstance {
   resume: () => void;
 }
 
+/**
+ * Process a scenario and load it into the game
+ * Used for loading custom maps in the main game
+ */
+export async function processScenarioForGame(app: App, scenario: SerializedScenario): Promise<void> {
+  console.log("[processScenarioForGame] Loading scenario:", scenario.name);
+  
+  // Create a group to hold all custom scenario objects
+  const customGroup = new THREE.Group();
+  customGroup.name = "CustomScenario";
+  app.scene.add(customGroup);
+  
+  // Find spawn point
+  let spawnBlock: SerializedNode | null = null;
+  for (const block of scenario.blocks) {
+    if (block.isSpawnPoint) {
+      spawnBlock = block;
+      break;
+    }
+  }
+  
+  // Calculate play area bounds for room constraints
+  let minX = Infinity, maxX = -Infinity;
+  let minZ = Infinity, maxZ = -Infinity;
+  
+  scenario.blocks.forEach((block: SerializedNode) => {
+    if (!block.isSpawnPoint) {
+      const x = block.transform.position.x;
+      const z = block.transform.position.z;
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minZ = Math.min(minZ, z);
+      maxZ = Math.max(maxZ, z);
+    }
+  });
+  
+  // Calculate center and size of the play area
+  const centerX = (minX + maxX) / 2;
+  const centerZ = (minZ + maxZ) / 2;
+  const sizeX = maxX - minX + 40; // Add generous padding
+  const sizeZ = maxZ - minZ + 40;
+  const roomSize = Math.max(sizeX, sizeZ, 100); // At least 100 units for freedom of movement
+  
+  console.log("[processScenarioForGame] Play area bounds:", { minX, maxX, minZ, maxZ });
+  console.log("[processScenarioForGame] Room center:", { centerX, centerZ });
+  console.log("[processScenarioForGame] Room size:", roomSize);
+  
+  // Update the player's room constraints
+  app.controls.initPlayerRoom(centerX, centerZ, roomSize);
+  console.log("[processScenarioForGame] Player room updated");
+  
+  // Process each block recursively
+  scenario.blocks.forEach((block: SerializedNode) => {
+    processBlockRecursively(block, customGroup, app, true, scenario.componentDefinitions);
+  });
+  
+  // Store reference to custom group for raycast detection
+  (app as typeof app & { editorCubesGroup?: THREE.Group }).editorCubesGroup = customGroup;
+  console.log("[processScenarioForGame] Stored editorCubesGroup reference for raycasting");
+  
+  // Wait for collision system to initialize
+  await app.collisionSystem.waitForInit();
+  console.log("[processScenarioForGame] Collision system initialized");
+  
+  // Sync scene.targets with app.targets for compatibility
+  app.scene.targets = app.targets;
+  console.log("[processScenarioForGame] Synced scene.targets with app.targets");
+  
+  // Teleport to spawn point if found
+  if (spawnBlock) {
+    const spawnX = spawnBlock.transform.position.x;
+    const spawnZ = spawnBlock.transform.position.z;
+    const spawnBlockTop = spawnBlock.transform.position.y + (spawnBlock.transform.scale.y / 2);
+    const spawnY = spawnBlockTop + 1.6;
+    const spawnYaw = spawnBlock.transform.rotation.y;
+    
+    app.controls.teleportTo(spawnX, spawnY, spawnZ, spawnYaw);
+    console.log(`[processScenarioForGame] Teleported to spawn: (${spawnX}, ${spawnY}, ${spawnZ}), yaw: ${spawnYaw}`);
+  }
+  
+  console.log(`[processScenarioForGame] Scenario loaded with ${app.targets.length} targets`);
+}
+
 // Helper function to recursively process blocks (including nested children in groups)
 function processBlockRecursively(
   block: SerializedNode,

@@ -623,6 +623,41 @@ export default class App {
   /**
    * Activate a disabled generator
    */
+  /**
+   * Load a custom map from a .rbonline file
+   */
+  private async loadCustomMap(mapPath: string): Promise<void> {
+    try {
+      console.log(`[App] Fetching map from: ${mapPath}`);
+      const response = await fetch(mapPath);
+      if (!response.ok) {
+        throw new Error(`Failed to load map: ${response.statusText}`);
+      }
+      
+      const scenarioData = await response.json();
+      console.log(`[App] Loaded scenario:`, scenarioData.name);
+      
+      // Import the bootstrap function
+      const { processScenarioForGame } = await import("@/editor/utils/gameBootstrap");
+      
+      // Process the scenario and load it into the game
+      await processScenarioForGame(this, scenarioData);
+      
+      // Targets are already added to app.targets by processScenarioForGame
+      // Just update controls reference
+      this.controls.updateTargets(this.targets);
+      
+      console.log(`[App] Custom map loaded with ${this.targets.length} targets`);
+    } catch (error) {
+      console.error(`[App] Failed to load custom map:`, error);
+      // Fallback to procedural generation
+      const useHalfSize = this.currentScenarioTargetScale === 0.2;
+      this.scene.loadScenario(this.currentScenarioTargetCount, useHalfSize, (Math.PI / 2) * 3);
+      this.targets = this.scene.targets;
+      this.controls.updateTargets(this.targets);
+    }
+  }
+
   private activateGenerator(generatorId: string): void {
     console.log(`[App] Activating generator: ${generatorId}`);
     
@@ -1236,7 +1271,7 @@ export default class App {
     this.startScenarioById(scenarioId);
   }
 
-  private startScenarioById(scenarioId: string) {
+  private async startScenarioById(scenarioId: string) {
     const scenario = getScenarioById(scenarioId) ?? this.scenarios[0];
     const index = this.scenarios.findIndex((s) => s.id === scenario.id);
     this.currentScenarioIndex = index;
@@ -1260,21 +1295,28 @@ export default class App {
     
     // In editor mode, don't generate default targets - custom scenario will be loaded separately
     if (!this.isEditorMode) {
-      const useHalfSize = scenario.targetScale === 0.2;
-      // Pass player orientation to target generation
-      this.scene.loadScenario(scenario.targetCount, useHalfSize, spawnYaw);
-      
-      // Sync targets array after generation (TargetManager updates scene.targets)
-      this.targets = this.scene.targets;
-      
-      // CRITICAL: Also update controls targets reference so it can send correct targetsInfo
-      this.controls.updateTargets(this.targets);
-      
-      this.applyScenarioTargetScale();
-      this.setupScenarioPortals();
-      
-      console.log(`[App] Scenario started with ${this.targets.length} targets`);
-      console.log(`[App] Controls now has ${this.targets.length} targets for network sync`);
+      // Check if scenario has a custom map file
+      if (scenario.mapFile) {
+        console.log(`[App] Loading custom map from: ${scenario.mapFile}`);
+        await this.loadCustomMap(scenario.mapFile);
+      } else {
+        // Generate procedural targets
+        const useHalfSize = scenario.targetScale === 0.2;
+        // Pass player orientation to target generation
+        this.scene.loadScenario(scenario.targetCount, useHalfSize, spawnYaw);
+        
+        // Sync targets array after generation (TargetManager updates scene.targets)
+        this.targets = this.scene.targets;
+        
+        // CRITICAL: Also update controls targets reference so it can send correct targetsInfo
+        this.controls.updateTargets(this.targets);
+        
+        this.applyScenarioTargetScale();
+        this.setupScenarioPortals();
+        
+        console.log(`[App] Scenario started with ${this.targets.length} targets`);
+        console.log(`[App] Controls now has ${this.targets.length} targets for network sync`);
+      }
     }
 
     this.loop.start();

@@ -17,14 +17,16 @@ The event system allows generators to trigger actions when completed, enabling c
 
 ## 📚 Event Types
 
-### Enable Generator Event
+### Start Generator Event
 
-Enables another generator when the current one completes all targets.
+Activates another generator when the current one completes all targets.
 
 ```typescript
-type CompletionEvent = {
-  type: 'enableGenerator';
-  targetGeneratorId: string;
+type StartGeneratorEvent = {
+  id: string;                    // Unique event ID
+  type: 'startGenerator';
+  enabled: boolean;              // Whether event is active
+  targetGeneratorId: string;     // ID of generator to activate
 };
 ```
 
@@ -36,17 +38,23 @@ type CompletionEvent = {
 // Wave 1 → Wave 2
 const wave1 = {
   enabled: true,
-  count: 20,
-  completionEvents: [{
-    type: 'enableGenerator',
-    targetGeneratorId: 'wave-2'
-  }]
+  targetCount: 20,
+  events: {
+    onComplete: [{
+      id: 'event-1',
+      type: 'startGenerator',
+      enabled: true,
+      targetGeneratorId: 'block-2'
+    }]
+  }
 };
 
 const wave2 = {
   enabled: false,  // Starts disabled
-  count: 30,
-  completionEvents: []
+  targetCount: 30,
+  events: {
+    onComplete: []
+  }
 };
 ```
 
@@ -56,29 +64,39 @@ const wave2 = {
 // Tutorial → Practice → Challenge
 const tutorial = {
   enabled: true,
-  count: 10,
-  targetScale: 0.5,  // Large targets
-  completionEvents: [{
-    type: 'enableGenerator',
-    targetGeneratorId: 'practice'
-  }]
+  targetCount: 10,
+  targetScale: 0.4,
+  events: {
+    onComplete: [{
+      id: 'event-tutorial',
+      type: 'startGenerator',
+      enabled: true,
+      targetGeneratorId: 'practice'
+    }]
+  }
 };
 
 const practice = {
   enabled: false,
-  count: 25,
-  targetScale: 0.4,  // Normal targets
-  completionEvents: [{
-    type: 'enableGenerator',
-    targetGeneratorId: 'challenge'
-  }]
+  targetCount: 25,
+  targetScale: 0.4,
+  events: {
+    onComplete: [{
+      id: 'event-practice',
+      type: 'startGenerator',
+      enabled: true,
+      targetGeneratorId: 'challenge'
+    }]
+  }
 };
 
 const challenge = {
   enabled: false,
-  count: 50,
+  targetCount: 50,
   targetScale: 0.2,  // Small targets
-  completionEvents: []
+  events: {
+    onComplete: []
+  }
 };
 ```
 
@@ -88,11 +106,23 @@ const challenge = {
 // Main wave triggers two parallel waves
 const mainWave = {
   enabled: true,
-  count: 30,
-  completionEvents: [
-    { type: 'enableGenerator', targetGeneratorId: 'left-wave' },
-    { type: 'enableGenerator', targetGeneratorId: 'right-wave' }
-  ]
+  targetCount: 30,
+  events: {
+    onComplete: [
+      { 
+        id: 'event-left',
+        type: 'startGenerator',
+        enabled: true,
+        targetGeneratorId: 'left-wave' 
+      },
+      { 
+        id: 'event-right',
+        type: 'startGenerator',
+        enabled: true,
+        targetGeneratorId: 'right-wave' 
+      }
+    ]
+  }
 };
 
 const leftWave = {

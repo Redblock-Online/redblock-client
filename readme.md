@@ -15,7 +15,9 @@ Redblock Online is a fast-paced 3D aim training game featuring a built-in world 
 Redblock Online combines two powerful experiences in one application:
 
 ### 🎮 **Game Mode**
-- **FPS Aim Training**: Practice your aim with procedurally generated targets
+- **FPS Aim Training**: Practice your aim with procedurally generated targets or custom maps
+- **Custom Maps**: Load pre-designed scenarios from `.rbonline` files
+- **Target Generators**: Dynamic target spawning with event-driven progression
 - **Multiple Difficulty Levels**: Choose from 3, 8, or 50 targets for quick warm-ups or intense sessions
 - **Real-time Performance Tracking**: Built-in timer tracks your completion time
 - **Smooth Movement**: WASD controls with adjustable mouse sensitivity and inertia
@@ -23,11 +25,14 @@ Redblock Online combines two powerful experiences in one application:
 
 ### 🛠️ **World Editor**
 - **Visual Level Designer**: Drag-and-drop interface to build custom training scenarios
+- **Target Generators**: Place generators that spawn targets dynamically with configurable bounds
+- **Event System**: Chain generators together with onComplete events for progressive challenges
 - **Component System**: Create reusable prefabs from grouped blocks
 - **Transform Tools**: Move (G), Rotate (R), and Scale (F) with axis constraints (X/Y/Z)
 - **Undo/Redo System**: Full history stack for safe experimentation
-- **Scenario Management**: Save, load, and export custom worlds
+- **Scenario Management**: Save, load, and export custom worlds as `.rbonline` files
 - **Spawn Point System**: Place cyan spawn points to define player starting positions
+- **Play Mode**: Test your scenarios directly in the editor before saving
 
 ### 🌐 **Multiplayer Ready**
 - WebSocket integration for real-time multiplayer (server implementation required)
@@ -280,6 +285,16 @@ npm start
 ```
 
 Supported platforms: Vercel, Netlify, Render, Railway, AWS, Google Cloud, Azure, etc.
+
+## 📚 Documentation
+
+Detailed documentation is available in the `/docs` folder:
+
+- **[TARGET_GENERATORS.md](docs/TARGET_GENERATORS.md)** - Complete guide to the target generator system
+- **[CUSTOM_MAPS.md](docs/CUSTOM_MAPS.md)** - How to create and load custom maps
+- **[AUDIO_SYSTEM.md](docs/AUDIO_SYSTEM.md)** - Audio system architecture and usage
+- **[PHYSICS.md](docs/PHYSICS.md)** - Physics and collision system documentation
+- **[PERFORMANCE_OPTIMIZATIONS.md](docs/PERFORMANCE_OPTIMIZATIONS.md)** - Performance tips and optimizations
 
 ## 🤝 Contributing
 

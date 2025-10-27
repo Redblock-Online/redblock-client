@@ -48,6 +48,7 @@ const sidebars: SidebarsConfig = {
         'editor/generators',
         'editor/events',
         'editor/components',
+        'editor/custom-maps',
       ],
     },
     {

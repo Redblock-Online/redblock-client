@@ -27,11 +27,19 @@ type RandomStaticConfig = {
   type: 'randomStatic';
   enabled: boolean;
   visible: boolean;
-  count: number;          // Number of targets to spawn
-  spawnRadius: number;    // Radius around generator
+  targetCount: number;    // Number of targets to spawn
   targetScale: number;    // Target size (0.2 = small, 0.4 = normal)
-  spawnHeight: number;    // Height above ground
-  completionEvents: CompletionEvent[];
+  spawnBounds: {          // Spawn area bounds (relative to generator)
+    minX: number;
+    maxX: number;
+    minY: number;
+    maxY: number;
+    minZ: number;
+    maxZ: number;
+  };
+  events: {
+    onComplete: Event[];  // Events triggered when all targets destroyed
+  };
 };
 ```
 
@@ -44,11 +52,19 @@ type GeneratorConfig = {
   type: 'randomStatic' | 'moving';
   enabled: boolean;              // Whether generator is active
   visible: boolean;              // Show generator marker in game
-  count: number;                 // Number of targets
-  spawnRadius: number;           // Spawn area radius
-  targetScale: number;           // Target size
-  spawnHeight: number;           // Spawn height
-  completionEvents: CompletionEvent[];
+  targetCount: number;           // Number of targets
+  targetScale: number;           // Target size (0.2 or 0.4)
+  spawnBounds: {                 // Spawn area bounds
+    minX: number;                // Relative to generator position
+    maxX: number;
+    minY: number;
+    maxY: number;
+    minZ: number;
+    maxZ: number;
+  };
+  events: {
+    onComplete: Event[];         // Completion events
+  };
 };
 ```
 
@@ -57,9 +73,11 @@ type GeneratorConfig = {
 Events triggered when all targets from a generator are destroyed:
 
 ```typescript
-type CompletionEvent = {
-  type: 'enableGenerator';
-  targetGeneratorId: string;     // ID of generator to enable
+type StartGeneratorEvent = {
+  id: string;                    // Unique event ID
+  type: 'startGenerator';
+  enabled: boolean;              // Whether event is active
+  targetGeneratorId: string;     // ID of generator to activate
 };
 ```
 
@@ -79,11 +97,16 @@ editor.updateGeneratorConfig(generator.id, {
   type: 'randomStatic',
   enabled: true,
   visible: false,              // Hide in game
-  count: 30,
-  spawnRadius: 10,
+  targetCount: 30,
   targetScale: 0.4,
-  spawnHeight: 1.5,
-  completionEvents: []
+  spawnBounds: {
+    minX: -10, maxX: 10,       // 20 units wide
+    minY: 0, maxY: 3,          // 3 units tall
+    minZ: -10, maxZ: 10        // 20 units deep
+  },
+  events: {
+    onComplete: []
+  }
 });
 ```
 
@@ -98,16 +121,23 @@ editor.updateGeneratorConfig(gen1.id, {
   type: 'randomStatic',
   enabled: true,
   visible: false,
-  count: 20,
-  spawnRadius: 8,
+  targetCount: 20,
   targetScale: 0.4,
-  spawnHeight: 1.5,
-  completionEvents: [
-    {
-      type: 'enableGenerator',
-      targetGeneratorId: 'gen-2'  // Enable gen2 when done
-    }
-  ]
+  spawnBounds: {
+    minX: -8, maxX: 8,
+    minY: 0, maxY: 3,
+    minZ: -8, maxZ: 8
+  },
+  events: {
+    onComplete: [
+      {
+        id: 'event-1',
+        type: 'startGenerator',
+        enabled: true,
+        targetGeneratorId: 'block-2'  // Enable gen2 when done
+      }
+    ]
+  }
 });
 
 // Generator 2 - Disabled at start
@@ -116,11 +146,16 @@ editor.updateGeneratorConfig(gen2.id, {
   type: 'randomStatic',
   enabled: false,              // Starts disabled
   visible: false,
-  count: 30,
-  spawnRadius: 10,
-  targetScale: 0.3,            // Smaller targets
-  spawnHeight: 2.0,
-  completionEvents: []
+  targetCount: 30,
+  targetScale: 0.4,
+  spawnBounds: {
+    minX: -10, maxX: 10,
+    minY: 0, maxY: 4,
+    minZ: -10, maxZ: 10
+  },
+  events: {
+    onComplete: []
+  }
 });
 ```
 
@@ -129,34 +164,56 @@ editor.updateGeneratorConfig(gen2.id, {
 ```typescript
 // Easy wave
 const easyGen = createGenerator({
-  count: 15,
-  spawnRadius: 12,
-  targetScale: 0.5,            // Large targets
-  completionEvents: [{ 
-    type: 'enableGenerator', 
-    targetGeneratorId: 'medium-gen' 
-  }]
+  targetCount: 15,
+  targetScale: 0.4,            // Normal targets
+  spawnBounds: {
+    minX: -12, maxX: 12,
+    minY: 0, maxY: 3,
+    minZ: -12, maxZ: 12
+  },
+  events: {
+    onComplete: [{ 
+      id: 'event-easy',
+      type: 'startGenerator',
+      enabled: true,
+      targetGeneratorId: 'medium-gen' 
+    }]
+  }
 });
 
 // Medium wave
 const mediumGen = createGenerator({
   enabled: false,
-  count: 25,
-  spawnRadius: 10,
+  targetCount: 25,
   targetScale: 0.4,            // Normal targets
-  completionEvents: [{ 
-    type: 'enableGenerator', 
-    targetGeneratorId: 'hard-gen' 
-  }]
+  spawnBounds: {
+    minX: -10, maxX: 10,
+    minY: 0, maxY: 3,
+    minZ: -10, maxZ: 10
+  },
+  events: {
+    onComplete: [{ 
+      id: 'event-medium',
+      type: 'startGenerator',
+      enabled: true,
+      targetGeneratorId: 'hard-gen' 
+    }]
+  }
 });
 
 // Hard wave
 const hardGen = createGenerator({
   enabled: false,
-  count: 40,
-  spawnRadius: 8,
+  targetCount: 40,
   targetScale: 0.2,            // Small targets
-  completionEvents: []
+  spawnBounds: {
+    minX: -8, maxX: 8,
+    minY: 0, maxY: 2,
+    minZ: -8, maxZ: 8
+  },
+  events: {
+    onComplete: []
+  }
 });
 ```
 
@@ -237,19 +294,32 @@ Generators are saved with their configuration:
 {
   type: "block",
   transform: { position, rotation, scale },
-  id: "gen-1",
+  id: "block-9",
   isGenerator: true,
   generatorConfig: {
     type: "randomStatic",
     enabled: true,
     visible: false,
-    count: 30,
-    spawnRadius: 10,
+    targetCount: 30,
     targetScale: 0.4,
-    spawnHeight: 1.5,
-    completionEvents: [
-      { type: "enableGenerator", targetGeneratorId: "gen-2" }
-    ]
+    spawnBounds: {
+      minX: -10,
+      maxX: 10,
+      minY: 0,
+      maxY: 3,
+      minZ: -10,
+      maxZ: 10
+    },
+    events: {
+      onComplete: [
+        {
+          id: "event-123",
+          type: "startGenerator",
+          enabled: true,
+          targetGeneratorId: "block-2"
+        }
+      ]
+    }
   }
 }
 ```
@@ -312,11 +382,19 @@ const DEFAULT_RANDOM_STATIC_CONFIG: GeneratorConfig = {
   type: 'randomStatic',
   enabled: true,
   visible: false,
-  count: 30,
-  spawnRadius: 10,
+  targetCount: 30,
   targetScale: 0.4,
-  spawnHeight: 1.5,
-  completionEvents: []
+  spawnBounds: {
+    minX: -10,
+    maxX: 10,
+    minY: 0,
+    maxY: 3,
+    minZ: -10,
+    maxZ: 10
+  },
+  events: {
+    onComplete: []
+  }
 };
 ```
 
@@ -345,10 +423,14 @@ generator.mesh.userData.generatorConfig = config;
 **Solution:**
 ```typescript
 // Use exact block ID
-completionEvents: [{
-  type: 'enableGenerator',
-  targetGeneratorId: 'block-123'  // Must match exactly
-}]
+events: {
+  onComplete: [{
+    id: 'event-1',
+    type: 'startGenerator',
+    enabled: true,
+    targetGeneratorId: 'block-123'  // Must match exactly
+  }]
+}
 ```
 
 ### Targets spawning in wrong location
@@ -361,8 +443,16 @@ completionEvents: [{
 const worldPos = new Vector3();
 generator.mesh.getWorldPosition(worldPos);
 
-// Spawn relative to world position
-spawnTargetsAround(worldPos, config.spawnRadius);
+// Spawn within bounds relative to world position
+for (let i = 0; i < config.targetCount; i++) {
+  const x = worldPos.x + config.spawnBounds.minX + 
+            Math.random() * (config.spawnBounds.maxX - config.spawnBounds.minX);
+  const y = worldPos.y + config.spawnBounds.minY + 
+            Math.random() * (config.spawnBounds.maxY - config.spawnBounds.minY);
+  const z = worldPos.z + config.spawnBounds.minZ + 
+            Math.random() * (config.spawnBounds.maxZ - config.spawnBounds.minZ);
+  spawnTargetAt(x, y, z);
+}
 ```
 
 ## 📈 Best Practices
@@ -397,17 +487,31 @@ spawnTargetsAround(worldPos, config.spawnRadius);
 1. **Don't create circular dependencies**
    ```typescript
    // ❌ Bad - infinite loop
-   gen1.completionEvents = [{ targetGeneratorId: 'gen-2' }];
-   gen2.completionEvents = [{ targetGeneratorId: 'gen-1' }];
+   gen1.events.onComplete = [{ 
+     type: 'startGenerator', 
+     targetGeneratorId: 'gen-2' 
+   }];
+   gen2.events.onComplete = [{ 
+     type: 'startGenerator', 
+     targetGeneratorId: 'gen-1' 
+   }];
    ```
 
-2. **Don't use huge spawn radius**
+2. **Don't use huge spawn bounds**
    ```typescript
    // ❌ Bad - targets too spread out
-   spawnRadius: 50
+   spawnBounds: {
+     minX: -50, maxX: 50,
+     minY: 0, maxY: 10,
+     minZ: -50, maxZ: 50
+   }
    
    // ✅ Good - reasonable area
-   spawnRadius: 10
+   spawnBounds: {
+     minX: -10, maxX: 10,
+     minY: 0, maxY: 3,
+     minZ: -10, maxZ: 10
+   }
    ```
 
 3. **Don't forget to disable chained generators**
