@@ -47,13 +47,16 @@ export default function PingDisplay({ wsManager }: Props) {
     };
   }, [wsManager]);
 
-  if (!visible) return null;
+  // DISABLED: Ping hidden for now
+  return null;
 
-  const pingColor = ping < 50 ? "text-green-600" : ping < 100 ? "text-yellow-600" : "text-red-600";
+  // if (!visible) return null;
 
-  return (
-    <div className={`font-mono text-sm font-bold border-[3px] border-black bg-white px-3 py-1 ${pingColor}`}>
-      PING: {ping}ms
-    </div>
-  );
+  // const pingColor = ping < 50 ? "text-green-600" : ping < 100 ? "text-yellow-600" : "text-red-600";
+
+  // return (
+  //   <div className={`font-mono text-sm font-bold border-[3px] border-black bg-white px-3 py-1 ${pingColor}`}>
+  //     PING: {ping}ms
+  //   </div>
+  // );
 }

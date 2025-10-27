@@ -829,11 +829,13 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 value={gameSettings.showFps}
                 onChange={(value) => updateGameSetting("showFps", value)}
               />
+              {/* DISABLED: Ping hidden for now
               <ToggleInput
                 label="Show Ping"
                 value={gameSettings.showPing}
                 onChange={(value) => updateGameSetting("showPing", value)}
               />
+              */}
               <SelectInput
                 label="Crosshair Style"
                 value={gameSettings.crosshairStyle}
