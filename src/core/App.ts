@@ -658,6 +658,61 @@ export default class App {
     }
   }
 
+  /**
+   * Load a custom scenario from sessionStorage
+   */
+  private async loadCustomScenarioFromStorage(scenarioId: string): Promise<void> {
+    try {
+      console.log(`[App] Loading custom scenario: ${scenarioId}`);
+      
+      // Get scenario data from sessionStorage
+      const storageKey = `scenario-${scenarioId}`;
+      const scenarioJson = sessionStorage.getItem(storageKey);
+      
+      if (!scenarioJson) {
+        throw new Error(`Scenario not found in sessionStorage: ${storageKey}`);
+      }
+      
+      const scenarioData = JSON.parse(scenarioJson);
+      console.log(`[App] Loaded scenario from storage:`, scenarioData.name);
+      
+      // Reset game state
+      this.resetRoundStats();
+      this.ui?.timer.reset();
+      this.resetTargets();
+      
+      // Import the bootstrap function
+      const { processScenarioForGame } = await import("@/editor/utils/gameBootstrap");
+      
+      // Process the scenario and load it into the game
+      await processScenarioForGame(this, scenarioData);
+      
+      // Targets are already added to app.targets by processScenarioForGame
+      // Just update controls reference
+      this.controls.updateTargets(this.targets);
+      
+      // Start the game loop
+      this.loop.start();
+      
+      // Start audio and timer (same as normal scenario start)
+      if (!this.isEditorMode) {
+        this.playPracticeMusic();
+        this.playAmbientWind();
+      }
+      this.startTimer();
+      this.gameRunning = true;
+      
+      console.log(`[App] Custom scenario loaded with ${this.targets.length} targets`);
+      
+      // Clean up sessionStorage
+      sessionStorage.removeItem(storageKey);
+    } catch (error) {
+      console.error(`[App] Failed to load custom scenario:`, error);
+      // Fallback to default scenario
+      this.startScenarioById(this.scenarios[0].id);
+    }
+  }
+
   private activateGenerator(generatorId: string): void {
     console.log(`[App] Activating generator: ${generatorId}`);
     
@@ -1272,6 +1327,13 @@ export default class App {
   }
 
   private async startScenarioById(scenarioId: string) {
+    // Check if this is a custom scenario from localStorage
+    if (scenarioId.startsWith('custom-')) {
+      console.log(`[App] Loading custom scenario from sessionStorage: ${scenarioId}`);
+      await this.loadCustomScenarioFromStorage(scenarioId);
+      return;
+    }
+    
     const scenario = getScenarioById(scenarioId) ?? this.scenarios[0];
     const index = this.scenarios.findIndex((s) => s.id === scenario.id);
     this.currentScenarioIndex = index;

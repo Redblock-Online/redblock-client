@@ -1,7 +1,8 @@
 import Image from "next/image";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Button from "@/ui/react/components/Button";
 import type { ScenarioConfig } from "@/config/scenarios";
+import { listScenarios, type StoredScenario } from "@/editor/scenarioStore";
 
 type Props = {
   scenarios: ScenarioConfig[];
@@ -10,6 +11,14 @@ type Props = {
 };
 
 export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
+  const [showScenarioMenu, setShowScenarioMenu] = useState(false);
+  const [savedScenarios, setSavedScenarios] = useState<StoredScenario[]>([]);
+
+  useEffect(() => {
+    // Load saved scenarios from localStorage
+    const scenarios = listScenarios();
+    setSavedScenarios(scenarios);
+  }, []);
 
   const requestPointerLockOnCanvas = () => {
     const canvas = document.getElementById("canvas") as HTMLCanvasElement | null;
@@ -33,6 +42,20 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
     } catch (_) {
       /* noop */
     }
+  };
+
+  const onLoadScenarioClick = (scenario: StoredScenario) => {
+    // Create a custom scenario config that will load from localStorage
+    const customScenarioId = `custom-${scenario.id}`;
+    
+    // Store the scenario data temporarily for the game to load
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(`scenario-${customScenarioId}`, JSON.stringify(scenario.data));
+    }
+    
+    // Start the game with this custom scenario
+    onStartClick(customScenarioId);
+    setShowScenarioMenu(false);
   };
 
   const onExitClick = () => {
@@ -96,28 +119,71 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
           sizes="(max-width: 768px) 70vw, 600px"
         />
         <div className="flex flex-col gap-4 items-center">
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-4">
-            {scenarios.map((scenario, idx) => (
-              <Button
-                key={scenario.id}
-                className="startButton"
-                id={`startButton-${scenario.id}`}
-                size="lg"
-                variant={idx === 0 ? "primary" : "outline"}
-                onClick={() => onStartClick(scenario.id)}
-              >
-                {scenario.label}
+          {!showScenarioMenu ? (
+            <>
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:justify-center sm:gap-4">
+                <Button
+                  className="startButton"
+                  id="startButton-quick-warmup"
+                  size="lg"
+                  variant="primary"
+                  onClick={() => onStartClick(scenarios[0].id)}
+                >
+                  Quick Warmup
+                </Button>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={() => setShowScenarioMenu(true)}
+                >
+                  Load Scenario
+                </Button>
+              </div>
+              <Button size="lg" variant="outline" onClick={onSettings}>
+                SETTINGS
               </Button>
-            ))}
-          </div>
-          <Button size="lg" variant="outline" onClick={onSettings}>
-            SETTINGS
-          </Button>
-
-          <Button size="lg" variant="outline" onClick={onExitClick}>
-            EXIT
-          </Button>
-          <p className="text-sm opacity-65">Click or press Space to choose randomly</p>
+              <Button size="lg" variant="outline" onClick={onExitClick}>
+                EXIT
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-col gap-3 w-full max-w-md">
+                <h2 className="text-2xl font-bold text-center mb-2">Load Scenario</h2>
+                {savedScenarios.length === 0 ? (
+                  <p className="text-center opacity-65 py-8">
+                    No saved scenarios found.<br />
+                    Create one in the Editor!
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-2 max-h-[400px] overflow-y-auto">
+                    {savedScenarios.map((scenario) => (
+                      <Button
+                        key={scenario.id}
+                        size="lg"
+                        variant="outline"
+                        onClick={() => onLoadScenarioClick(scenario)}
+                        className="justify-between"
+                      >
+                        <span>{scenario.name}</span>
+                        <span className="text-xs opacity-60">
+                          {new Date(scenario.updatedAt).toLocaleDateString()}
+                        </span>
+                      </Button>
+                    ))}
+                  </div>
+                )}
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={() => setShowScenarioMenu(false)}
+                  className="mt-4"
+                >
+                  Back
+                </Button>
+              </div>
+            </>
+          )}
         </div>
         <div className="absolute bottom-4  text-sm opacity-60">v0.2.0 alpha</div>
       </div>
