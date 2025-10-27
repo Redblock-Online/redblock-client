@@ -127,7 +127,7 @@ export default function TimerDisplay({
   return (
     <div 
       id="timer" 
-      className="absolute top-5 left-5 text-[32px] pointer-events-none z-10 select-none"
+      className="absolute top-5 left-5 text-[32px] pointer-events-none z-10 select-none hidden"
       style={{ transform: `scale(${scaleValue})`, transformOrigin: 'top left' }}
     >
       {text}

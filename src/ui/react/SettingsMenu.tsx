@@ -868,6 +868,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 unit="%"
                 onChange={(value) => updateGameSetting("crosshairOpacity", value)}
               />
+              {/* DISABLED: Timer hidden for now
               <SliderInput
                 label="HUD Scale"
                 value={gameSettings.hudScale}
@@ -882,6 +883,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 value={gameSettings.showTimer}
                 onChange={(value) => updateGameSetting("showTimer", value)}
               />
+              */}
               <ToggleInput
                 label="Show Hints"
                 value={gameSettings.showHints}

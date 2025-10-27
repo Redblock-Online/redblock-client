@@ -537,10 +537,11 @@ export default class App {
     
     // Only stop timer if no targets remain AND no new generators were activated
     if (!remaining && !newGeneratorsActivated) {
-  // Play celebratory laser sound for hitting the last target
-  this.audioManager.play('lazer02_1', { volume: 0.35, startAtMs: 0 });
+      // Play celebratory laser sound for hitting the last target
+      this.audioManager.play('lazer02_1', { volume: 0.35, startAtMs: 0 });
       
-      this.stopTimer();
+      // DISABLED: Don't stop timer or show stats - let player continue
+      // this.stopTimer();
       
       // TargetManager handles all cleanup and pooling automatically
       // No manual dispose needed - the pool manages everything efficiently
