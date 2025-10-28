@@ -3,6 +3,9 @@ import React, { useState, useEffect } from "react";
 import Button from "@/ui/react/components/Button";
 import type { ScenarioConfig } from "@/config/scenarios";
 import { listScenarios, type StoredScenario } from "@/editor/scenarioStore";
+import { FaTwitter, FaDiscord, FaYoutube, FaGithub } from "react-icons/fa";
+import { RiInstagramFill } from "react-icons/ri";
+import socials from "@/config/socials.json";
 
 type Props = {
   scenarios: ScenarioConfig[];
@@ -11,6 +14,26 @@ type Props = {
 };
 
 export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
+  const ICONS = {
+    twitter: FaTwitter,
+    discord: FaDiscord,
+    youtube: FaYoutube,
+    github: FaGithub,
+    instagram: RiInstagramFill,
+  } as const;
+
+  type SocialIconKey = keyof typeof ICONS;
+  type SocialLink = {
+    id: string;
+    label: string;
+    url: string;
+    icon: SocialIconKey;
+  };
+
+  const socialLinks: SocialLink[] = Array.isArray((socials as { links?: unknown }).links)
+    ? (((socials as { links: unknown }).links) as SocialLink[])
+    : [];
+
   const [showScenarioMenu, setShowScenarioMenu] = useState(false);
   const [savedScenarios, setSavedScenarios] = useState<StoredScenario[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -104,6 +127,25 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
         className="absolute w-10 h-10 border-2 border-black bg-transparent z-[2] animate-float will-change-transform"
         style={{ top: "60%", left: "5%", transform: "translate3d(0, 0, 0) rotate(45deg)" }}
       />
+      {/* Social Links - top right (from config) */}
+      <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+        {socialLinks.map((link) => {
+          const Icon = ICONS[link.icon] ?? FaGithub;
+          return (
+            <a
+              key={link.id}
+              href={link.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group p-1 transition-transform duration-150 hover:scale-110"
+              aria-label={link.label}
+              title={link.label}
+            >
+              <Icon className="text-2xl text-black/80 group-hover:text-black transition-colors" />
+            </a>
+          );
+        })}
+      </div>
 
       {/* Menu container */}
       <div className="relative z-10 flex flex-col items-center justify-center min-h-screen p-8">
@@ -288,7 +330,7 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
             </div>
           )}
         </div>
-        <div className="absolute bottom-4  text-sm opacity-60">v0.2.0 alpha</div>
+        <div className="absolute bottom-4 text-sm opacity-60">v0.2.0 alpha</div>
       </div>
     </div>
   );

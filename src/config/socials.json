@@ -1,0 +1,24 @@
+{
+  "links": [{
+      "id": "instagram",
+      "label": "Instagram",
+      "url": "https://instagram.com/redblock.online",
+      "icon": "instagram"
+    }, {
+      "id": "github",
+      "label": "GitHub",
+      "url": "https://github.com/Redblock-Online/redblock-client",
+      "icon": "github"
+    }, {
+      "id": "discord",
+      "label": "Discord",
+      "url": "https://discord.gg/nYMkANTv",
+      "icon": "discord"
+    }, {
+      "id": "youtube",
+      "label": "YouTube",
+      "url": "https://youtube.com/@redblockonline",
+      "icon": "youtube"
+    }
+  ]
+}
