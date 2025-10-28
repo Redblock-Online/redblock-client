@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type SetStateAction } from "react";
 import { Euler, Group, Vector3, Object3D, Quaternion as ThreeQuaternion } from "three";
 import { FaPlay, FaStop } from "react-icons/fa";
@@ -1165,13 +1166,15 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         {!isGameActive && (
           <header className="relative z-50 flex h-12 items-center justify-between border-b border-[#1a1a1a] bg-[#323232] px-4 pointer-events-auto">
         <div className="flex items-center gap-6">
-          <Image
-            src="/logo.png"
-            alt="Redblock logo"
-            width={498}
-            height={410}
-            className="h-8 w-auto"
-          />
+          <Link href="/" className="cursor-pointer hover:opacity-80 transition-opacity">
+            <Image
+              src="/logo.png"
+              alt="Redblock logo"
+              width={498}
+              height={410}
+              className="h-8 w-auto"
+            />
+          </Link>
           <nav className="flex items-center gap-0.5 text-[11px] text-[#cccccc]">
             {menuGroups.map((menu) => (
               <div key={menu.id} className="relative">
