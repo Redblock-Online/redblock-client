@@ -59,7 +59,7 @@ type GraphicsSettings = {
 };
 
 const DEFAULT_GAME_SETTINGS: GameSettings = {
-  fov: 90,
+  fov: 60,
   showFps: false,
   showPing: false,
   crosshairStyle: "cross",

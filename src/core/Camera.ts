@@ -8,11 +8,11 @@ export default class Camera {
   constructor() {
     // Load FOV from settings or use default
     const savedSettings = localStorage.getItem("gameSettings");
-    let worldFov = 90; // default world FOV
+    let worldFov = 60; // default world FOV
     if (savedSettings) {
       try {
         const settings = JSON.parse(savedSettings);
-        worldFov = settings.fov || 90;
+        worldFov = settings.fov || 60;
       } catch {
         // Use default
       }
