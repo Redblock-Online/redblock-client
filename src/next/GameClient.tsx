@@ -12,17 +12,19 @@ export default function GameClient() {
     let uiController: UIController | undefined;
 
     const start = async () => {
-      const [{ default: logCredits }, { default: AppClass }, { mountUI }, { ensureCsrfCookie }] =
-        await Promise.all([
-          import("@/credits"),
-          import("@/core/App"),
-          import("@/ui/react/mountUI"),
-          import("@/ui/react/api/http"),
-        ]);
+      const { default: logCredits } = await import("@/credits");
 
       if (disposed) return;
 
       logCredits();
+
+      const [{ default: AppClass }, { mountUI }, { ensureCsrfCookie }] = await Promise.all([
+        import("@/core/App"),
+        import("@/ui/react/mountUI"),
+        import("@/ui/react/api/http"),
+      ]);
+
+      if (disposed) return;
 
       try {
         await ensureCsrfCookie();

@@ -2,6 +2,25 @@ type Role = "Founder" | "Programmer" | "Designer" | "Artist" | "Musician" | "Sou
 
 let message = "";
 
+const originalConsoleLog = console.log.bind(console);
+const noop = (..._args: unknown[]) => {};
+
+let consoleSilencedForProduction = false;
+
+const silenceConsoleInProduction = () => {
+  if (consoleSilencedForProduction) return;
+  if (typeof window === "undefined") return;
+  if (process.env.NODE_ENV !== "production") return;
+
+  console.log = noop as typeof console.log;
+  console.info = noop as typeof console.info;
+  console.debug = noop as typeof console.debug;
+  console.warn = noop as typeof console.warn;
+  console.trace = noop as typeof console.trace;
+
+  consoleSilencedForProduction = true;
+};
+
 /* ---------- Utils ---------- */
 const separator = () => { message += "\n\n\n\n"; };
 
@@ -93,14 +112,16 @@ const weAre = (names: string[], roles: Role[], links: string[]) => {
 /* ---------- Finish ---------- */
 const finish = () => {
   message += "Thanks for playing!\n\n";
-  console.log(message);
+  originalConsoleLog(message);
 };
 
 /* ---------- Public API ---------- */
 export default function logCredits() {
+  message = "";
   banner();
   iAm("Freddy", "Founder", "https://github.com/freddysae0");
   iAm("René", "Programmer", "https://github.com/reneespinosa");
   // weAre(["Pepe", "Juan", "Alfonso"], ["Artist", "Programmer", "Designer"], ["https://github.com/pepe", "https://github.com/juan", "https://github.com/alfonso"]);
   finish();
+  silenceConsoleInProduction();
 }
