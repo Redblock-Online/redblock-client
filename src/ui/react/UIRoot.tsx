@@ -47,7 +47,25 @@ const readStoredMusicCategory = (): MusicCategory => {
 };
 
 function isTouchDevice() {
-  return "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  // Check if it's actually a mobile device, not just a PC with touchscreen
+  // Use multiple signals to avoid false positives on touch-enabled laptops
+  
+  // 1. Check user agent for mobile indicators
+  const userAgent = navigator.userAgent.toLowerCase();
+  const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+  
+  // 2. Check if primary input is touch (not mouse/trackpad)
+  const hasFinePointer = window.matchMedia("(pointer: fine)").matches;
+  
+  // 3. Check screen size (mobile devices typically < 768px width)
+  const isSmallScreen = window.innerWidth < 768;
+  
+  // Device is mobile if:
+  // - Has mobile user agent, OR
+  // - Has touch AND no fine pointer (mouse/trackpad) AND small screen
+  const hasTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  
+  return isMobileUA || (hasTouch && !hasFinePointer && isSmallScreen);
 }
 
 export default function UIRoot({ onStart, onPauseChange, bindTimerController, onExit }: Props) {
