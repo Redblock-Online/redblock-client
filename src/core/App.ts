@@ -110,11 +110,12 @@ export default class App {
     return 'calm';
   }
 
-  constructor(ui?: UIController, options?: { disableServer?: boolean }) {
+  constructor(ui?: UIController, options?: { disableServer?: boolean; editorMode?: boolean }) {
     this.ui = ui;
     this.canvas = document.querySelector("canvas") as HTMLCanvasElement;
     this.gameRunning = false;
-    this.isEditorMode = options?.disableServer ?? false;
+    // Editor mode should be explicitly set, not inferred from server state
+    this.isEditorMode = options?.editorMode ?? false;
     
     console.log("[App] Constructor - options:", options);
     console.log("[App] Constructor - isEditorMode:", this.isEditorMode);
