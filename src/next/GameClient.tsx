@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { MULTIPLAYER_ENABLED } from "@/config/gameConfig";
 import type App from "@/core/App";
 import type { UIController } from "@/ui/react/mountUI";
 
@@ -31,7 +32,7 @@ export default function GameClient() {
 
       if (disposed) return;
 
-      appInstance = new AppClass();
+      appInstance = new AppClass(undefined, { disableServer: !MULTIPLAYER_ENABLED, editorMode: false });
       uiController = mountUI({
         onStart: (scenarioId: string) => appInstance?.startGame(scenarioId),
         onPauseChange: (paused: boolean) => appInstance?.setPaused(paused),
