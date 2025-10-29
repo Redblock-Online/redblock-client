@@ -46,7 +46,7 @@ const readStoredMusicCategory = (): MusicCategory => {
   return DEFAULT_MUSIC_CATEGORY;
 };
 
-function isTouchDevice() {
+function isAMobile() {
   // Check if it's actually a mobile device, not just a PC with touchscreen
   // Use multiple signals to avoid false positives on touch-enabled laptops
   
@@ -77,7 +77,11 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
   const [showHints, setShowHints] = useState(true);
   const [musicCategory, setMusicCategory] = useState<MusicCategory>(() => readStoredMusicCategory());
   const { setUser, setHydrated } = useMeStore();
-  const touch = useMemo(() => isTouchDevice(), []);
+  const isMobile = useMemo(() => isAMobile(), []);
+  const [mobileWarningDismissed, setMobileWarningDismissed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("dismissMobileWarning") === "true";
+  });
   const timerRef = useRef<TimerController | null>(null);
   const pausedRef = useRef(false);
   const timerRunningRef = useRef(false);
@@ -379,14 +383,32 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
     };
   }, [started, onPauseChange]);
 
-  if (touch) {
+  const handleDismissMobileWarning = useCallback(() => {
+    localStorage.setItem("dismissMobileWarning", "true");
+    setMobileWarningDismissed(true);
+  }, []);
+
+  if (isMobile && !mobileWarningDismissed) {
     return (
       <div className="fixed inset-0 bg-[radial-gradient(#fff,#fff)] flex items-center justify-center text-black">
         <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_49%,#000_49%,#000_51%,transparent_51%),linear-gradient(0deg,transparent_49%,#000_49%,#000_51%,transparent_51%)] [background-size:80px_80px] opacity-10" />
-        <div className="relative z-10 flex flex-col p-5 text-center max-w-md">
-          <h1 className="text-2xl font-bold mb-2">This game is designed for PC</h1>
+        <div className="relative z-10 flex flex-col gap-4 p-8 text-center max-w-lg border-[3px]  bg-white">
+          <h1 className="text-2xl font-bold font-mono tracking-wider uppercase">This game is designed for PC</h1>
           <IGBadge started={false} />
-          <p>Please switch to a desktop or laptop for the best experience.</p>
+          <p className="text-base leading-relaxed">
+            This game requires a keyboard and mouse for the best experience.
+          </p>
+          <div className="border-t-[3px] border-black pt-4 mt-2">
+            <p className="font-mono text-sm font-bold mb-4 uppercase">
+              Do you have a keyboard and mouse connected?
+            </p>
+            <button
+              onClick={handleDismissMobileWarning}
+              className="w-full font-mono font-bold tracking-wider border-[3px] border-black px-6 py-3 uppercase transition-all bg-[#ff0000] text-white hover:bg-black"
+            >
+              Yes, Let Me Play
+            </button>
+          </div>
         </div>
       </div>
     );
