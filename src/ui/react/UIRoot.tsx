@@ -12,6 +12,9 @@ import SettingsMenu from "./SettingsMenu";
 import Crosshair from "./components/Crosshair";
 import StatsDisplay from "./components/StatsDisplay";
 import { AudioManager } from "@/utils/AudioManager";
+import { FaTwitter, FaDiscord, FaYoutube, FaGithub } from "react-icons/fa";
+import { RiInstagramFill } from "react-icons/ri";
+import socials from "@/config/socials.json";
 
 type Props = {
   onStart: (scenarioId: string) => void;
@@ -388,13 +391,54 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
     setMobileWarningDismissed(true);
   }, []);
 
+  // Social links setup (same as StartScreen)
+  const SOCIAL_ICONS = {
+    twitter: FaTwitter,
+    discord: FaDiscord,
+    youtube: FaYoutube,
+    github: FaGithub,
+    instagram: RiInstagramFill,
+  } as const;
+
+  type SocialIconKey = keyof typeof SOCIAL_ICONS;
+  type SocialLink = {
+    id: string;
+    label: string;
+    url: string;
+    icon: SocialIconKey;
+  };
+
+  const socialLinks: SocialLink[] = Array.isArray((socials as { links?: unknown }).links)
+    ? (((socials as { links: unknown }).links) as SocialLink[])
+    : [];
+
   if (isMobile && !mobileWarningDismissed) {
     return (
       <div className="fixed inset-0 bg-[radial-gradient(#fff,#fff)] flex items-center justify-center text-black">
         <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_49%,#000_49%,#000_51%,transparent_51%),linear-gradient(0deg,transparent_49%,#000_49%,#000_51%,transparent_51%)] [background-size:80px_80px] opacity-10" />
-        <div className="relative z-10 flex flex-col gap-4 p-8 text-center max-w-lg border-[3px]  bg-white">
+        
+        {/* Social Links - top right */}
+        <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+          {socialLinks.map((link) => {
+            const Icon = SOCIAL_ICONS[link.icon] ?? FaGithub;
+            return (
+              <a
+                key={link.id}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group p-1 transition-transform duration-150 hover:scale-110"
+                aria-label={link.label}
+                title={link.label}
+              >
+                <Icon className="text-2xl text-black/80 group-hover:text-black transition-colors" />
+              </a>
+            );
+          })}
+        </div>
+
+        <div className="relative z-10 flex flex-col gap-4 p-8 text-center max-w-lg border-[3px] border-black bg-white">
           <h1 className="text-2xl font-bold font-mono tracking-wider uppercase">This game is designed for PC</h1>
-          <IGBadge started={false} />
           <p className="text-base leading-relaxed">
             This game requires a keyboard and mouse for the best experience.
           </p>
