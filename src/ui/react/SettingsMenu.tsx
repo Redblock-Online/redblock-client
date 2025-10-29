@@ -48,7 +48,6 @@ type GameSettings = {
   hudScale: number;
   showTimer: boolean;
   showHints: boolean;
-  multiplayerEnabled: boolean;
 };
 
 type GraphicsSettings = {
@@ -70,7 +69,6 @@ const DEFAULT_GAME_SETTINGS: GameSettings = {
   hudScale: 100,
   showTimer: true,
   showHints: true,
-  multiplayerEnabled: false,
 };
 
 type MusicCategory = "none" | "energy" | "calm";
@@ -831,16 +829,6 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 value={gameSettings.showFps}
                 onChange={(value) => updateGameSetting("showFps", value)}
               />
-              <ToggleInput
-                label="Enable Multiplayer"
-                value={gameSettings.multiplayerEnabled}
-                onChange={(value) => updateGameSetting("multiplayerEnabled", value)}
-              />
-              <div className="px-4 py-2 border-[3px] border-black/20 bg-white/30">
-                <p className="font-mono text-[10px] uppercase opacity-70 leading-relaxed">
-                  Changing Multiplayer requires restarting the session.
-                </p>
-              </div>
               {/* DISABLED: Ping hidden for now
               <ToggleInput
                 label="Show Ping"
