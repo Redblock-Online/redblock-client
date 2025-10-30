@@ -6,9 +6,11 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import MainScene from "@/scenes/MainScene";
 import { PhysicsSystem } from "@/systems/PhysicsSystem";
 import Camera from "./Camera";
+import type Renderer from "./Renderer";
 
 export default class Loop {
   renderer: EffectComposer;
+  rendererClass: Renderer | null = null; // Reference to Renderer class for respawn effect
   scene: MainScene;
   camera: THREE.Camera;
   cameraClass: Camera | null = null; // Reference to Camera class for weapon camera sync
@@ -38,7 +40,8 @@ export default class Loop {
     controls: ControlsWithMovement,
     pistol: Pistol,
     physicsSystem: PhysicsSystem,
-    cameraClass?: Camera // Optional Camera class for weapon camera sync
+    cameraClass?: Camera, // Optional Camera class for weapon camera sync
+    rendererClass?: Renderer // Optional Renderer class for respawn effect
   ) {
     this.renderer = renderer;
     this.scene = scene;
@@ -47,6 +50,7 @@ export default class Loop {
     this.pistol = pistol;
     this.physicsSystem = physicsSystem;
     this.cameraClass = cameraClass || null;
+    this.rendererClass = rendererClass || null;
     this.active = false;
 
     this.deltaTime = 0;
@@ -262,6 +266,11 @@ export default class Loop {
     
     this.pistol.update(this.deltaTime, this.camera);
     this.scene.update();
+    
+    // Update respawn effect if available
+    if (this.rendererClass?.respawnEffect) {
+      this.rendererClass.respawnEffect.update(now / 1000); // Convert to seconds
+    }
     
     requestAnimationFrame(this.animate);
     this.renderer.render(this.deltaTime);
