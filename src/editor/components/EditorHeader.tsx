@@ -17,8 +17,8 @@ interface EditorHeaderProps {
   hasUnsavedChanges: boolean;
   title: string;
   menuAnchors: React.MutableRefObject<Record<string, HTMLButtonElement | null>>;
-  onMenuClick: (menuId: string) => void;
-  closeMenus: () => void;
+  onMenuHover: (menuId: string) => void;
+  onMenuLeave: () => void;
   alerts: Alert[];
 }
 
@@ -29,8 +29,8 @@ export function EditorHeader({
   hasUnsavedChanges,
   title,
   menuAnchors,
-  onMenuClick,
-  closeMenus,
+  onMenuHover,
+  onMenuLeave,
   alerts,
 }: EditorHeaderProps): ReactElement {
   return (
@@ -58,13 +58,8 @@ export function EditorHeader({
                     ? "bg-[#4772b3] text-white"
                     : "text-[#cccccc] hover:bg-[#404040]"
                 }`}
-                onClick={() => {
-                  if (openMenuId === menu.id) {
-                    closeMenus();
-                  } else {
-                    onMenuClick(menu.id);
-                  }
-                }}
+                onMouseEnter={() => onMenuHover(menu.id)}
+                onMouseLeave={() => onMenuLeave()}
               >
                 {menu.label}
               </button>

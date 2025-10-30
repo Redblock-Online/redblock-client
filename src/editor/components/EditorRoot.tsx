@@ -87,6 +87,8 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ left: number; top: number; width: number } | null>(null);
   const menuAnchors = useRef<Record<string, HTMLButtonElement | null>>({});
+  const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const menuContainerRef = useRef<HTMLDivElement | null>(null);
   const autoSaveTimeoutRef = useRef<number | null>(null);
   const panelAutoSavePendingRef = useRef(false);
   const isMountedRef = useRef(true);
@@ -186,7 +188,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       performAutoSave();
       autoSaveTimeoutRef.current = null;
     }, 500);
-  }, [markUnsaved, performAutoSave]);
+  }, [editor, markUnsaved, performAutoSave]);
 
   const flushAutoSave = useCallback(() => {
     if (typeof window === "undefined") {
@@ -217,6 +219,34 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     setMenuPosition(null);
   }, []);
 
+  const scheduleCloseMenus = useCallback((delay: number = 300) => {
+    // Cancel any existing timeout
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+    }
+    
+    // Schedule new close timeout
+    hoverTimeoutRef.current = setTimeout(() => {
+      closeMenus();
+      hoverTimeoutRef.current = null;
+    }, delay);
+  }, [closeMenus]);
+
+  const handleMenuHover = useCallback((menuId: string) => {
+    // Cancel any pending close timeout
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    
+    setOpenMenuId(menuId);
+    updateMenuPosition(menuId);
+  }, [updateMenuPosition]);
+
+  const handleMenuLeave = useCallback(() => {
+    scheduleCloseMenus();
+  }, [scheduleCloseMenus]);
+
   useEffect(() => {
     refreshScenarios();
   }, [refreshScenarios]);
@@ -227,6 +257,10 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       if (autoSaveTimeoutRef.current !== null && typeof window !== "undefined") {
         window.clearTimeout(autoSaveTimeoutRef.current);
         autoSaveTimeoutRef.current = null;
+      }
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+        hoverTimeoutRef.current = null;
       }
       flushAutoSave();
     };
@@ -284,11 +318,26 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     const handleReposition = () => updateMenuPosition(openMenuId);
     window.addEventListener("resize", handleReposition);
     window.addEventListener("scroll", handleReposition, true);
+    // Close on outside click (but allow clicks on the anchor button and the menu container)
+    const handleDocumentMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      const anchor = menuAnchors.current[openMenuId];
+      const container = menuContainerRef.current;
+      if (
+        target &&
+        (container?.contains(target) || (anchor && anchor.contains(target)))
+      ) {
+        return;
+      }
+      closeMenus();
+    };
+    document.addEventListener("mousedown", handleDocumentMouseDown, true);
     return () => {
       window.removeEventListener("resize", handleReposition);
       window.removeEventListener("scroll", handleReposition, true);
+      document.removeEventListener("mousedown", handleDocumentMouseDown, true);
     };
-  }, [openMenuId, updateMenuPosition]);
+  }, [closeMenus, openMenuId, updateMenuPosition]);
 
   useEffect(() => {
     if (!openMenuId) {
@@ -1188,14 +1237,8 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
                       ? "bg-[#4772b3] text-white"
                       : "text-[#cccccc] hover:bg-[#404040]"
                   }`}
-                  onClick={() => {
-                    if (openMenuId === menu.id) {
-                      closeMenus();
-                    } else {
-                      setOpenMenuId(menu.id);
-                      updateMenuPosition(menu.id);
-                    }
-                  }}
+                  onMouseEnter={() => handleMenuHover(menu.id)}
+                  onMouseLeave={() => handleMenuLeave()}
                 >
                   {menu.label}
                 </button>
@@ -1250,11 +1293,20 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         
         {openMenuId && activeMenu && menuPosition ? (
           <Portal>
-            <div className="fixed inset-0 z-[900]" onMouseDown={closeMenus}>
+            <div className="fixed inset-0 z-[900] pointer-events-none">
               <div
-                className="absolute min-w-[180px] overflow-hidden rounded border border-[#1a1a1a] bg-[#323232] shadow-lg"
+                ref={menuContainerRef}
+                className="absolute min-w-[180px] overflow-hidden rounded border border-[#1a1a1a] bg-[#323232] shadow-lg pointer-events-auto"
                 style={{ left: menuPosition.left, top: menuPosition.top, minWidth: Math.max(menuPosition.width, 160) }}
                 onMouseDown={(event) => event.stopPropagation()}
+                onMouseEnter={() => {
+                  // Cancel any pending close timeout when mouse enters the menu
+                  if (hoverTimeoutRef.current) {
+                    clearTimeout(hoverTimeoutRef.current);
+                    hoverTimeoutRef.current = null;
+                  }
+                }}
+                onMouseLeave={() => handleMenuLeave()}
               >
                 {activeMenu.items.map((item) => {
                   const disabled = Boolean(item.disabled);

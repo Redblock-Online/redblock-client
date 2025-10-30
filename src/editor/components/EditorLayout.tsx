@@ -40,8 +40,8 @@ interface EditorLayoutProps {
   rotationState: VectorState;
   isEditingComponent: boolean;
   selectedComponentId: string | null;
-  onMenuClick: (menuId: string) => void;
-  closeMenus: () => void;
+  onMenuHover: (menuId: string) => void;
+  onMenuLeave: () => void;
   setActiveItem: (item: EditorItem | null) => void;
   setComponentPendingDelete: (value: { id: string; label: string }) => void;
   handlePositionChange: (updater: React.SetStateAction<VectorState>) => void;
@@ -69,11 +69,17 @@ export function EditorLayout(props: EditorLayoutProps): ReactElement {
         hasUnsavedChanges={props.hasUnsavedChanges}
         title={props.title}
         menuAnchors={props.menuAnchors}
-        onMenuClick={props.onMenuClick}
-        closeMenus={props.closeMenus}
+        onMenuHover={props.onMenuHover}
+        onMenuLeave={props.onMenuLeave}
         alerts={props.alerts}
       />
-      <DropdownMenu menu={props.activeMenu} position={props.menuPosition} onClose={props.closeMenus} />
+      <DropdownMenu 
+        menu={props.activeMenu} 
+        position={props.menuPosition} 
+        onClose={props.onMenuLeave}
+        onMouseEnter={() => props.onMenuHover(props.openMenuId ?? "")}
+        onMouseLeave={props.onMenuLeave}
+      />
       <div className="flex flex-1 overflow-hidden px-2 pb-2 pt-2 gap-2">
         <EditorSidebar
           items={props.items}
