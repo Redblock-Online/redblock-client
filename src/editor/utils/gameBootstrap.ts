@@ -35,18 +35,21 @@ export async function processScenarioForGame(app: App, scenario: SerializedScena
     }
   }
   
-  // Calculate play area bounds for room constraints
+  // Calculate play area bounds for room constraints and find lowest block
   let minX = Infinity, maxX = -Infinity;
   let minZ = Infinity, maxZ = -Infinity;
+  let minY = Infinity; // Track lowest block Y position
   
   scenario.blocks.forEach((block: SerializedNode) => {
-    if (!block.isSpawnPoint) {
+    if (!block.isSpawnPoint && !block.isGenerator) {
       const x = block.transform.position.x;
       const z = block.transform.position.z;
+      const y = block.transform.position.y - (block.transform.scale.y / 2); // Bottom of block
       minX = Math.min(minX, x);
       maxX = Math.max(maxX, x);
       minZ = Math.min(minZ, z);
       maxZ = Math.max(maxZ, z);
+      minY = Math.min(minY, y);
     }
   });
   
@@ -57,13 +60,19 @@ export async function processScenarioForGame(app: App, scenario: SerializedScena
   const sizeZ = maxZ - minZ + 40;
   const roomSize = Math.max(sizeX, sizeZ, 100); // At least 100 units for freedom of movement
   
-  console.log("[processScenarioForGame] Play area bounds:", { minX, maxX, minZ, maxZ });
+  console.log("[processScenarioForGame] Play area bounds:", { minX, maxX, minZ, maxZ, minY });
   console.log("[processScenarioForGame] Room center:", { centerX, centerZ });
   console.log("[processScenarioForGame] Room size:", roomSize);
   
   // Update the player's room constraints
   app.controls.initPlayerRoom(centerX, centerZ, roomSize);
   console.log("[processScenarioForGame] Player room updated");
+  
+  // Set lowest block Y for fall detection
+  if (minY !== Infinity) {
+    app.controls.setLowestBlockY(minY);
+    console.log("[processScenarioForGame] Lowest block Y set for fall detection:", minY);
+  }
   
   // Process each block recursively
   scenario.blocks.forEach((block: SerializedNode) => {
@@ -449,18 +458,21 @@ function loadCustomScenario(app: App, scenario: SerializedScenario) {
   const customGroup = new THREE.Group();
   customGroup.userData.isCubeGroup = true;
   
-  // Calculate bounds of all blocks to set room size
+  // Calculate bounds of all blocks to set room size and find lowest block
   let minX = Infinity, maxX = -Infinity;
   let minZ = Infinity, maxZ = -Infinity;
+  let minY = Infinity; // Track lowest block Y position
   
   scenario.blocks.forEach((block) => {
-    if (!block.isSpawnPoint) {
+    if (!block.isSpawnPoint && !block.isGenerator) {
       const x = block.transform.position.x;
       const z = block.transform.position.z;
+      const y = block.transform.position.y - (block.transform.scale.y / 2); // Bottom of block
       minX = Math.min(minX, x);
       maxX = Math.max(maxX, x);
       minZ = Math.min(minZ, z);
       maxZ = Math.max(maxZ, z);
+      minY = Math.min(minY, y);
     }
   });
   
@@ -471,13 +483,19 @@ function loadCustomScenario(app: App, scenario: SerializedScenario) {
   const sizeZ = maxZ - minZ + 20;
   const roomSize = Math.max(sizeX, sizeZ, 50); // At least 50 units
   
-  console.log("[Bootstrap] Play area bounds:", { minX, maxX, minZ, maxZ });
+  console.log("[Bootstrap] Play area bounds:", { minX, maxX, minZ, maxZ, minY });
   console.log("[Bootstrap] Room center:", { centerX, centerZ });
   console.log("[Bootstrap] Room size:", roomSize);
   
   // Update the player's room constraints
   app.controls.initPlayerRoom(centerX, centerZ, roomSize);
   console.log("[Bootstrap] Player room updated");
+  
+  // Set lowest block Y for fall detection
+  if (minY !== Infinity) {
+    app.controls.setLowestBlockY(minY);
+    console.log("[Bootstrap] Lowest block Y set for fall detection:", minY);
+  }
   
   // Process each block from the scenario recursively (handles nested groups/components)
   console.log("[Bootstrap] Processing blocks recursively...");

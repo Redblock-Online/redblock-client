@@ -82,8 +82,15 @@ export default class Controls {
   // Room tracking
   private roomCoordX = 0;
   private roomCoordZ = 0;
-  private roomSize = 20; // default room size (width/depth)
+  private roomSize = 200; // default room size (width/depth) - increased for larger play area
   private isEditorMode = false; // If true, disable movement limits
+
+  // Spawn point and fall detection
+  private spawnPoint = new THREE.Vector3(0, 0, 0);
+  private spawnYaw = 0;
+  private lowestBlockY = -Infinity; // Y position of the lowest block in the scene
+  private fallThreshold = 20; // Distance below lowest block before respawn
+  private onRespawnCallback: (() => void) | null = null; // Callback for respawn visual effects
 
   private changeCheckAccumulator = 0;
   private changeCheckInterval = 1 / 20; // Reduced from 24 to 20 Hz for less network overhead
@@ -329,6 +336,23 @@ export default class Controls {
   }
 
   /**
+   * Set the lowest block Y position for fall detection
+   * @param lowestY - Y position of the lowest block in the scene
+   */
+  public setLowestBlockY(lowestY: number) {
+    this.lowestBlockY = lowestY;
+    console.log("[Controls] Lowest block Y set to:", lowestY, "- fall threshold:", lowestY - this.fallThreshold);
+  }
+
+  /**
+   * Set callback for respawn visual effects
+   * @param callback - Function to call when player respawns
+   */
+  public setOnRespawnCallback(callback: () => void) {
+    this.onRespawnCallback = callback;
+  }
+
+  /**
    * Reset player physics state (velocity)
    * Call when level starts/ends
    */
@@ -339,11 +363,18 @@ export default class Controls {
   }
 
   // Safe teleport (moves the parent, not the camera)
-  public teleportTo(x: number, y: number, z: number, yawRad: number = 0) {
+  public teleportTo(x: number, y: number, z: number, yawRad: number = 0, saveAsSpawn: boolean = true) {
     this.initPlayerRoom(x, z, this.roomSize);
     this.yawObject.position.set(x, y, z);
     this.yawObject.rotation.set(0, yawRad, 0);
     this.pitchObject.rotation.set(0, 0, 0); // resetea pitch
+    
+    // Save as spawn point for respawn after falling
+    if (saveAsSpawn) {
+      this.spawnPoint.set(x, y, z);
+      this.spawnYaw = yawRad;
+      console.log("[Controls] Spawn point saved:", this.spawnPoint, "yaw:", yawRad);
+    }
     
     // CRITICAL: Sync physics body position after teleport
     if (this.collisionSystem) {
@@ -371,20 +402,7 @@ export default class Controls {
     if (this.keysPressed[this.keybindings.backward]) this._tempTargetDir.x -= 1;
     if (this.keysPressed[this.keybindings.forward]) this._tempTargetDir.x += 1;
 
-    // Only clamp position in normal game mode, not in editor
-    if (!this.isEditorMode) {
-      const halfRoom = this.roomSize / 2;
-      this.yawObject.position.x = THREE.MathUtils.clamp(
-        this.yawObject.position.x,
-        this.roomCoordX - halfRoom,
-        this.roomCoordX + halfRoom
-      );
-      this.yawObject.position.z = THREE.MathUtils.clamp(
-        this.yawObject.position.z,
-        this.roomCoordZ - halfRoom,
-        this.roomCoordZ + halfRoom
-      );
-    }
+    // Movement restrictions removed - player can move freely in X and Z
     const effectiveSpeed =
       this.moveSpeed *
       (this.isCrouching ? this.crouchSpeedFactor : 1) *
@@ -503,6 +521,23 @@ export default class Controls {
 
     // Head bobbing logic
     this.updateHeadBobbing(deltaTime);
+
+    // Fall detection - respawn if player falls below lowest block
+    if (this.lowestBlockY !== -Infinity) {
+      const fallLimit = this.lowestBlockY - this.fallThreshold;
+      if (this.yawObject.position.y < fallLimit) {
+        console.log("[Controls] Player fell below fall limit:", this.yawObject.position.y, "< ", fallLimit);
+        console.log("[Controls] Respawning at spawn point:", this.spawnPoint);
+        
+        // Trigger respawn visual effect
+        if (this.onRespawnCallback) {
+          this.onRespawnCallback();
+        }
+        
+        this.teleportTo(this.spawnPoint.x, this.spawnPoint.y, this.spawnPoint.z, this.spawnYaw, false);
+        this.resetPhysicsState();
+      }
+    }
 
     // Periodic check (you already had it)
     this.changeCheckAccumulator += deltaTime;
