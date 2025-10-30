@@ -88,7 +88,21 @@ export class EditorNodeBuilder {
         return this.buildGroupFromNode(child, componentMap);
       }
       case "component": {
-        return null;
+        if (!child.componentId) return null;
+        const definition = componentMap.get(child.componentId);
+        if (!definition) return null;
+        const group = new Group();
+        this.serializer.applySerializedTransform(group, child.transform);
+        definition.members.forEach((member) => {
+          const mesh = this.blocks.createPrimitiveBlockMesh();
+          mesh.position.set(member.position.x, member.position.y, member.position.z);
+          mesh.rotation.set(member.rotation.x, member.rotation.y, member.rotation.z);
+          mesh.scale.set(member.scale.x, member.scale.y, member.scale.z);
+          group.add(mesh);
+        });
+        (group as Object3D & { userData: Record<string, unknown> }).userData.componentId = definition.id;
+        (group as Object3D & { userData: Record<string, unknown> }).userData.componentRole = "instance";
+        return group;
       }
     }
   }

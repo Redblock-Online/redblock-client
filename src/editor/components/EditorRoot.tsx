@@ -862,11 +862,8 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
 
   // Clipboard helpers must be declared before effects that depend on them
   const copySelection = useCallback(() => {
-    const currentSelection = selection
-      ? Array.isArray(selection)
-        ? selection
-        : [selection]
-      : editor.getSelectionArray();
+    // Always query the live selection from the editor to avoid React state races
+    const currentSelection = editor.getSelectionArray();
     if (currentSelection.length === 0) {
       return;
     }
@@ -877,7 +874,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     }
     clipboardRef.current = payload;
     pasteOffsetRef.current = 0;
-  }, [editor, selection]);
+  }, [editor]);
 
   const pasteClipboard = useCallback(() => {
     const payload = clipboardRef.current;
