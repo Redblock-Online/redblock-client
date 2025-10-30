@@ -95,15 +95,13 @@ export class EditorSerializer {
     if (object instanceof Group) {
       const componentId = (object.userData?.componentId as string | undefined) ?? null;
       if (componentId) {
-        if (space === "world") {
-          usedComponents.add(componentId);
-          return {
-            type: "component",
-            componentId,
-            transform: this.toSerializedTransform(object, space),
-          };
-        }
-        return null;
+        // Always serialize component instances regardless of space
+        usedComponents.add(componentId);
+        return {
+          type: "component",
+          componentId,
+          transform: this.toSerializedTransform(object, space),
+        };
       }
 
       const children: SerializedNode[] = [];
