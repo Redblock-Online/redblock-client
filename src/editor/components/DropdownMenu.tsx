@@ -19,9 +19,11 @@ interface DropdownMenuProps {
   menu: MenuGroup | null;
   position: MenuPosition;
   onClose: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
-export function DropdownMenu({ menu, position, onClose }: DropdownMenuProps): ReactElement | null {
+export function DropdownMenu({ menu, position, onClose, onMouseEnter, onMouseLeave }: DropdownMenuProps): ReactElement | null {
   if (!menu || !position) return null;
 
   return (
@@ -31,6 +33,8 @@ export function DropdownMenu({ menu, position, onClose }: DropdownMenuProps): Re
           className="absolute min-w-[180px] overflow-hidden rounded border border-[#1a1a1a] bg-[#323232] shadow-lg"
           style={{ left: position.left, top: position.top, minWidth: Math.max(position.width, 160) }}
           onMouseDown={(event) => event.stopPropagation()}
+          onMouseEnter={onMouseEnter}
+          onMouseLeave={onMouseLeave}
         >
           {menu.items.map((item) => {
             const disabled = Boolean(item.disabled);
