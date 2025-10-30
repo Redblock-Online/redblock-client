@@ -955,15 +955,13 @@ export default class EditorApp {
     if (object instanceof Group) {
       const componentId = (object.userData?.componentId as string | undefined) ?? null;
       if (componentId) {
-        if (space === "world") {
-          usedComponents.add(componentId);
-          return {
-            type: "component",
-            componentId,
-            transform: this.toSerializedTransform(object, space),
-          };
-        }
-        return null;
+        // Always serialize component instances, even when nested (local space)
+        usedComponents.add(componentId);
+        return {
+          type: "component",
+          componentId,
+          transform: this.toSerializedTransform(object, space),
+        };
       }
 
       const children: SerializedNode[] = [];
@@ -984,10 +982,12 @@ export default class EditorApp {
       const isSpawnPoint = object.userData.isSpawnPoint === true;
       const isGenerator = object.userData.isGenerator === true;
       const generatorConfig = object.userData.generatorConfig;
+      const preservedId = (object as Object3D & { userData: { editorId?: string } }).userData?.editorId as string | undefined;
       
       return {
         type: "block",
         transform: this.toSerializedTransform(object, space),
+        ...(preservedId && { id: preservedId }),
         ...(isSpawnPoint && { isSpawnPoint: true }),
         ...(isGenerator && { isGenerator: true }),
         ...(isGenerator && generatorConfig && { generatorConfig }),
@@ -1073,10 +1073,16 @@ export default class EditorApp {
         }
         const definition = componentMap.get(node.componentId);
         if (!definition) {
-          return null;
+          // Fallback: create placeholder group so paste does not fail
+          const placeholder = new Group();
+          this.applySerializedTransform(placeholder, node.transform);
+          (placeholder as Object3D & { userData: { componentId?: string; componentRole?: string } }).userData.componentId = node.componentId;
+          (placeholder as Object3D & { userData: { componentId?: string; componentRole?: string } }).userData.componentRole = "instance";
+          block = this.blocks.registerGroup(placeholder);
+        } else {
+          const transform = this.transformFromSerialized(node.transform);
+          block = this.components.instantiateComponent(definition, transform);
         }
-        const transform = this.transformFromSerialized(node.transform);
-        block = this.components.instantiateComponent(definition, transform);
         break;
       }
       case "group": {
@@ -1119,13 +1125,39 @@ export default class EditorApp {
           ? createSpawnPointMesh() 
           : this.blocks.createPrimitiveBlockMesh();
         this.applySerializedTransform(mesh, child.transform);
+        // Preserve original block id for stable ungroup/regroup and subsequent copy/paste
+        if (child.id) {
+          (mesh as Object3D & { userData: { editorId?: string } }).userData.editorId = child.id;
+        }
         return mesh;
       }
       case "group": {
         return this.buildGroupFromNode(child, componentMap);
       }
       case "component": {
-        return null;
+        if (!child.componentId) {
+          return null;
+        }
+        const definition = componentMap.get(child.componentId);
+        // Build a component instance as a plain Object3D hierarchy (no block registration)
+        const group = new Group();
+        this.applySerializedTransform(group, child.transform);
+        if (definition) {
+          definition.members.forEach((member) => {
+            const mesh = this.blocks.createPrimitiveBlockMesh();
+            mesh.position.set(member.position.x, member.position.y, member.position.z);
+            mesh.rotation.set(member.rotation.x, member.rotation.y, member.rotation.z);
+            mesh.scale.set(member.scale.x, member.scale.y, member.scale.z);
+            group.add(mesh);
+          });
+          (group as Object3D & { userData: Record<string, unknown> }).userData.componentId = definition.id;
+          (group as Object3D & { userData: Record<string, unknown> }).userData.componentRole = "instance";
+        } else {
+          // Fallback: keep empty group but tag with componentId to preserve identity
+          (group as Object3D & { userData: Record<string, unknown> }).userData.componentId = child.componentId;
+          (group as Object3D & { userData: Record<string, unknown> }).userData.componentRole = "instance";
+        }
+        return group;
       }
     }
   }
