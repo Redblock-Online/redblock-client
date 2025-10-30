@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import Button from "@/ui/react/components/Button";
 import type { ScenarioConfig } from "@/config/scenarios";
 import { listScenarios, type StoredScenario } from "@/editor/scenarioStore";
-import { FaTwitter, FaDiscord, FaYoutube, FaGithub } from "react-icons/fa";
+import { FaTwitter, FaTelegram, FaYoutube, FaGithub } from "react-icons/fa";
 import { RiInstagramFill } from "react-icons/ri";
 import socials from "@/config/socials.json";
 
@@ -16,7 +16,7 @@ type Props = {
 export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
   const ICONS = {
     twitter: FaTwitter,
-    discord: FaDiscord,
+    telegram: FaTelegram,
     youtube: FaYoutube,
     github: FaGithub,
     instagram: RiInstagramFill,

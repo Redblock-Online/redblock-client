@@ -2,6 +2,7 @@ import { Quaternion, Vector3 } from "three";
 import type { EditorModeManager, TransformMode, AxisConstraint } from "../EditorModeManager";
 import type EditorApp from "../../EditorApp";
 import type { SelectionTransform } from "../../types";
+import { cloneTransform, hasTransformChanged } from "../EditorTransformUtils";
 
 const MOVE_SENSITIVITY = 0.02;
 const ROTATE_SENSITIVITY = 0.005;
@@ -49,7 +50,7 @@ export class TransformHandler {
       .getTransformsForIds(selectionArray.map((block) => block.id))
       .map((entry) => ({
         id: entry.id,
-        origin: this.cloneTransform(entry.transform),
+        origin: cloneTransform(entry.transform),
       }));
 
     if (targets.length === 0) {
@@ -93,7 +94,7 @@ export class TransformHandler {
 
     if (!commit) {
       this.editor.applyTransformsForIds(
-        this.targets.map((target) => ({ id: target.id, transform: this.cloneTransform(target.origin) })),
+        this.targets.map((target) => ({ id: target.id, transform: cloneTransform(target.origin) })),
       );
       if (this.onUpdate) {
         this.onUpdate(this.targets[0]?.origin ?? null);
@@ -236,11 +237,11 @@ export class TransformHandler {
       const currentEntry = current.find((entry) => entry.id === target.id);
       if (!currentEntry) continue;
 
-      if (this.hasTransformChanged(target.origin, currentEntry.transform)) {
+      if (hasTransformChanged(target.origin, currentEntry.transform)) {
         changes.push({
           id: target.id,
-          before: this.cloneTransform(target.origin),
-          after: this.cloneTransform(currentEntry.transform),
+          before: cloneTransform(target.origin),
+          after: cloneTransform(currentEntry.transform),
         });
       }
     }
@@ -321,25 +322,4 @@ export class TransformHandler {
     document.addEventListener("pointerlockerror", handlePointerLockChange);
   }
 
-  private cloneTransform(input: SelectionTransform): SelectionTransform {
-    return {
-      position: input.position.clone(),
-      rotation: input.rotation.clone(),
-      scale: input.scale.clone(),
-    };
-  }
-
-  private hasTransformChanged(before: SelectionTransform, after: SelectionTransform): boolean {
-    return (
-      Math.abs(after.position.x - before.position.x) > 1e-6 ||
-      Math.abs(after.position.y - before.position.y) > 1e-6 ||
-      Math.abs(after.position.z - before.position.z) > 1e-6 ||
-      Math.abs(after.rotation.x - before.rotation.x) > 1e-6 ||
-      Math.abs(after.rotation.y - before.rotation.y) > 1e-6 ||
-      Math.abs(after.rotation.z - before.rotation.z) > 1e-6 ||
-      Math.abs(after.scale.x - before.scale.x) > 1e-6 ||
-      Math.abs(after.scale.y - before.scale.y) > 1e-6 ||
-      Math.abs(after.scale.z - before.scale.z) > 1e-6
-    );
-  }
 }
