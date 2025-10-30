@@ -167,7 +167,15 @@ export default class App {
       this.pistol = loadedPistol;
       this.pistol.setScene(this.scene);
     });
-    this.loop = new Loop(this.renderer.instance,this.scene,this.camera.instance,this.controls,this.pistol,this.collisionSystem,this.camera);
+    this.loop = new Loop(this.renderer.instance,this.scene,this.camera.instance,this.controls,this.pistol,this.collisionSystem,this.camera,this.renderer);
+    
+    // Setup respawn visual effect callback
+    this.controls.setOnRespawnCallback(() => {
+      if (this.renderer.respawnEffect) {
+        this.renderer.respawnEffect.trigger(0.4); // 0.4 seconds duration
+        console.log("[App] Respawn effect triggered");
+      }
+    });
     
     // Listen for graphics settings changes
     window.addEventListener("graphicsSettingsChanged", ((e: CustomEvent) => {
