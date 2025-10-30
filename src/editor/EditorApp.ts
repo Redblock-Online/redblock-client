@@ -188,6 +188,11 @@ export default class EditorApp {
     canvas.addEventListener("pointerdown", (e) => this.inputRouter.handlePointerDown(e));
     canvas.addEventListener("pointermove", (e) => this.inputRouter.handlePointerMove(e));
     canvas.addEventListener("pointerup", (e) => this.inputRouter.handlePointerUp(e));
+    // Ensure we clean up even if the pointer is released/canceled outside the canvas
+    window.addEventListener("pointerup", this.handleGlobalPointerUp, { capture: true });
+    window.addEventListener("pointercancel", this.handleGlobalPointerCancel, { capture: true });
+    window.addEventListener("blur", this.handleWindowBlur);
+    
     window.addEventListener("keydown", (e) => this.inputRouter.handleKeyDown(e));
 
     // Keep movement keys
@@ -202,6 +207,36 @@ export default class EditorApp {
     this.handleResize();
     window.addEventListener("resize", this.handleResize);
   }
+
+  // Ensure cleanup when pointer released outside the canvas
+  private handleGlobalPointerUp = (event: PointerEvent): void => {
+    const mode = this.modeManager.getMode();
+    if (mode.type === "dragging") {
+      event.preventDefault?.();
+      this.dragHandler.finish(true);
+    }
+    // Transforming is committed via click/Enter by design; do not auto-commit here
+  };
+
+  // Cancel interactions on pointer cancel to avoid stuck states
+  private handleGlobalPointerCancel = (_event: PointerEvent): void => {
+    const mode = this.modeManager.getMode();
+    if (mode.type === "dragging") {
+      this.dragHandler.finish(false);
+    } else if (mode.type === "transforming") {
+      this.transformHandler.finish(false);
+    }
+  };
+
+  // Also cancel interactions if the window loses focus
+  private handleWindowBlur = (): void => {
+    const mode = this.modeManager.getMode();
+    if (mode.type === "dragging") {
+      this.dragHandler.finish(false);
+    } else if (mode.type === "transforming") {
+      this.transformHandler.finish(false);
+    }
+  };
 
   public setDraggingCursor(active: boolean): void {
     if (active === this.draggingCursorApplied) {
