@@ -82,7 +82,7 @@ export default class Controls {
   // Room tracking
   private roomCoordX = 0;
   private roomCoordZ = 0;
-  private roomSize = 20; // default room size (width/depth)
+  private roomSize = 200; // default room size (width/depth) - increased for larger play area
   private isEditorMode = false; // If true, disable movement limits
 
   // Spawn point and fall detection
@@ -402,20 +402,7 @@ export default class Controls {
     if (this.keysPressed[this.keybindings.backward]) this._tempTargetDir.x -= 1;
     if (this.keysPressed[this.keybindings.forward]) this._tempTargetDir.x += 1;
 
-    // Only clamp position in normal game mode, not in editor
-    if (!this.isEditorMode) {
-      const halfRoom = this.roomSize / 2;
-      this.yawObject.position.x = THREE.MathUtils.clamp(
-        this.yawObject.position.x,
-        this.roomCoordX - halfRoom,
-        this.roomCoordX + halfRoom
-      );
-      this.yawObject.position.z = THREE.MathUtils.clamp(
-        this.yawObject.position.z,
-        this.roomCoordZ - halfRoom,
-        this.roomCoordZ + halfRoom
-      );
-    }
+    // Movement restrictions removed - player can move freely in X and Z
     const effectiveSpeed =
       this.moveSpeed *
       (this.isCrouching ? this.crouchSpeedFactor : 1) *
