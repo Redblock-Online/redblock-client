@@ -12,7 +12,7 @@ import SettingsMenu from "./SettingsMenu";
 import Crosshair from "./components/Crosshair";
 import StatsDisplay from "./components/StatsDisplay";
 import { AudioManager } from "@/utils/AudioManager";
-import { FaTwitter, FaDiscord, FaYoutube, FaGithub } from "react-icons/fa";
+import { FaTwitter, FaTelegram, FaYoutube, FaGithub } from "react-icons/fa";
 import { RiInstagramFill } from "react-icons/ri";
 import socials from "@/config/socials.json";
 
@@ -394,7 +394,7 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
   // Social links setup (same as StartScreen)
   const SOCIAL_ICONS = {
     twitter: FaTwitter,
-    discord: FaDiscord,
+    telegram: FaTelegram,
     youtube: FaYoutube,
     github: FaGithub,
     instagram: RiInstagramFill,
