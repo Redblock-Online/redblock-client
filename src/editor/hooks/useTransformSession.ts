@@ -3,6 +3,7 @@ import { Quaternion, Vector3 } from "three";
 import type EditorApp from "../EditorApp";
 import type { SelectionTransform } from "../types";
 import type { HistoryAction } from "./useHistoryStack";
+import { cloneTransform, hasTransformChanged } from "../core/EditorTransformUtils";
 
 export type TransformMode = "translate" | "rotate" | "scale";
 export type AxisConstraint = "x" | "y" | "z" | null;
@@ -370,24 +371,3 @@ export function useTransformSession(
   };
 }
 
-function cloneTransform(input: SelectionTransform): SelectionTransform {
-  return {
-    position: input.position.clone(),
-    rotation: input.rotation.clone(),
-    scale: input.scale.clone(),
-  };
-}
-
-function hasTransformChanged(before: SelectionTransform, after: SelectionTransform): boolean {
-  return (
-    Math.abs(after.position.x - before.position.x) > 1e-6 ||
-    Math.abs(after.position.y - before.position.y) > 1e-6 ||
-    Math.abs(after.position.z - before.position.z) > 1e-6 ||
-    Math.abs(after.rotation.x - before.rotation.x) > 1e-6 ||
-    Math.abs(after.rotation.y - before.rotation.y) > 1e-6 ||
-    Math.abs(after.rotation.z - before.rotation.z) > 1e-6 ||
-    Math.abs(after.scale.x - before.scale.x) > 1e-6 ||
-    Math.abs(after.scale.y - before.scale.y) > 1e-6 ||
-    Math.abs(after.scale.z - before.scale.z) > 1e-6
-  );
-}

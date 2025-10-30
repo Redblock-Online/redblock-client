@@ -6,6 +6,7 @@ import ToggleInput from "@/ui/react/components/ToggleInput";
 import SelectInput from "@/ui/react/components/SelectInput";
 import ColorInput from "@/ui/react/components/ColorInput";
 import { AudioManager, type AudioOptions } from "@/utils/AudioManager";
+import { detectMonitorRefreshRate } from "@/utils/displayUtils";
 
 type Tab = "game" | "controls" | "audio" | "video" | "gameplay" | "account";
 
@@ -91,18 +92,6 @@ const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   musicCategory: "calm",
 };
 
-// Function to detect monitor refresh rate (same logic as Loop.ts)
-const detectMonitorRefreshRate = (): number => {
-  if (typeof window !== 'undefined' && window.screen) {
-    // @ts-ignore - screen.refreshRate is not in all type definitions
-    const screenRefreshRate = window.screen.refreshRate;
-    if (screenRefreshRate && screenRefreshRate > 0) {
-      return Math.round(screenRefreshRate);
-    }
-  }
-  // Fallback to 60Hz if detection fails
-  return 60;
-};
 
 const DEFAULT_GRAPHICS_SETTINGS: GraphicsSettings = {
   vsync: true,
