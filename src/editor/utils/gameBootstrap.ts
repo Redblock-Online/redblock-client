@@ -677,9 +677,44 @@ export async function bootstrapGameInEditor(
   console.log("[Bootstrap] Creating App instance");
   console.log("[Bootstrap] Canvas element:", canvas);
   console.log("[Bootstrap] Canvas in DOM:", document.body.contains(canvas));
-  appInstance = new AppClass(uiController, { disableServer: true });
-  console.log("[Bootstrap] Starting App (offline mode - server disabled)");
+  // CRITICAL: Pass editorMode: true to prevent loading default scenarios/maps
+  appInstance = new AppClass(uiController, { disableServer: true, editorMode: true });
+  console.log("[Bootstrap] Starting App (offline mode - server disabled, editor mode)");
   appInstance.start();
+  
+  // CRITICAL: Clear any existing custom scenario groups from previous game sessions
+  // This prevents maps from the main game (Quick Warm Up) from appearing in editor preview
+  console.log("[Bootstrap] Clearing any existing custom scenario groups...");
+  const existingCustomGroups = appInstance.scene.children.filter(
+    (child) => child.name === "CustomScenario" || child.userData.isCubeGroup
+  );
+  existingCustomGroups.forEach((group) => {
+    console.log("[Bootstrap] Removing existing group:", group.name);
+    appInstance.scene.remove(group);
+    // Dispose geometries and materials to free memory
+    group.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach((m: THREE.Material) => m.dispose());
+          } else {
+            child.material.dispose();
+          }
+        }
+      }
+    });
+  });
+  
+  // Also clear collision system to remove any colliders from previous scenarios
+  appInstance.collisionSystem.clearAll();
+  console.log("[Bootstrap] Collision system cleared");
+  
+  // Clear targets array to remove any targets from previous scenarios
+  appInstance.targets = [];
+  console.log("[Bootstrap] Targets array cleared");
+  
+  console.log("[Bootstrap] Scene cleaned, ready for editor scenario");
   
   // Ensure pointer lock works by adding a click listener
   canvas.addEventListener('click', () => {
