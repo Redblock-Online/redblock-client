@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, act } from '@testing-library/react';
-import TimerDisplay, { type TimerController, type TimerHint } from '@/ui/react/TimerDisplay';
+import { TimerDisplay, type TimerController, type TimerHint } from '@/features/game/ui';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 function setup() {

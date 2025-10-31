@@ -1,5 +1,5 @@
 import type Target from "@/objects/Target";
-import type { TargetInfo } from "@/scenes/MainScene";
+import type { TargetInfo } from "@/features/game/scenes";
 
 export function buildTargetsInfo(
   targets: Target[],

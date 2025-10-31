@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { MULTIPLAYER_ENABLED } from "@/config/gameConfig";
 import type App from "@/core/App";
-import type { UIController } from "@/ui/react/mountUI";
+import type { UIController } from "@/features/menu";
 
 export default function GameClient() {
   useEffect(() => {
@@ -20,7 +20,7 @@ export default function GameClient() {
 
       const [{ default: AppClass }, { mountUI }, { ensureCsrfCookie }] = await Promise.all([
         import("@/core/App"),
-        import("@/ui/react/mountUI"),
+        import("@/features/menu"),
         import("@/ui/react/api/http"),
       ]);
 
