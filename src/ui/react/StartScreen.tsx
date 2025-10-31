@@ -300,10 +300,10 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {filteredScenarios.map((scenario) => (
-                        <button
+                        <div
                           key={scenario.id}
                           onClick={() => onLoadScenarioClick(scenario)}
-                          className="group relative border-4 border-black bg-white p-6 text-left hover:bg-gray-100 hover:text-black transition-colors duration-200"
+                          className="group relative border-4 border-black bg-white p-6 text-left hover:bg-gray-100 hover:text-black transition-colors duration-200 cursor-pointer"
                         >
                           {/* Edit button in top right corner */}
                           <button
@@ -344,7 +344,7 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
                           <div className="mt-4 text-xs opacity-40 group-hover:opacity-60">
                             Click to load
                           </div>
-                        </button>
+                        </div>
                       ))}
                     </div>
                   )}
