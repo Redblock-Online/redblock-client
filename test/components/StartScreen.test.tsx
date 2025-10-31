@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import StartScreen from '@/ui/react/StartScreen';
+import StartScreen from '@/features/menu/components/StartScreen';
 import { SCENARIOS } from '@/config/scenarios';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 

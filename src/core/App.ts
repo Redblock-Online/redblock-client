@@ -1,19 +1,19 @@
 import Renderer from "./Renderer";
 import Camera from "./Camera";
-import MainScene from "@/scenes/MainScene";
+import { MainScene } from "@/features/game/scenes";
 import Loop from "./Loop";
-import ControlsWithMovement from "@/systems/ControlsWithMovement";
-import { PhysicsSystem } from "@/systems/PhysicsSystem";
+import { ControlsWithMovement } from "@/features/game/controls";
+import { PhysicsSystem } from "@/features/game/physics";
 import { Raycaster, Vector2, Vector3, BufferGeometry, Line , LineBasicMaterial, BufferAttribute, Mesh, SphereGeometry, MeshBasicMaterial, Box3, Material } from "three";
 import Pistol from "@/objects/Pistol";
 import Target from "@/objects/Target";
 import WSManager, { type PlayerCore } from "@/utils/ws/WSManager";
-import type { UIController } from "@/ui/react/mountUI";
+import type { UIController } from "@/features/menu";
 import { AudioManager } from "@/utils/AudioManager";
 import { SCENARIOS, type ScenarioConfig, getScenarioById } from "@/config/scenarios";
-import type { TimerHint, TimerHintTableRow } from "@/ui/react/TimerDisplay";
+import type { TimerHint, TimerHintTableRow } from "@/features/game/ui";
 import gsap from "gsap";
-import type { GeneratorConfig } from "@/editor/types/generatorConfig";
+import type { GeneratorConfig } from "@/features/editor/types/generatorConfig";
 
 
 type StoredMetricSet = {
@@ -648,7 +648,7 @@ export default class App {
       console.log(`[App] Loaded scenario:`, scenarioData.name);
       
       // Import the bootstrap function
-      const { processScenarioForGame } = await import("@/editor/utils/gameBootstrap");
+      const { processScenarioForGame } = await import("@/features/editor/core/gameBootstrap");
       
       // Process the scenario and load it into the game
       await processScenarioForGame(this, scenarioData);
@@ -692,7 +692,7 @@ export default class App {
       this.resetTargets();
       
       // Import the bootstrap function
-      const { processScenarioForGame } = await import("@/editor/utils/gameBootstrap");
+      const { processScenarioForGame } = await import("@/features/editor/core/gameBootstrap");
       
       // Process the scenario and load it into the game
       await processScenarioForGame(this, scenarioData);

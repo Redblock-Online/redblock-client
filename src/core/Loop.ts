@@ -1,10 +1,10 @@
 // Animation/render loop
 import * as THREE from "three";
-import ControlsWithMovement from "@/systems/ControlsWithMovement";
+import { ControlsWithMovement } from "@/features/game/controls";
 import Pistol from "@/objects/Pistol";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import MainScene from "@/scenes/MainScene";
-import { PhysicsSystem } from "@/systems/PhysicsSystem";
+import { MainScene } from "@/features/game/scenes";
+import { PhysicsSystem } from "@/features/game/physics";
 import Camera from "./Camera";
 import type Renderer from "./Renderer";
 import { detectMonitorRefreshRate } from "@/utils/displayUtils";
