@@ -420,19 +420,33 @@ export default class EditorApp {
       const spawnPos = new Vector3();
       spawnPoint.mesh.getWorldPosition(spawnPos);
       
+      // Start raycast from the bottom of the spawn point sphere (radius = 0.5)
+      // This ensures we check from where the player would actually stand
+      const rayOrigin = spawnPos.clone();
+      rayOrigin.y -= 0.5; // Subtract sphere radius to get bottom position
+      
       // Raycast downward from spawn point
       const raycaster = new Raycaster();
-      raycaster.set(spawnPos, new Vector3(0, -1, 0));
+      raycaster.set(rayOrigin, new Vector3(0, -1, 0));
       
-      // Get all meshes except the spawn point itself
+      // Get all solid block meshes (exclude spawn point, generators, and other non-solid objects)
       const meshes = this.blocks.getAllBlocks()
-        .filter(b => b.id !== spawnPoint.id)
+        .filter(b => {
+          // Exclude the spawn point itself
+          if (b.id === spawnPoint.id) return false;
+          // Exclude generators (they generate targets which are non-solid)
+          if (b.mesh.userData.isGenerator === true) return false;
+          // Exclude any other non-solid objects
+          if (b.mesh.userData.isTarget === true) return false;
+          // Include only solid blocks
+          return true;
+        })
         .map(b => b.mesh);
       
       const intersects = raycaster.intersectObjects(meshes, true);
       
-      // Check if there's a floor within reasonable distance (10 units)
-      const hasFloor = intersects.length > 0 && intersects[0].distance < 10;
+      // Check if there's any floor beneath the spawn point
+      const hasFloor = intersects.length > 0;
       
       if (!hasFloor) {
         this.alerts.publish(
