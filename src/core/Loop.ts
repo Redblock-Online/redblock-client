@@ -1,14 +1,17 @@
 // Animation/render loop
 import * as THREE from "three";
-import ControlsWithMovement from "@/systems/ControlsWithMovement";
+import { ControlsWithMovement } from "@/features/game/controls";
 import Pistol from "@/objects/Pistol";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import MainScene from "@/scenes/MainScene";
-import { PhysicsSystem } from "@/systems/PhysicsSystem";
+import { MainScene } from "@/features/game/scenes";
+import { PhysicsSystem } from "@/features/game/physics";
 import Camera from "./Camera";
+import type Renderer from "./Renderer";
+import { detectMonitorRefreshRate } from "@/utils/displayUtils";
 
 export default class Loop {
   renderer: EffectComposer;
+  rendererClass: Renderer | null = null; // Reference to Renderer class for respawn effect
   scene: MainScene;
   camera: THREE.Camera;
   cameraClass: Camera | null = null; // Reference to Camera class for weapon camera sync
@@ -38,7 +41,8 @@ export default class Loop {
     controls: ControlsWithMovement,
     pistol: Pistol,
     physicsSystem: PhysicsSystem,
-    cameraClass?: Camera // Optional Camera class for weapon camera sync
+    cameraClass?: Camera, // Optional Camera class for weapon camera sync
+    rendererClass?: Renderer // Optional Renderer class for respawn effect
   ) {
     this.renderer = renderer;
     this.scene = scene;
@@ -47,6 +51,7 @@ export default class Loop {
     this.pistol = pistol;
     this.physicsSystem = physicsSystem;
     this.cameraClass = cameraClass || null;
+    this.rendererClass = rendererClass || null;
     this.active = false;
 
     this.deltaTime = 0;
@@ -61,55 +66,11 @@ export default class Loop {
   }
   
   /**
-   * Detect monitor refresh rate using requestAnimationFrame timing
+   * Detect monitor refresh rate using the Screen API
    */
   private detectRefreshRate(): void {
-    // Try to get refresh rate from screen API (modern browsers)
-    if (typeof window !== 'undefined' && window.screen) {
-      // @ts-ignore - screen.refreshRate is not in all type definitions
-      const screenRefreshRate = window.screen.refreshRate;
-      if (screenRefreshRate && screenRefreshRate > 0) {
-        this.detectedRefreshRate = Math.round(screenRefreshRate);
-        console.log(`[Loop] Detected monitor refresh rate: ${this.detectedRefreshRate}Hz`);
-        return;
-      }
-    }
-    
-    // Fallback: Measure frame timing to estimate refresh rate
-    let frameCount = 0;
-    let lastTime = performance.now();
-    const samples: number[] = [];
-    
-    const measureFrame = () => {
-      const now = performance.now();
-      const delta = now - lastTime;
-      
-      if (delta > 0) {
-        samples.push(1000 / delta); // Convert to FPS
-      }
-      
-      lastTime = now;
-      frameCount++;
-      
-      if (frameCount < 60) {
-        requestAnimationFrame(measureFrame);
-      } else {
-        // Calculate average FPS from samples
-        const avgFPS = samples.reduce((a, b) => a + b, 0) / samples.length;
-        
-        // Round to common refresh rates
-        if (avgFPS >= 235) this.detectedRefreshRate = 240;
-        else if (avgFPS >= 140) this.detectedRefreshRate = 144;
-        else if (avgFPS >= 115) this.detectedRefreshRate = 120;
-        else if (avgFPS >= 90) this.detectedRefreshRate = 100;
-        else if (avgFPS >= 72) this.detectedRefreshRate = 75;
-        else this.detectedRefreshRate = 60;
-        
-        console.log(`[Loop] Estimated monitor refresh rate: ${this.detectedRefreshRate}Hz (measured: ${avgFPS.toFixed(1)}fps)`);
-      }
-    };
-    
-    requestAnimationFrame(measureFrame);
+    this.detectedRefreshRate = detectMonitorRefreshRate();
+    console.log(`[Loop] Detected monitor refresh rate: ${this.detectedRefreshRate}Hz`);
   }
   
   /**
@@ -262,6 +223,11 @@ export default class Loop {
     
     this.pistol.update(this.deltaTime, this.camera);
     this.scene.update();
+    
+    // Update respawn effect if available
+    if (this.rendererClass?.respawnEffect) {
+      this.rendererClass.respawnEffect.update(now / 1000); // Convert to seconds
+    }
     
     requestAnimationFrame(this.animate);
     this.renderer.render(this.deltaTime);

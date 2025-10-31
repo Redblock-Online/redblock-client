@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useAuthStore } from "../authStore";
-import Button from "@/ui/react/components/Button";
+import { Button } from "@/features/shared/ui";
 import { useRouter } from "next/navigation";
 
 /**
