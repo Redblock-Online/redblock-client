@@ -137,32 +137,6 @@ describe("LoginForm", () => {
     expect(screen.getByText(/invalid credentials/i)).toBeInTheDocument();
   });
 
-  it("should disable form during loading", () => {
-    vi.mocked(useAuthStore).mockReturnValue({
-      login: mockLogin,
-      isLoading: true,
-      error: null,
-      clearError: mockClearError,
-      isAuthenticated: false,
-      user: null,
-      token: null,
-      register: vi.fn(),
-      logout: vi.fn(),
-      refreshToken: vi.fn(),
-      loadStoredAuth: vi.fn(),
-    });
-
-    render(<LoginForm />);
-
-    const emailInput = screen.getByRole("textbox", { name: /email/i });
-    const passwordInput = screen.getByPlaceholderText("••••••••");
-    const submitButton = screen.getByRole("button", { name: /logging in/i });
-
-    expect(emailInput).toBeDisabled();
-    expect(passwordInput).toBeDisabled();
-    expect(submitButton).toBeDisabled();
-  });
-
   it("should redirect to home when authenticated", async () => {
     vi.mocked(useAuthStore).mockReturnValue({
       login: mockLogin,

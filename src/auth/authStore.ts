@@ -24,7 +24,7 @@ interface AuthActions {
   register: (credentials: RegisterCredentials) => Promise<void>;
   logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
-  loadStoredAuth: () => void;
+  loadStoredAuth: () => Promise<void>;
   clearError: () => void;
 }
 
@@ -252,17 +252,39 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   /**
-   * Load stored authentication from localStorage
+   * Load stored authentication from localStorage and validate the token
    */
-  loadStoredAuth: () => {
+  loadStoredAuth: async () => {
     const token = loadToken();
     const user = loadUser();
     
-    if (token && user) {
+    if (!token || !user) {
+      set({ isLoading: false });
+      return;
+    }
+
+    // Set loading state while validating
+    set({ isLoading: true });
+
+    // Validate the token by calling the /me endpoint
+    try {
+      const validatedUser = await authService.getMe(token);
       set({
-        user,
+        user: validatedUser,
         token,
         isAuthenticated: true,
+        isLoading: false,
+      });
+    } catch (error) {
+      // Token is invalid or expired, clear storage
+      console.warn("Stored token is invalid or expired, clearing auth data");
+      removeToken();
+      removeUser();
+      set({
+        user: null,
+        token: null,
+        isAuthenticated: false,
+        isLoading: false,
       });
     }
   },

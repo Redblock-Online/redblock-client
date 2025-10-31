@@ -23,6 +23,7 @@ export default function RegisterForm() {
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -43,16 +44,31 @@ export default function RegisterForm() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       await register({ name, email, password, password_confirmation: passwordConfirmation });
       // Redirect will happen via useEffect when isAuthenticated becomes true
     } catch (err) {
       // Error is handled by the store
       console.error("Registration error:", err);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const passwordsMatch = password === passwordConfirmation || passwordConfirmation === "";
+
+  // Show loading state while validating stored token (only on initial load)
+  const isValidatingToken = isLoading && !name && !email && !password && !passwordConfirmation && !isSubmitting;
+  if (isValidatingToken) {
+    return (
+      <div className="w-full max-w-md bg-white border-2 border-black p-8 flex items-center justify-center">
+        <p className="text-sm font-bold opacity-60">VALIDATING SESSION...</p>
+      </div>
+    );
+  }
+
+  const isFormDisabled = isLoading || isSubmitting;
 
   return (
     <div className="w-full max-w-md bg-white border-2 border-black p-8">
@@ -69,7 +85,7 @@ export default function RegisterForm() {
             onChange={(e) => setName(e.target.value)}
             className="w-full px-4 py-3 border-2 border-black bg-white text-black font-mono focus:outline-none focus:ring-4 focus:ring-black/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             placeholder="Your name"
-            disabled={isLoading}
+            disabled={isFormDisabled}
             required
             autoComplete="name"
           />
@@ -87,7 +103,7 @@ export default function RegisterForm() {
             onChange={(e) => setEmail(e.target.value)}
             className="w-full px-4 py-3 border-2 border-black bg-white text-black font-mono focus:outline-none focus:ring-4 focus:ring-black/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             placeholder="your@email.com"
-            disabled={isLoading}
+            disabled={isFormDisabled}
             required
             autoComplete="email"
           />
@@ -106,7 +122,7 @@ export default function RegisterForm() {
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-3 border-2 border-black bg-white text-black font-mono focus:outline-none focus:ring-4 focus:ring-black/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed pr-12"
               placeholder="••••••••"
-              disabled={isLoading}
+              disabled={isFormDisabled}
               required
               autoComplete="new-password"
             />
@@ -114,7 +130,7 @@ export default function RegisterForm() {
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold opacity-50 hover:opacity-100 transition-opacity text-black"
-              disabled={isLoading}
+              disabled={isFormDisabled}
               aria-label={showPassword ? "Hide password" : "Show password"}
             >
               {showPassword ? "HIDE" : "SHOW"}
@@ -135,7 +151,7 @@ export default function RegisterForm() {
               onChange={(e) => setPasswordConfirmation(e.target.value)}
               className={`w-full px-4 py-3 border-2 ${passwordsMatch ? 'border-black' : 'border-red-500'} bg-white text-black font-mono focus:outline-none focus:ring-4 focus:ring-black/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed pr-12`}
               placeholder="••••••••"
-              disabled={isLoading}
+              disabled={isFormDisabled}
               required
               autoComplete="new-password"
             />
@@ -143,7 +159,7 @@ export default function RegisterForm() {
               type="button"
               onClick={() => setShowPasswordConfirmation(!showPasswordConfirmation)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold opacity-50 hover:opacity-100 transition-opacity text-black"
-              disabled={isLoading}
+              disabled={isFormDisabled}
               aria-label={showPasswordConfirmation ? "Hide password" : "Show password"}
             >
               {showPasswordConfirmation ? "HIDE" : "SHOW"}
@@ -167,9 +183,9 @@ export default function RegisterForm() {
           variant="primary"
           size="lg"
           className="w-full"
-          disabled={isLoading || !name || !email || !password || !passwordConfirmation || !passwordsMatch}
+          disabled={isFormDisabled || !name || !email || !password || !passwordConfirmation || !passwordsMatch}
         >
-          {isLoading ? "CREATING ACCOUNT..." : "CREATE ACCOUNT"}
+          {isSubmitting ? "CREATING ACCOUNT..." : "CREATE ACCOUNT"}
         </Button>
 
         {/* Login Link */}
@@ -180,7 +196,7 @@ export default function RegisterForm() {
               type="button"
               onClick={() => router.push("/login")}
               className="font-bold underline hover:opacity-100 transition-opacity"
-              disabled={isLoading}
+              disabled={isFormDisabled}
             >
               Login here
             </button>
@@ -193,7 +209,7 @@ export default function RegisterForm() {
             type="button"
             onClick={() => router.push("/")}
             className="text-sm opacity-40 hover:opacity-100 transition-opacity"
-            disabled={isLoading}
+            disabled={isFormDisabled}
           >
             ← Back to Home
           </button>

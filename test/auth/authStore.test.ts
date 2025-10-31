@@ -290,31 +290,57 @@ describe("useAuthStore", () => {
   });
 
   describe("loadStoredAuth", () => {
-    it("should load stored authentication from localStorage", () => {
+    it("should load and validate stored authentication from localStorage", async () => {
       const mockUser = { id: 1, name: "Test User", email: "test@example.com" };
+      const validatedUser = { id: 1, name: "Test User Updated", email: "test@example.com" };
       localStorageMock["redblock.auth.token"] = "stored-token";
       localStorageMock["redblock.auth.user"] = JSON.stringify(mockUser);
 
+      vi.mocked(authService.getMe).mockResolvedValueOnce(validatedUser);
+
       const { loadStoredAuth } = useAuthStore.getState();
-      loadStoredAuth();
+      await loadStoredAuth();
 
       const state = useAuthStore.getState();
       expect(state.token).toBe("stored-token");
-      expect(state.user).toEqual(mockUser);
+      expect(state.user).toEqual(validatedUser);
       expect(state.isAuthenticated).toBe(true);
+      expect(state.isLoading).toBe(false);
+      expect(authService.getMe).toHaveBeenCalledWith("stored-token");
     });
 
-    it("should not load if token or user is missing", () => {
-      localStorageMock["redblock.auth.token"] = "stored-token";
-      // No user in localStorage
+    it("should clear auth if token validation fails", async () => {
+      const mockUser = { id: 1, name: "Test User", email: "test@example.com" };
+      localStorageMock["redblock.auth.token"] = "expired-token";
+      localStorageMock["redblock.auth.user"] = JSON.stringify(mockUser);
+
+      vi.mocked(authService.getMe).mockRejectedValueOnce(new Error("Token expired"));
 
       const { loadStoredAuth } = useAuthStore.getState();
-      loadStoredAuth();
+      await loadStoredAuth();
 
       const state = useAuthStore.getState();
       expect(state.token).toBeNull();
       expect(state.user).toBeNull();
       expect(state.isAuthenticated).toBe(false);
+      expect(state.isLoading).toBe(false);
+      expect(localStorageMock["redblock.auth.token"]).toBeUndefined();
+      expect(localStorageMock["redblock.auth.user"]).toBeUndefined();
+    });
+
+    it("should not load if token or user is missing", async () => {
+      localStorageMock["redblock.auth.token"] = "stored-token";
+      // No user in localStorage
+
+      const { loadStoredAuth } = useAuthStore.getState();
+      await loadStoredAuth();
+
+      const state = useAuthStore.getState();
+      expect(state.token).toBeNull();
+      expect(state.user).toBeNull();
+      expect(state.isAuthenticated).toBe(false);
+      expect(state.isLoading).toBe(false);
+      expect(authService.getMe).not.toHaveBeenCalled();
     });
   });
 

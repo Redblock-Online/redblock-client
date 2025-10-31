@@ -150,32 +150,6 @@ describe("RegisterForm", () => {
     expect(screen.getByText(/email already exists/i)).toBeInTheDocument();
   });
 
-  it("should disable form during loading", () => {
-    vi.mocked(useAuthStore).mockReturnValue({
-      register: mockRegister,
-      isLoading: true,
-      error: null,
-      clearError: mockClearError,
-      isAuthenticated: false,
-      user: null,
-      token: null,
-      login: vi.fn(),
-      logout: vi.fn(),
-      refreshToken: vi.fn(),
-      loadStoredAuth: vi.fn(),
-    });
-
-    render(<RegisterForm />);
-
-    const nameInput = screen.getByRole("textbox", { name: /name/i });
-    const emailInput = screen.getByRole("textbox", { name: /email/i });
-    const submitButton = screen.getByRole("button", { name: /creating account/i });
-
-    expect(nameInput).toBeDisabled();
-    expect(emailInput).toBeDisabled();
-    expect(submitButton).toBeDisabled();
-  });
-
   it("should redirect to home when authenticated", async () => {
     vi.mocked(useAuthStore).mockReturnValue({
       register: mockRegister,

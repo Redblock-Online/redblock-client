@@ -20,6 +20,7 @@ export default function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -36,14 +37,29 @@ export default function LoginForm() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       await login({ email, password });
       // Redirect will happen via useEffect when isAuthenticated becomes true
     } catch (err) {
       // Error is handled by the store
       console.error("Login error:", err);
+    } finally {
+      setIsSubmitting(false);
     }
   };
+
+  // Show loading state while validating stored token (only on initial load)
+  const isValidatingToken = isLoading && !email && !password && !isSubmitting;
+  if (isValidatingToken) {
+    return (
+      <div className="w-full max-w-md bg-white border-2 border-black p-8 flex items-center justify-center">
+        <p className="text-sm font-bold opacity-60">VALIDATING SESSION...</p>
+      </div>
+    );
+  }
+
+  const isFormDisabled = isLoading || isSubmitting;
 
   return (
     <div className="w-full max-w-md bg-white border-2 border-black  p-8">
@@ -60,7 +76,7 @@ export default function LoginForm() {
             onChange={(e) => setEmail(e.target.value)}
             className="w-full px-4 py-3 border-2 border-black bg-white text-black font-mono focus:outline-none focus:ring-4 focus:ring-black/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             placeholder="your@email.com"
-            disabled={isLoading}
+            disabled={isFormDisabled}
             required
             autoComplete="email"
           />
@@ -79,7 +95,7 @@ export default function LoginForm() {
               onChange={(e) => setPassword(e.target.value)}
               className="w-full px-4 py-3 border-2 border-black bg-white text-black font-mono focus:outline-none focus:ring-4 focus:ring-black/20 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed pr-12"
               placeholder="••••••••"
-              disabled={isLoading}
+              disabled={isFormDisabled}
               required
               autoComplete="current-password"
             />
@@ -87,7 +103,7 @@ export default function LoginForm() {
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold opacity-50 hover:opacity-100 transition-opacity text-black"
-              disabled={isLoading}
+              disabled={isFormDisabled}
               aria-label={showPassword ? "Hide password" : "Show password"}
             >
               {showPassword ? "HIDE" : "SHOW"}
@@ -108,9 +124,9 @@ export default function LoginForm() {
           variant="primary"
           size="lg"
           className="w-full"
-          disabled={isLoading || !email || !password}
+          disabled={isFormDisabled || !email || !password}
         >
-          {isLoading ? "LOGGING IN..." : "LOGIN"}
+          {isSubmitting ? "LOGGING IN..." : "LOGIN"}
         </Button>
 
         {/* Register Link */}
@@ -121,7 +137,7 @@ export default function LoginForm() {
               type="button"
               onClick={() => router.push("/register")}
               className="font-bold underline hover:opacity-100 transition-opacity"
-              disabled={isLoading}
+              disabled={isFormDisabled}
             >
               Register here
             </button>
@@ -134,7 +150,7 @@ export default function LoginForm() {
             type="button"
             onClick={() => router.push("/")}
             className="text-sm opacity-40 hover:opacity-100 transition-opacity"
-            disabled={isLoading}
+            disabled={isFormDisabled}
           >
             ← Back to Home
           </button>
