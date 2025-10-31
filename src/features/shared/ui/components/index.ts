@@ -1,8 +1,8 @@
 export { default as Button } from './Button';
 export * from './ColorInput';
-export * from './Crosshair';
+export { default as Crosshair } from './Crosshair';
 export * from './KeybindInput';
 export * from './SelectInput';
 export * from './SliderInput';
-export * from './StatsDisplay';
+export { default as StatsDisplay } from './StatsDisplay';
 export * from './ToggleInput';
