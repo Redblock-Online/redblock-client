@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import Button from "@/ui/react/components/Button";
 import type { ScenarioConfig } from "@/config/scenarios";
 import { listScenarios, type StoredScenario } from "@/editor/scenarioStore";
-import { FaTwitter, FaTelegram, FaYoutube, FaGithub } from "react-icons/fa";
+import { FaTwitter, FaTelegram, FaYoutube, FaGithub, FaPencilAlt } from "react-icons/fa";
 import { RiInstagramFill } from "react-icons/ri";
 import socials from "@/config/socials.json";
 
@@ -85,6 +85,19 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
     // Start the game with this custom scenario
     onStartClick(customScenarioId);
     setShowScenarioMenu(false);
+  };
+
+  const onEditScenarioClick = (scenario: StoredScenario, event: React.MouseEvent) => {
+    // Prevent the parent button click (load scenario)
+    event.stopPropagation();
+    
+    // Store scenario name in sessionStorage for editor to load
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("editor-load-scenario", scenario.name);
+    }
+    
+    // Navigate to editor
+    window.location.href = "/editor";
   };
 
   const onExitClick = () => {
@@ -290,9 +303,19 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
                         <button
                           key={scenario.id}
                           onClick={() => onLoadScenarioClick(scenario)}
-                          className="group relative border-4 border-black bg-white p-6 text-left hover:bg-black hover:text-white transition-colors duration-200"
+                          className="group relative border-4 border-black bg-white p-6 text-left hover:bg-gray-100 hover:text-black transition-colors duration-200"
                         >
-                          <h3 className="text-xl font-bold mb-3 break-words">
+                          {/* Edit button in top right corner */}
+                          <button
+                            onClick={(e) => onEditScenarioClick(scenario, e)}
+                            className="absolute top-3 right-3 w-8 h-8 flex items-center justify-center bg-white border-2 border-black rounded hover:bg-black hover:text-white transition-colors duration-200 z-10"
+                            title="Edit scenario"
+                            aria-label="Edit scenario"
+                          >
+                            <FaPencilAlt className="text-sm" />
+                          </button>
+
+                          <h3 className="text-xl font-bold mb-3 break-words pr-10">
                             {scenario.name}
                           </h3>
                           

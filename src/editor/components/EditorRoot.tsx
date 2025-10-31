@@ -133,6 +133,29 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     }
   }, [editor, refreshScenarios]);
 
+  // Auto-load scenario from sessionStorage if coming from game
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    
+    const scenarioToLoad = sessionStorage.getItem("editor-load-scenario");
+    if (scenarioToLoad) {
+      // Clear the flag
+      sessionStorage.removeItem("editor-load-scenario");
+      
+      // Find and load the scenario
+      const scenarios = listScenarios();
+      const scenario = scenarios.find(s => s.name === scenarioToLoad);
+      
+      if (scenario) {
+        console.log("[EditorRoot] Auto-loading scenario from game:", scenarioToLoad);
+        editor.importScenario(scenario.data);
+        setActiveScenarioName(scenario.name);
+        saveScenario(AUTO_SAVE_SCENARIO_NAME, scenario.data);
+        refreshComponents();
+      }
+    }
+  }, [editor, refreshComponents]);
+
   // Subscribe to alerts
   useEffect(() => {
     const unsubscribe = editor.alerts.addListener((newAlerts) => {
