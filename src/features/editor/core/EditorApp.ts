@@ -144,8 +144,31 @@ export default class EditorApp {
 
     this.blocks = new BlockStore(this.scene);
     this.selection = new SelectionManager(this.scene, this.blocks, {
-      getBlockColor: (block, selected) => this.resolveBlockOutlineColor(block, selected),
+      getBlockColor: (block, selected) => {
+        // Get the current selection count to determine if we should use pink color
+        const selectionArray = this.selection.getSelectionArray();
+        const selectedCount = selectionArray.length;
+        return this.resolveBlockOutlineColor(block, selected, selectedCount);
+      },
       setOutlineColor: (block, color) => {
+        // Update block.outline directly if it exists (similar to defaultSetOutlineColor)
+        if (block.outline) {
+          block.outline.visible = true; // Asegurar que el outline sea visible
+          const material = block.outline.material as LineBasicMaterial | LineBasicMaterial[];
+          if (Array.isArray(material)) {
+            material.forEach((entry) => {
+              if (entry instanceof LineBasicMaterial) {
+                entry.color.setHex(color);
+                entry.visible = true;
+              }
+            });
+          } else if (material instanceof LineBasicMaterial) {
+            material.color.setHex(color);
+            material.visible = true;
+          }
+        }
+        // Also traverse the mesh to update all LineSegments within
+        // This ensures ALL outlines in the hierarchy are updated
         this.blocks.setOutlineColor(block.mesh, color);
       },
     });
@@ -1256,7 +1279,7 @@ export default class EditorApp {
     };
   }
 
-  private resolveBlockOutlineColor(block: EditorBlock, selected: boolean): number {
+  private resolveBlockOutlineColor(block: EditorBlock, selected: boolean, selectedCount: number = 1): number {
     const role = (block.mesh.userData?.componentRole as string | undefined) ?? null;
     if (role === "master") {
       return COMPONENT_MASTER_OUTLINE_COLOR;
@@ -1264,7 +1287,13 @@ export default class EditorApp {
     if (role === "instance") {
       return COMPONENT_INSTANCE_OUTLINE_COLOR;
     }
-    return selected ? 0xff0000 : 0x000000;
+    // When multiple objects are selected (2 or more), use pink color (like when grouping)
+    // This gives visual feedback that multiple objects are selected
+    // Single selection uses red, multiple selection uses pink
+    if (selected) {
+      return selectedCount >= 2 ? 0xff4dff : 0xff0000;
+    }
+    return 0x000000;
   }
 
   private setupScene(): void {

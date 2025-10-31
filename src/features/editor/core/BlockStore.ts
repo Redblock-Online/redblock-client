@@ -119,15 +119,20 @@ export class BlockStore {
   public setOutlineColor(object: Object3D, color: number): void {
     object.traverse((child) => {
       if (child instanceof LineSegments) {
+        // Asegurar que el LineSegments sea visible
+        child.visible = true;
+        
         const material = child.material;
         if (Array.isArray(material)) {
           material.forEach((entry) => {
             if (entry instanceof LineBasicMaterial) {
               entry.color.setHex(color);
+              entry.visible = true;
             }
           });
         } else if (material instanceof LineBasicMaterial) {
           material.color.setHex(color);
+          material.visible = true;
         }
       }
     });

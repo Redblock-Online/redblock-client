@@ -1,4 +1,4 @@
-import { BoxHelper, LineBasicMaterial, Scene, Vector3, Euler } from "three";
+import { BoxHelper, Box3, BoxGeometry, LineBasicMaterial, LineSegments, Scene, Vector3, Euler, Group, Mesh, MeshBasicMaterial } from "three";
 import type { BlockStore } from "./BlockStore";
 import type { EditorBlock, EditorSelection, SelectionListener, SelectionTransform } from "@/features/editor/types";
 
@@ -10,6 +10,7 @@ export class SelectionManager {
   private readonly selectedIds = new Set<string>();
   private selection: EditorBlock | null = null;
   private highlight?: BoxHelper;
+  private multiSelectHelpers: Array<BoxHelper & { userData?: { tempMesh?: Mesh } }> = [];
   private readonly getBlockColor: BlockColorResolver;
   private readonly setOutlineColor: OutlineColorApplier;
 
@@ -162,13 +163,21 @@ export class SelectionManager {
   }
 
   private applySelection(nextIds: Set<string>): void {
+    // Reset outlines of blocks that are being deselected
     this.resetDeselectedOutlines(nextIds);
-    this.applyOutlineToNewSelections(nextIds);
-
+    
+    // Update selectedIds BEFORE applying outlines to ensure consistency
     this.selectedIds.clear();
     nextIds.forEach((id) => this.selectedIds.add(id));
+    
+    // Apply outline to ALL selected blocks - this must happen AFTER selectedIds is updated
+    // to ensure all blocks get the outline correctly
+    // IMPORTANT: Always apply outlines to ALL selected blocks, even if they were already selected,
+    // to ensure that when multiple components are selected, ALL of them show their outlines correctly
+    // This includes blocks that were already selected AND newly selected blocks
+    this.applyOutlineToNewSelections(this.selectedIds);
+    
     this.updateHighlightForSelection();
-
     this.emitSelection();
   }
 
@@ -185,26 +194,139 @@ export class SelectionManager {
   }
 
   private applyOutlineToNewSelections(nextIds: Set<string>): void {
+    // SOLUCIÓN DIRECTA: Cuando hay 2+ objetos seleccionados, aplicar líneas rosadas a TODOS
+    const selectedCount = nextIds.size;
+    const usePinkColor = selectedCount >= 2; // Si hay 2 o más, usar rosado
+    
+    // Procesar TODOS los bloques seleccionados
     for (const id of nextIds) {
-      if (this.selectedIds.has(id)) {
-        continue;
-      }
       const block = this.blocks.getBlock(id);
       if (!block) {
         continue;
       }
-      this.setOutlineColor(block, this.getBlockColor(block, true));
+      
+      // Determinar el color: rosado si hay múltiples selecciones, sino usar el color normal
+      let finalColor: number;
+      
+      if (usePinkColor) {
+        // Si hay múltiples selecciones, usar rosado (0xff4dff) para bloques normales
+        const role = (block.mesh.userData?.componentRole as string | undefined) ?? null;
+        if (role === "master") {
+          finalColor = 0x9b5cff; // Púrpura para master
+        } else if (role === "instance") {
+          finalColor = 0xff4dff; // Rosado para instance
+        } else {
+          finalColor = 0xff4dff; // Rosado para bloques normales cuando hay múltiples selecciones
+        }
+      } else {
+        // Si solo hay uno, usar el color normal
+        finalColor = this.getBlockColor(block, true);
+      }
+      
+      // PASO 1: Actualizar block.outline si existe
+      if (block.outline) {
+        const material = block.outline.material as LineBasicMaterial | LineBasicMaterial[];
+        if (Array.isArray(material)) {
+          material.forEach((entry) => {
+            if (entry instanceof LineBasicMaterial) {
+              entry.color.setHex(finalColor);
+            }
+          });
+        } else if (material instanceof LineBasicMaterial) {
+          material.color.setHex(finalColor);
+        }
+      }
+      
+      // PASO 2: Recorrer TODO el mesh y actualizar TODOS los LineSegments
+      block.mesh.traverse((child) => {
+        if (child instanceof LineSegments) {
+          // Asegurar que el LineSegments sea visible
+          child.visible = true;
+          
+          const material = child.material;
+          if (Array.isArray(material)) {
+            material.forEach((entry) => {
+              if (entry instanceof LineBasicMaterial) {
+                entry.color.setHex(finalColor);
+                entry.visible = true;
+              }
+            });
+          } else if (material instanceof LineBasicMaterial) {
+            material.color.setHex(finalColor);
+            material.visible = true;
+          }
+        }
+      });
+      
+      // PASO 3: Si es un Group, actualizar también los hijos individualmente
+      if (block.mesh instanceof Group) {
+        block.mesh.traverse((child) => {
+          if (child instanceof Mesh && child !== block.mesh) {
+            // Determinar color para hijos
+            let childColor = finalColor;
+            const childRole = (child.userData?.componentRole as string | undefined) ?? null;
+            if (childRole === "master") {
+              childColor = 0x9b5cff;
+            } else if (childRole === "instance") {
+              childColor = 0xff4dff;
+            } else if (usePinkColor) {
+              childColor = 0xff4dff; // Rosado para hijos cuando hay múltiples selecciones
+            }
+            
+            // Actualizar LineSegments en cada hijo
+            child.traverse((grandchild) => {
+              if (grandchild instanceof LineSegments) {
+                // Asegurar que el LineSegments sea visible
+                grandchild.visible = true;
+                
+                const material = grandchild.material;
+                if (Array.isArray(material)) {
+                  material.forEach((entry) => {
+                    if (entry instanceof LineBasicMaterial) {
+                      entry.color.setHex(childColor);
+                      entry.visible = true;
+                    }
+                  });
+                } else if (material instanceof LineBasicMaterial) {
+                  material.color.setHex(childColor);
+                  material.visible = true;
+                }
+              }
+            });
+          }
+        });
+      }
     }
   }
 
   private updateHighlightForSelection(): void {
+    // Limpiar highlight de selección única
     if (this.highlight) {
       this.scene.remove(this.highlight);
       this.highlight.geometry.dispose();
       this.highlight = undefined;
     }
 
+    // Limpiar helpers de selección múltiple
+    for (const helper of this.multiSelectHelpers) {
+      this.scene.remove(helper);
+      helper.geometry.dispose();
+      // Limpiar el mesh temporal si existe
+      const tempMesh = helper.userData?.tempMesh;
+      if (tempMesh) {
+        this.scene.remove(tempMesh);
+        tempMesh.geometry.dispose();
+        if (Array.isArray(tempMesh.material)) {
+          tempMesh.material.forEach((mat) => mat.dispose());
+        } else {
+          tempMesh.material.dispose();
+        }
+      }
+    }
+    this.multiSelectHelpers = [];
+
     if (this.selectedIds.size === 1) {
+      // Selección única: usar highlight normal
       const [id] = this.selectedIds;
       const block = id ? this.blocks.getBlock(id) ?? null : null;
       this.selection = block;
@@ -212,6 +334,56 @@ export class SelectionManager {
         const highlightColor = this.getBlockColor(block, true);
         this.highlight = new BoxHelper(block.mesh, highlightColor);
         this.scene.add(this.highlight);
+      }
+    } else if (this.selectedIds.size >= 2) {
+      // Selección múltiple: crear UN SOLO BoxHelper AZUL que englobe TODOS los bloques
+      // Esto muestra las mismas líneas que aparecen al crear un grupo, pero en azul
+      this.selection = null;
+      const blueColor = 0x0080ff; // Color AZUL para múltiples selecciones
+      
+      // Calcular el bounding box que engloba todos los bloques seleccionados
+      const boundingBox = new Box3();
+      let hasBlocks = false;
+      
+      for (const id of this.selectedIds) {
+        const block = this.blocks.getBlock(id);
+        if (!block) {
+          continue;
+        }
+        
+        // Expandir el bounding box para incluir este bloque
+        const blockBox = new Box3().setFromObject(block.mesh);
+        if (hasBlocks) {
+          boundingBox.union(blockBox);
+        } else {
+          boundingBox.copy(blockBox);
+          hasBlocks = true;
+        }
+      }
+      
+      if (hasBlocks && !boundingBox.isEmpty()) {
+        // Crear un mesh temporal invisible con el tamaño del bounding box combinado
+        // Esto permite que BoxHelper calcule correctamente el outline
+        const center = boundingBox.getCenter(new Vector3());
+        const size = boundingBox.getSize(new Vector3());
+        
+        // Crear un mesh temporal invisible con geometría de caja del tamaño correcto
+        const tempGeometry = new BoxGeometry(size.x, size.y, size.z);
+        const tempMaterial = new MeshBasicMaterial({ visible: false });
+        const tempMesh = new Mesh(tempGeometry, tempMaterial);
+        tempMesh.position.copy(center);
+        
+        // Crear BoxHelper alrededor del mesh temporal
+        const helper = new BoxHelper(tempMesh, blueColor);
+        this.scene.add(helper);
+        this.multiSelectHelpers.push(helper);
+        
+        // Guardar referencia al mesh temporal para poder limpiarlo después
+        // (lo almacenamos en userData del helper para poder eliminarlo)
+        if (!helper.userData) {
+          helper.userData = {};
+        }
+        helper.userData.tempMesh = tempMesh;
       }
     } else {
       this.selection = null;
@@ -221,6 +393,10 @@ export class SelectionManager {
   private refreshHighlight(): void {
     if (this.highlight) {
       this.highlight.update();
+    }
+    // Actualizar todos los helpers de selección múltiple
+    for (const helper of this.multiSelectHelpers) {
+      helper.update();
     }
   }
 
