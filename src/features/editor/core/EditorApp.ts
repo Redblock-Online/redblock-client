@@ -692,6 +692,43 @@ export default class EditorApp {
     }
   }
 
+  /**
+   * Detects which block is under the cursor without changing the selection.
+   * This is useful for checking if a clicked block is already selected.
+   */
+  public detectBlockUnderCursor(clientX: number, clientY: number): EditorBlock | null {
+    const rect = this.canvas.getBoundingClientRect();
+    this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
+
+    const intersects = this.raycaster.intersectObjects(this.blocks.getMeshes(), true);
+    const editingId = this.getEditingComponentId();
+
+    if (intersects.length === 0) {
+      return null;
+    }
+
+    for (const result of intersects) {
+      // Ignore outline helpers and any line-only helpers
+      if (result.object instanceof LineSegments) {
+        continue;
+      }
+      // Only count actual Mesh or Group objects that belong to blocks
+      const mesh = result.object as Object3D;
+      const block = this.blocks.findBlockByMesh(mesh);
+      if (!block) {
+        continue;
+      }
+      if (editingId && !this.components.isBlockWithinActiveEdit(block.id)) {
+        continue;
+      }
+      return block;
+    }
+
+    return null;
+  }
+
   public pickBlock(clientX: number, clientY: number, additive: boolean = false): EditorBlock | null {
     const rect = this.canvas.getBoundingClientRect();
     this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;

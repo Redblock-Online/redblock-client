@@ -143,8 +143,76 @@ export class SelectionManager {
     this.refreshHighlight();
   }
 
+  /**
+   * Updates the multi-select helpers by recalculating the bounding box
+   * that encompasses all selected blocks. This is called when blocks are moved
+   * during drag operations.
+   */
+  private updateMultiSelectHelpers(): void {
+    if (this.selectedIds.size < 2) {
+      return;
+    }
+
+    // Calcular el nuevo bounding box que engloba todos los bloques seleccionados
+    const boundingBox = new Box3();
+    let hasBlocks = false;
+    
+    for (const id of this.selectedIds) {
+      const block = this.blocks.getBlock(id);
+      if (!block) {
+        continue;
+      }
+      
+      // Expandir el bounding box para incluir este bloque
+      const blockBox = new Box3().setFromObject(block.mesh);
+      if (hasBlocks) {
+        boundingBox.union(blockBox);
+      } else {
+        boundingBox.copy(blockBox);
+        hasBlocks = true;
+      }
+    }
+    
+    if (!hasBlocks || boundingBox.isEmpty()) {
+      return;
+    }
+
+    // Actualizar el mesh temporal de cada helper con el nuevo bounding box
+    for (const helper of this.multiSelectHelpers) {
+      const tempMesh = helper.userData?.tempMesh as Mesh | undefined;
+      if (!tempMesh) {
+        continue;
+      }
+
+      // Calcular nuevo centro y tamaño
+      const center = boundingBox.getCenter(new Vector3());
+      const size = boundingBox.getSize(new Vector3());
+      
+      // Actualizar posición del mesh temporal
+      tempMesh.position.copy(center);
+      
+      // Actualizar geometría si el tamaño cambió significativamente
+      const currentSize = new Vector3();
+      tempMesh.geometry.computeBoundingBox();
+      if (tempMesh.geometry.boundingBox) {
+        tempMesh.geometry.boundingBox.getSize(currentSize);
+        // Solo recrear la geometría si el tamaño cambió mucho (para evitar recrear en cada frame)
+        const sizeDiff = Math.abs(currentSize.x - size.x) + Math.abs(currentSize.y - size.y) + Math.abs(currentSize.z - size.z);
+        if (sizeDiff > 0.1) {
+          tempMesh.geometry.dispose();
+          tempMesh.geometry = new BoxGeometry(size.x, size.y, size.z);
+        }
+      }
+      
+      // Actualizar el helper
+      helper.update();
+    }
+  }
+
   public applyTransformsForIds(entries: Array<{ id: string; transform: SelectionTransform }>): void {
     let highlightNeedsUpdate = false;
+    let multiSelectNeedsUpdate = false;
+    
     for (const entry of entries) {
       const block = this.blocks.getBlock(entry.id);
       if (!block) {
@@ -153,12 +221,25 @@ export class SelectionManager {
       block.mesh.position.copy(entry.transform.position);
       block.mesh.rotation.copy(entry.transform.rotation);
       block.mesh.scale.copy(entry.transform.scale);
+      
+      // Check if this block is in the current selection
       if (this.selection?.id === entry.id) {
         highlightNeedsUpdate = true;
       }
+      
+      // Check if this block is part of multiple selection
+      if (this.selectedIds.has(entry.id) && this.selectedIds.size > 1) {
+        multiSelectNeedsUpdate = true;
+      }
     }
+    
     if (highlightNeedsUpdate && this.highlight) {
       this.highlight.update();
+    }
+    
+    // Update multi-select helpers by recalculating the bounding box
+    if (multiSelectNeedsUpdate && this.multiSelectHelpers.length > 0) {
+      this.updateMultiSelectHelpers();
     }
   }
 
