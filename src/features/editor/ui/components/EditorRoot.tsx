@@ -77,6 +77,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const [showSidebar, setShowSidebar] = useState(true);
   const [showInspector, setShowInspector] = useState(true);
   const [showControls, setShowControls] = useState(true);
+  const [simpleMode, setSimpleMode] = useState(false);
 
   const selectedItemRef = useRef<EditorItem | null>(null);
 
@@ -1268,6 +1269,13 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         </div>
         <div className="flex items-center gap-4">
           <AlertIcon alerts={alerts} />
+          <button
+            onClick={() => setSimpleMode(!simpleMode)}
+            className="rounded px-3 py-1.5 text-[11px] transition bg-[#4a4a4a] text-[#cccccc] hover:bg-[#555555]"
+            title={simpleMode ? "Switch to full editor mode" : "Switch to simple mode"}
+          >
+            {simpleMode ? "Switch to Full Mode" : "Switch to Simple Mode"}
+          </button>
           {!isGameActive ? (
             <button
               onClick={handleStartGame}
@@ -1359,7 +1367,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         
         {/* Editor Content */}
         <div className="relative flex flex-1 gap-2 overflow-hidden px-2 pb-2 pt-2">
-              {showSidebar && (
+              {showSidebar && !simpleMode && (
                 <aside className="relative z-10 flex w-64 flex-col rounded border border-[#1a1a1a] bg-[#383838] pointer-events-auto overflow-auto">
           <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2 border-b border-[#1a1a1a]">
             <div className="text-[11px] text-[#999999] font-medium">Components</div>
@@ -1440,7 +1448,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             ) : null}
           </div>
         </main>
-        {showInspector && (
+        {showInspector && !simpleMode && (
           <aside
             className={`relative z-10 w-72 rounded border border-[#1a1a1a] bg-[#383838] p-3 transition-opacity overflow-auto ${
               inspectorVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-40"
