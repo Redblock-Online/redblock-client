@@ -867,15 +867,15 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     };
   }, [autoSaveScenario, editor, editingActive, pushHistory]);
 
-  // Simple mode: Minecraft-style block placement on click
+  // Simple mode: Minecraft-style block placement on left click, deletion on middle click (wheel button)
   useEffect(() => {
     if (!simpleMode) return;
     
     const canvas = editor.getCanvas();
     
     const handlePointerDown = (event: PointerEvent) => {
-      // Only handle left clicks
-      if (event.button !== 0) return;
+      // Only handle left clicks (place) or middle clicks (delete)
+      if (event.button !== 0 && event.button !== 1) return;
       
       // Only handle clicks on canvas
       const target = event.target as Node;
@@ -883,13 +883,50 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         return;
       }
       
-      // Don't place if editing
+      // Don't handle if editing
       if (editingActive) return;
       
       // Prevent other handlers from interfering
       event.preventDefault();
       event.stopImmediatePropagation();
       
+      // Handle middle click (wheel button) for deletion
+      if (event.button === 1) {
+        const hit = editor.pickBlock(event.clientX, event.clientY, false);
+        
+        if (hit) {
+          // Serialize block before deletion for history
+          const payload = editor.serializeBlocksByIds([hit.id]);
+          
+          if (editor.removeBlock(hit.id)) {
+            // Add to history
+            if (payload.nodes.length > 0) {
+              pushHistory({ 
+                type: "delete", 
+                ids: [hit.id], 
+                payload 
+              });
+            }
+            
+            // Clear selection and update state
+            editor.clearSelection();
+            setSelection(null);
+            
+            // Clear clipboard if deleted block was in clipboard
+            clipboardRef.current = null;
+            pasteOffsetRef.current = 0;
+            
+            // Update spawn point status
+            setHasSpawnPoint(editor.hasSpawnPoint());
+            
+            // Auto-save scenario
+            autoSaveScenario();
+          }
+        }
+        return;
+      }
+      
+      // Handle left click for placement
       // Check if we clicked on an existing block and get face normal
       const hit = editor.pickBlock(event.clientX, event.clientY, false);
       
@@ -1605,9 +1642,14 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
                   </button>
                 )}
                 {simpleMode ? (
-                  <span className="text-[11px] leading-relaxed">
-                    Click to place block
-                  </span>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[11px] leading-relaxed">
+                      Left click to place block
+                    </span>
+                    <span className="text-[11px] leading-relaxed">
+                      Middle click (wheel) to delete block
+                    </span>
+                  </div>
                 ) : (
                   <>
                     <span className="text-[10px] text-[#999999] mb-0.5">
