@@ -890,8 +890,37 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       event.preventDefault();
       event.stopImmediatePropagation();
       
-      // Minecraft-style: always place block on click
-      const placed = editor.placeBlockAt(event.clientX, event.clientY);
+      // Check if we clicked on an existing block
+      const hit = editor.pickBlock(event.clientX, event.clientY, false);
+      
+      let placed: EditorBlock | null = null;
+      
+      if (hit) {
+        // Minecraft-style: place block on top of the clicked block
+        const blockPosition = hit.mesh.position.clone();
+        const blockScale = hit.mesh.scale.clone();
+        // Calculate top of the block (position is center, so add half height)
+        const topY = blockPosition.y + (blockScale.y / 2);
+        // Place new block one unit above (1 unit = block height)
+        const newPosition = new Vector3(
+          blockPosition.x,
+          topY + 0.5, // Half block height above the top
+          blockPosition.z
+        );
+        
+        // Create block at calculated position
+        placed = editor.createBlock({
+          position: newPosition,
+          rotation: new Euler(0, 0, 0),
+          scale: new Vector3(1, 1, 1)
+        });
+        
+        // Select the new block
+        editor.setSelectionByIds([placed.id]);
+      } else {
+        // Click on empty space: place on ground
+        placed = editor.placeBlockAt(event.clientX, event.clientY);
+      }
       
       if (placed) {
         const transform = editor.getSelectionTransform();
