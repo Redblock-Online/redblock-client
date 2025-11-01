@@ -1407,33 +1407,45 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         <main className="pointer-events-none relative flex-1">
           <div className="pointer-events-none absolute inset-0">
             {showControls && (
-              <div className="absolute left-4 top-4 flex max-w-md flex-col gap-1.5 rounded border border-[#1a1a1a] bg-[#323232]/95 px-3 py-2.5 text-[11px] text-[#cccccc]">
-                {/* Cruz blanca en la esquina superior */}
-                <button 
-                  className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center hover:bg-[#404040] rounded transition-colors pointer-events-auto"
-                  onClick={() => setShowControls(false)}
-                  title="Cerrar controles"
-                >
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-white">
-                    <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                </button>
-                <span className="text-[10px] text-[#999999] mb-0.5">
-                  Controls
-                </span>
-                <span className="leading-relaxed text-[10px]">
-                  Orbit with right click · Pan with Shift + right click · Zoom with scroll
-                </span>
-                <span className="leading-relaxed text-[10px]">
-                  Select with left click · Move (G) · Rotate (R) · Scale (F) · constrain with X / Y / Z
-                </span>
-                <span className="leading-relaxed text-[10px]">Move camera with WASD</span>
-                <span className="leading-relaxed text-[10px]">Toggle Components (B) · Toggle Inspector (I) · Toggle Controls (C)</span>
-                {transformLabel ? (
-                  <span className="mt-1 w-fit rounded border border-[#1a1a1a] bg-[#4772b3] px-2.5 py-1 text-[10px] text-white">
-                    {transformLabel}
+              <div className={`absolute left-4 top-4 flex max-w-md flex-col gap-1.5 rounded border border-[#1a1a1a] bg-[#323232]/95 text-[#cccccc] ${
+                simpleMode ? 'px-4 py-2.5' : 'px-3 py-2.5'
+              }`}>
+                {/* Cruz blanca en la esquina superior - Solo visible en modo normal */}
+                {!simpleMode && (
+                  <button 
+                    className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center hover:bg-[#404040] rounded transition-colors pointer-events-auto"
+                    onClick={() => setShowControls(false)}
+                    title="Cerrar controles"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-white">
+                      <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                  </button>
+                )}
+                {simpleMode ? (
+                  <span className="text-[11px] leading-relaxed">
+                    Click to place block
                   </span>
-                ) : null}
+                ) : (
+                  <>
+                    <span className="text-[10px] text-[#999999] mb-0.5">
+                      Controls
+                    </span>
+                    <span className="leading-relaxed text-[10px]">
+                      Orbit with right click · Pan with Shift + right click · Zoom with scroll
+                    </span>
+                    <span className="leading-relaxed text-[10px]">
+                      Select with left click · Move (G) · Rotate (R) · Scale (F) · constrain with X / Y / Z
+                    </span>
+                    <span className="leading-relaxed text-[10px]">Move camera with WASD</span>
+                    <span className="leading-relaxed text-[10px]">Toggle Components (B) · Toggle Inspector (I) · Toggle Controls (C)</span>
+                    {transformLabel ? (
+                      <span className="mt-1 w-fit rounded border border-[#1a1a1a] bg-[#4772b3] px-2.5 py-1 text-[10px] text-white">
+                        {transformLabel}
+                      </span>
+                    ) : null}
+                  </>
+                )}
               </div>
             )}
             {activeItem ? (
