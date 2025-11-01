@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type SetStateAction } from "react";
-import { Euler, Group, Vector3, Object3D, Quaternion as ThreeQuaternion } from "three";
+import { Euler, Group, Vector3, Vector2, Object3D, Quaternion as ThreeQuaternion, Raycaster, Quaternion, Matrix3, Mesh, LineSegments } from "three";
 import { FaPlay, FaStop } from "react-icons/fa";
 import { EditorApp } from "@/features/editor/core";
 import type { EditorBlock, EditorSelection, SelectionTransform, SerializedNode } from "@/features/editor/types";
@@ -890,23 +890,129 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       event.preventDefault();
       event.stopImmediatePropagation();
       
-      // Check if we clicked on an existing block
+      // Check if we clicked on an existing block and get face normal
       const hit = editor.pickBlock(event.clientX, event.clientY, false);
       
       let placed: EditorBlock | null = null;
       
       if (hit) {
-        // Minecraft-style: place block on top of the clicked block
+        // Get raycaster intersection to determine which face was clicked
+        const rect = canvas.getBoundingClientRect();
+        const pointer = new Vector2();
+        pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        
+        // Raycast manually to get the face normal
+        const tempRaycaster = new Raycaster();
+        const camera = editor.getCamera();
+        tempRaycaster.setFromCamera(pointer, camera);
+        
+        // Find the actual Mesh object (not LineSegments or Group)
+        // The mesh might have outline children that we need to skip
+        let targetMesh: Object3D | null = null;
+        
+        if (hit.mesh instanceof Group) {
+          // If it's a group, find the first Mesh child (skip LineSegments)
+          hit.mesh.traverse((child) => {
+            if (child instanceof Mesh && !(child instanceof LineSegments)) {
+              if (!targetMesh) {
+                targetMesh = child;
+              }
+            }
+          });
+        } else if (hit.mesh instanceof Mesh) {
+          targetMesh = hit.mesh;
+        }
+        
+        if (!targetMesh) {
+          // Fallback: try to use hit.mesh directly
+          targetMesh = hit.mesh;
+        }
+        
+        // Intersect only with the mesh (not children like outline LineSegments)
+        const intersects = tempRaycaster.intersectObject(targetMesh, false);
+        
+        let faceNormal = new Vector3(0, 1, 0); // Default to top
+        
+        if (intersects.length > 0 && intersects[0].face) {
+          // Get face normal in world space
+          const normal = intersects[0].face.normal.clone();
+          
+          // Transform normal to world space
+          if (intersects[0].object instanceof Object3D) {
+            const worldQuaternion = new Quaternion();
+            intersects[0].object.getWorldQuaternion(worldQuaternion);
+            normal.applyQuaternion(worldQuaternion);
+          }
+          
+          faceNormal = normal.normalize();
+          
+          // Debug log
+          console.log('[SimpleMode] Face normal (world):', faceNormal.x.toFixed(3), faceNormal.y.toFixed(3), faceNormal.z.toFixed(3));
+          console.log('[SimpleMode] Intersect distance:', intersects[0].distance.toFixed(2));
+        } else {
+          console.warn('[SimpleMode] No face found in intersection, using default (top)');
+        }
+        
+        // Calculate block position based on face normal
         const blockPosition = hit.mesh.position.clone();
         const blockScale = hit.mesh.scale.clone();
-        // Calculate top of the block (position is center, so add half height)
-        const topY = blockPosition.y + (blockScale.y / 2);
-        // Place new block one unit above (1 unit = block height)
-        const newPosition = new Vector3(
-          blockPosition.x,
-          topY + 0.5, // Half block height above the top
-          blockPosition.z
-        );
+        
+        // Determine which direction based on the dominant component of the normal
+        const absX = Math.abs(faceNormal.x);
+        const absY = Math.abs(faceNormal.y);
+        const absZ = Math.abs(faceNormal.z);
+        
+        console.log('[SimpleMode] Normal components - absX:', absX.toFixed(3), 'absY:', absY.toFixed(3), 'absZ:', absZ.toFixed(3));
+        
+        const offset = new Vector3(0, 0, 0);
+        const blockSize = 1; // Standard block size
+        
+        // Find the component with the maximum absolute value (dominant direction)
+        const maxAbs = Math.max(absX, absY, absZ);
+        
+        // Use a threshold to determine the dominant direction
+        // If the dominant component is significantly larger, use it
+        if (Math.abs(absY - maxAbs) < 0.1) {
+          // Y is dominant (top or bottom)
+          if (faceNormal.y > 0) {
+            // Top face - place above
+            offset.y = blockScale.y / 2 + blockSize / 2;
+            console.log('[SimpleMode] ✅ Placing block on TOP');
+          } else {
+            // Bottom face - place below
+            offset.y = -(blockScale.y / 2 + blockSize / 2);
+            console.log('[SimpleMode] ✅ Placing block on BOTTOM');
+          }
+        } else if (Math.abs(absX - maxAbs) < 0.1) {
+          // X is dominant (left or right)
+          if (faceNormal.x > 0) {
+            // Right face - place to the right
+            offset.x = blockScale.x / 2 + blockSize / 2;
+            console.log('[SimpleMode] ✅ Placing block on RIGHT');
+          } else {
+            // Left face - place to the left
+            offset.x = -(blockScale.x / 2 + blockSize / 2);
+            console.log('[SimpleMode] ✅ Placing block on LEFT');
+          }
+        } else if (Math.abs(absZ - maxAbs) < 0.1) {
+          // Z is dominant (front or back)
+          if (faceNormal.z > 0) {
+            // Front face - place in front
+            offset.z = blockScale.z / 2 + blockSize / 2;
+            console.log('[SimpleMode] ✅ Placing block on FRONT');
+          } else {
+            // Back face - place behind
+            offset.z = -(blockScale.z / 2 + blockSize / 2);
+            console.log('[SimpleMode] ✅ Placing block on BACK');
+          }
+        } else {
+          // Fallback: if unclear, use Y (top)
+          offset.y = blockScale.y / 2 + blockSize / 2;
+          console.log('[SimpleMode] ⚠️ Unclear direction, defaulting to TOP');
+        }
+        
+        const newPosition = blockPosition.clone().add(offset);
         
         // Create block at calculated position
         placed = editor.createBlock({
