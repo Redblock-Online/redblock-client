@@ -867,6 +867,53 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     };
   }, [autoSaveScenario, editor, editingActive, pushHistory]);
 
+  // Simple mode: Minecraft-style block placement on click
+  useEffect(() => {
+    if (!simpleMode) return;
+    
+    const canvas = editor.getCanvas();
+    
+    const handlePointerDown = (event: PointerEvent) => {
+      // Only handle left clicks
+      if (event.button !== 0) return;
+      
+      // Only handle clicks on canvas
+      const target = event.target as Node;
+      if (target !== canvas && !canvas.contains(target)) {
+        return;
+      }
+      
+      // Don't place if editing
+      if (editingActive) return;
+      
+      // Prevent other handlers from interfering
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      
+      // Minecraft-style: always place block on click
+      const placed = editor.placeBlockAt(event.clientX, event.clientY);
+      
+      if (placed) {
+        const transform = editor.getSelectionTransform();
+        if (transform) {
+          pushHistory({ 
+            type: "add", 
+            id: placed.id, 
+            transform 
+          });
+        }
+        autoSaveScenario();
+      }
+    };
+    
+    // Use capture phase at document level to intercept before other handlers
+    document.addEventListener("pointerdown", handlePointerDown, { capture: true, passive: false });
+    
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, { capture: true });
+    };
+  }, [simpleMode, editor, editingActive, pushHistory, autoSaveScenario]);
+
   useEffect(() => {
     const removeListener = editor.addDragCommitListener((changes) => {
       if (changes.length === 0) {
