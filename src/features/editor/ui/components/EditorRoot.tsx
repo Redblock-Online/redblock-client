@@ -133,10 +133,24 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     }
   }, [editor, refreshScenarios]);
 
-  // Auto-load scenario from sessionStorage if coming from game
+  // Auto-load scenario from sessionStorage if coming from game OR create new if requested
   useEffect(() => {
     if (typeof window === "undefined") return;
     
+    // Check if we should create a new scenario
+    const createNew = sessionStorage.getItem("editor-create-new");
+    if (createNew) {
+      sessionStorage.removeItem("editor-create-new");
+      console.log("[EditorRoot] Creating new scenario from menu");
+      editor.resetScene();
+      const emptyScenario = editor.exportScenario(AUTO_SAVE_SCENARIO_NAME);
+      saveScenario(AUTO_SAVE_SCENARIO_NAME, emptyScenario);
+      setActiveScenarioName(AUTO_SAVE_SCENARIO_NAME);
+      refreshScenarios();
+      return;
+    }
+    
+    // Check if we should load a specific scenario
     const scenarioToLoad = sessionStorage.getItem("editor-load-scenario");
     if (scenarioToLoad) {
       // Clear the flag
@@ -154,7 +168,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         refreshComponents();
       }
     }
-  }, [editor, refreshComponents]);
+  }, [editor, refreshComponents, refreshScenarios]);
 
   // Subscribe to alerts
   useEffect(() => {
@@ -389,11 +403,15 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     }
     editor.resetScene();
     setActiveScenarioName(AUTO_SAVE_SCENARIO_NAME);
+    
+    // Save the empty scene to auto-save immediately after reset
+    const emptyScenario = editor.exportScenario(AUTO_SAVE_SCENARIO_NAME);
+    saveScenario(AUTO_SAVE_SCENARIO_NAME, emptyScenario);
+    
     refreshScenarios();
-    flushAutoSave();
     clearUnsaved();
     panelAutoSavePendingRef.current = false;
-  }, [clearUnsaved, closeMenus, editor, refreshScenarios, flushAutoSave, setActiveScenarioName]);
+  }, [clearUnsaved, closeMenus, editor, refreshScenarios, setActiveScenarioName]);
 
   const handleSaveScenarioAs = useCallback(() => {
     closeMenus();

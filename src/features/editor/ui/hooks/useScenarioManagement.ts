@@ -30,10 +30,14 @@ export function useScenarioManagement(
     if (!window.confirm("Start a new scenario? This clears the current scene.")) return;
     editor.resetScene();
     setActiveScenarioName(AUTO_SAVE_SCENARIO_NAME);
+    
+    // Save the empty scene to auto-save immediately after reset
+    const emptyScenario = editor.exportScenario(AUTO_SAVE_SCENARIO_NAME);
+    saveScenario(AUTO_SAVE_SCENARIO_NAME, emptyScenario);
+    
     refreshScenarios();
-    flushAutoSave();
     clearUnsaved();
-  }, [clearUnsaved, closeMenus, editor, refreshScenarios, flushAutoSave]);
+  }, [clearUnsaved, closeMenus, editor, refreshScenarios]);
 
   const handleSaveScenarioAs = useCallback(() => {
     closeMenus();

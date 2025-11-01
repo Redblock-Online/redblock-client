@@ -2,7 +2,7 @@ import Image from "next/image";
 import React, { useState, useEffect } from "react";
 import Button from "@/features/shared/ui/components/Button";
 import type { ScenarioConfig } from "@/config/scenarios";
-import { listScenarios, type StoredScenario } from "@/features/editor/scenarios";
+import { listScenarios, type StoredScenario, AUTO_SAVE_SCENARIO_NAME } from "@/features/editor/scenarios";
 import { FaTwitter, FaTelegram, FaYoutube, FaGithub, FaPencilAlt } from "react-icons/fa";
 import { RiInstagramFill } from "react-icons/ri";
 import socials from "@/config/socials.json";
@@ -39,8 +39,10 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    // Load saved scenarios from localStorage
-    const scenarios = listScenarios();
+    // Load saved scenarios from localStorage, excluding auto-save
+    const scenarios = listScenarios().filter(
+      (scenario) => scenario.name !== AUTO_SAVE_SCENARIO_NAME
+    );
     setSavedScenarios(scenarios);
   }, []);
 
@@ -76,12 +78,12 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
   const onLoadScenarioClick = (scenario: StoredScenario) => {
     // Create a custom scenario config that will load from localStorage
     const customScenarioId = `custom-${scenario.id}`;
-    
+
     // Store the scenario data temporarily for the game to load
     if (typeof window !== "undefined") {
       sessionStorage.setItem(`scenario-${customScenarioId}`, JSON.stringify(scenario.data));
     }
-    
+
     // Start the game with this custom scenario
     onStartClick(customScenarioId);
     setShowScenarioMenu(false);
@@ -90,12 +92,12 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
   const onEditScenarioClick = (scenario: StoredScenario, event: React.MouseEvent) => {
     // Prevent the parent button click (load scenario)
     event.stopPropagation();
-    
+
     // Store scenario name in sessionStorage for editor to load
     if (typeof window !== "undefined") {
       sessionStorage.setItem("editor-load-scenario", scenario.name);
     }
-    
+
     // Navigate to editor
     window.location.href = "/editor";
   };
@@ -197,7 +199,7 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
                   variant="outline"
                   onClick={() => setShowScenarioMenu(true)}
                 >
-                  Load Scenarios  
+                  Load Scenarios
                 </Button>
               </div>
               <Button size="lg" variant="outline" onClick={onSettings}>
@@ -211,7 +213,7 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
             <div className="fixed inset-0 bg-[radial-gradient(#fff,#fff)] z-50 flex flex-col">
               {/* background grid overlay */}
               <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent_49%,#000_49%,#000_51%,transparent_51%),linear-gradient(0deg,transparent_49%,#000_49%,#000_51%,transparent_51%)] [background-size:80px_80px] opacity-10 z-[1]" />
-              
+
               {/* Header */}
               <div className="relative z-10 border-b-4 border-black bg-white p-6">
                 <div className="max-w-4xl mx-auto">
@@ -221,7 +223,11 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
                       <Button
                         size="lg"
                         variant="primary"
-                        onClick={() => window.location.href = '/editor'}
+                        onClick={() => {
+                          // Signal to editor that we want to create a new scenario
+                          sessionStorage.setItem("editor-create-new", "true");
+                          window.location.href = '/editor';
+                        }}
                         className="relative overflow-hidden group"
                       >
                         <span className="relative z-10 flex items-center gap-2">
@@ -241,7 +247,7 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
                       </Button>
                     </div>
                   </div>
-                  
+
                   {/* Search Bar */}
                   <div className="relative">
                     <div className="absolute left-5 top-1/2 -translate-y-1/2 text-xl pointer-events-none opacity-40">
@@ -264,7 +270,7 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
                       </button>
                     )}
                   </div>
-                  
+
                   {/* Results count */}
                   <div className="mt-4 flex items-center gap-2">
                     <div className="h-1 w-1 rounded-full bg-black/40"></div>
@@ -286,9 +292,12 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
                       <Button
                         size="lg"
                         variant="primary"
-                        onClick={() => window.location.href = '/editor'}
+                        onClick={() => {
+                          sessionStorage.setItem("editor-create-new", "true");
+                          window.location.href = '/editor'
+                        }}
                       >
-                        🔨 Create Scenario
+                        Create Scenario
                       </Button>
                     </div>
                   ) : filteredScenarios.length === 0 ? (
@@ -318,7 +327,7 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
                           <h3 className="text-xl font-bold mb-3 break-words pr-10">
                             {scenario.name}
                           </h3>
-                          
+
                           <div className="space-y-1 text-sm">
                             <div className="flex items-center gap-2 opacity-60 group-hover:opacity-80">
                               <span>📅</span>
@@ -340,7 +349,7 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
                               </span>
                             </div>
                           </div>
-                          
+
                           <div className="mt-4 text-xs opacity-40 group-hover:opacity-60">
                             Click to load
                           </div>
