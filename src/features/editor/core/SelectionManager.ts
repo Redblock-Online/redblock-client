@@ -153,7 +153,7 @@ export class SelectionManager {
       return;
     }
 
-    // Calcular el nuevo bounding box que engloba todos los bloques seleccionados
+    // Calculate the new bounding box that encompasses all selected blocks
     const boundingBox = new Box3();
     let hasBlocks = false;
     
@@ -163,7 +163,7 @@ export class SelectionManager {
         continue;
       }
       
-      // Expandir el bounding box para incluir este bloque
+      // Expand the bounding box to include this block
       const blockBox = new Box3().setFromObject(block.mesh);
       if (hasBlocks) {
         boundingBox.union(blockBox);
@@ -177,26 +177,26 @@ export class SelectionManager {
       return;
     }
 
-    // Actualizar el mesh temporal de cada helper con el nuevo bounding box
+    // Update the temporary mesh of each helper with the new bounding box
     for (const helper of this.multiSelectHelpers) {
       const tempMesh = helper.userData?.tempMesh as Mesh | undefined;
       if (!tempMesh) {
         continue;
       }
 
-      // Calcular nuevo centro y tamaño
+      // Calculate new center and size
       const center = boundingBox.getCenter(new Vector3());
       const size = boundingBox.getSize(new Vector3());
       
-      // Actualizar posición del mesh temporal
+      // Update position of temporary mesh
       tempMesh.position.copy(center);
       
-      // Actualizar geometría si el tamaño cambió significativamente
+      // Update geometry if size changed significantly
       const currentSize = new Vector3();
       tempMesh.geometry.computeBoundingBox();
       if (tempMesh.geometry.boundingBox) {
         tempMesh.geometry.boundingBox.getSize(currentSize);
-        // Solo recrear la geometría si el tamaño cambió mucho (para evitar recrear en cada frame)
+        // Only recreate geometry if size changed significantly (to avoid recreating every frame)
         const sizeDiff = Math.abs(currentSize.x - size.x) + Math.abs(currentSize.y - size.y) + Math.abs(currentSize.z - size.z);
         if (sizeDiff > 0.1) {
           tempMesh.geometry.dispose();
@@ -204,7 +204,7 @@ export class SelectionManager {
         }
       }
       
-      // Actualizar el helper
+      // Update the helper
       helper.update();
     }
   }
@@ -275,36 +275,36 @@ export class SelectionManager {
   }
 
   private applyOutlineToNewSelections(nextIds: Set<string>): void {
-    // SOLUCIÓN DIRECTA: Cuando hay 2+ objetos seleccionados, aplicar líneas rosadas a TODOS
+    // DIRECT SOLUTION: When there are 2+ selected objects, apply pink lines to ALL
     const selectedCount = nextIds.size;
-    const usePinkColor = selectedCount >= 2; // Si hay 2 o más, usar rosado
+    const usePinkColor = selectedCount >= 2; // If there are 2 or more, use pink
     
-    // Procesar TODOS los bloques seleccionados
+    // Process ALL selected blocks
     for (const id of nextIds) {
       const block = this.blocks.getBlock(id);
       if (!block) {
         continue;
       }
       
-      // Determinar el color: rosado si hay múltiples selecciones, sino usar el color normal
+      // Determine color: pink if multiple selections, otherwise use normal color
       let finalColor: number;
       
       if (usePinkColor) {
-        // Si hay múltiples selecciones, usar rosado (0xff4dff) para bloques normales
+        // If there are multiple selections, use pink (0xff4dff) for normal blocks
         const role = (block.mesh.userData?.componentRole as string | undefined) ?? null;
         if (role === "master") {
-          finalColor = 0x9b5cff; // Púrpura para master
+          finalColor = 0x9b5cff; // Purple for master
         } else if (role === "instance") {
-          finalColor = 0xff4dff; // Rosado para instance
+          finalColor = 0xff4dff; // Pink for instance
         } else {
-          finalColor = 0xff4dff; // Rosado para bloques normales cuando hay múltiples selecciones
+          finalColor = 0xff4dff; // Pink for normal blocks when there are multiple selections
         }
       } else {
-        // Si solo hay uno, usar el color normal
+        // If there is only one, use normal color
         finalColor = this.getBlockColor(block, true);
       }
       
-      // PASO 1: Actualizar block.outline si existe
+      // STEP 1: Update block.outline if it exists
       if (block.outline) {
         const material = block.outline.material as LineBasicMaterial | LineBasicMaterial[];
         if (Array.isArray(material)) {
@@ -318,10 +318,10 @@ export class SelectionManager {
         }
       }
       
-      // PASO 2: Recorrer TODO el mesh y actualizar TODOS los LineSegments
+      // STEP 2: Traverse the entire mesh and update ALL LineSegments
       block.mesh.traverse((child) => {
         if (child instanceof LineSegments) {
-          // Asegurar que el LineSegments sea visible
+          // Ensure the LineSegments is visible
           child.visible = true;
           
           const material = child.material;
@@ -339,11 +339,11 @@ export class SelectionManager {
         }
       });
       
-      // PASO 3: Si es un Group, actualizar también los hijos individualmente
+      // STEP 3: If it's a Group, also update children individually
       if (block.mesh instanceof Group) {
         block.mesh.traverse((child) => {
           if (child instanceof Mesh && child !== block.mesh) {
-            // Determinar color para hijos
+            // Determine color for children
             let childColor = finalColor;
             const childRole = (child.userData?.componentRole as string | undefined) ?? null;
             if (childRole === "master") {
@@ -351,13 +351,13 @@ export class SelectionManager {
             } else if (childRole === "instance") {
               childColor = 0xff4dff;
             } else if (usePinkColor) {
-              childColor = 0xff4dff; // Rosado para hijos cuando hay múltiples selecciones
+              childColor = 0xff4dff; // Pink for children when there are multiple selections
             }
             
-            // Actualizar LineSegments en cada hijo
+            // Update LineSegments in each child
             child.traverse((grandchild) => {
               if (grandchild instanceof LineSegments) {
-                // Asegurar que el LineSegments sea visible
+                // Ensure the LineSegments is visible
                 grandchild.visible = true;
                 
                 const material = grandchild.material;
@@ -381,18 +381,18 @@ export class SelectionManager {
   }
 
   private updateHighlightForSelection(): void {
-    // Limpiar highlight de selección única
+    // Clear single selection highlight
     if (this.highlight) {
       this.scene.remove(this.highlight);
       this.highlight.geometry.dispose();
       this.highlight = undefined;
     }
 
-    // Limpiar helpers de selección múltiple
+    // Clear multiple selection helpers
     for (const helper of this.multiSelectHelpers) {
       this.scene.remove(helper);
       helper.geometry.dispose();
-      // Limpiar el mesh temporal si existe
+      // Clear the temporary mesh if it exists
       const tempMesh = helper.userData?.tempMesh;
       if (tempMesh) {
         this.scene.remove(tempMesh);
@@ -407,7 +407,7 @@ export class SelectionManager {
     this.multiSelectHelpers = [];
 
     if (this.selectedIds.size === 1) {
-      // Selección única: usar highlight normal
+      // Single selection: use normal highlight
       const [id] = this.selectedIds;
       const block = id ? this.blocks.getBlock(id) ?? null : null;
       this.selection = block;
@@ -417,12 +417,12 @@ export class SelectionManager {
         this.scene.add(this.highlight);
       }
     } else if (this.selectedIds.size >= 2) {
-      // Selección múltiple: crear UN SOLO BoxHelper AZUL que englobe TODOS los bloques
-      // Esto muestra las mismas líneas que aparecen al crear un grupo, pero en azul
+      // Multiple selection: create A SINGLE BLUE BoxHelper that encompasses ALL blocks
+      // This shows the same lines that appear when creating a group, but in blue
       this.selection = null;
-      const blueColor = 0x0080ff; // Color AZUL para múltiples selecciones
+      const blueColor = 0x0080ff; // BLUE color for multiple selections
       
-      // Calcular el bounding box que engloba todos los bloques seleccionados
+      // Calculate the bounding box that encompasses all selected blocks
       const boundingBox = new Box3();
       let hasBlocks = false;
       
@@ -432,7 +432,7 @@ export class SelectionManager {
           continue;
         }
         
-        // Expandir el bounding box para incluir este bloque
+        // Expand the bounding box to include this block
         const blockBox = new Box3().setFromObject(block.mesh);
         if (hasBlocks) {
           boundingBox.union(blockBox);
@@ -443,24 +443,24 @@ export class SelectionManager {
       }
       
       if (hasBlocks && !boundingBox.isEmpty()) {
-        // Crear un mesh temporal invisible con el tamaño del bounding box combinado
-        // Esto permite que BoxHelper calcule correctamente el outline
+        // Create an invisible temporary mesh with the size of the combined bounding box
+        // This allows BoxHelper to correctly calculate the outline
         const center = boundingBox.getCenter(new Vector3());
         const size = boundingBox.getSize(new Vector3());
         
-        // Crear un mesh temporal invisible con geometría de caja del tamaño correcto
+        // Create an invisible temporary mesh with box geometry of the correct size
         const tempGeometry = new BoxGeometry(size.x, size.y, size.z);
         const tempMaterial = new MeshBasicMaterial({ visible: false });
         const tempMesh = new Mesh(tempGeometry, tempMaterial);
         tempMesh.position.copy(center);
         
-        // Crear BoxHelper alrededor del mesh temporal
+        // Create BoxHelper around the temporary mesh
         const helper = new BoxHelper(tempMesh, blueColor);
         this.scene.add(helper);
         this.multiSelectHelpers.push(helper);
         
-        // Guardar referencia al mesh temporal para poder limpiarlo después
-        // (lo almacenamos en userData del helper para poder eliminarlo)
+        // Save reference to temporary mesh to be able to clean it up later
+        // (we store it in the helper's userData so we can remove it)
         if (!helper.userData) {
           helper.userData = {};
         }
@@ -475,7 +475,7 @@ export class SelectionManager {
     if (this.highlight) {
       this.highlight.update();
     }
-    // Actualizar todos los helpers de selección múltiple
+    // Update all multiple selection helpers
     for (const helper of this.multiSelectHelpers) {
       helper.update();
     }

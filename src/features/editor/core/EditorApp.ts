@@ -153,7 +153,7 @@ export default class EditorApp {
       setOutlineColor: (block, color) => {
         // Update block.outline directly if it exists (similar to defaultSetOutlineColor)
         if (block.outline) {
-          block.outline.visible = true; // Asegurar que el outline sea visible
+          block.outline.visible = true; // Ensure the outline is visible
           const material = block.outline.material as LineBasicMaterial | LineBasicMaterial[];
           if (Array.isArray(material)) {
             material.forEach((entry) => {

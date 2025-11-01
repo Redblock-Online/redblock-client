@@ -119,7 +119,7 @@ export class BlockStore {
   public setOutlineColor(object: Object3D, color: number): void {
     object.traverse((child) => {
       if (child instanceof LineSegments) {
-        // Asegurar que el LineSegments sea visible
+        // Ensure the LineSegments is visible
         child.visible = true;
         
         const material = child.material;
