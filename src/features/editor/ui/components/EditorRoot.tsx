@@ -1592,7 +1592,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
               <div className={`absolute left-4 top-4 flex max-w-md flex-col gap-1.5 rounded border border-[#1a1a1a] bg-[#323232]/95 text-[#cccccc] ${
                 simpleMode ? 'px-4 py-2.5' : 'px-3 py-2.5'
               }`}>
-                {/* Cruz blanca en la esquina superior - Solo visible en modo normal */}
+                {/* White cross in the top corner - Only visible in normal mode */}
                 {!simpleMode && (
                   <button 
                     className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center hover:bg-[#404040] rounded transition-colors pointer-events-auto"
