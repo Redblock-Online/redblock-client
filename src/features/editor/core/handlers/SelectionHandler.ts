@@ -33,7 +33,26 @@ export class SelectionHandler {
     this.dragStartX = event.clientX;
     this.dragStartY = event.clientY;
 
-    // Pick block under cursor
+    // Get current selection before picking
+    const currentSelection = this.editor.getSelectionArray();
+    const hasSelection = currentSelection.length > 0;
+    const hasMultipleSelection = currentSelection.length > 1;
+
+    // Detect block under cursor without changing selection
+    const detectedBlock = this.editor.detectBlockUnderCursor(event.clientX, event.clientY);
+    const clickedBlockIsSelected = detectedBlock && currentSelection.some(block => block.id === detectedBlock.id);
+
+    // If we have multiple blocks selected and clicked on one of them, preserve selection and start drag
+    if (hasMultipleSelection && clickedBlockIsSelected && detectedBlock && this.dragHandler) {
+      if (!this.editor.isSelectingGenerator()) {
+        // Don't call pickBlock - it would change selection. Just start drag with all selected blocks.
+        this.dragHandler.start(event.clientX, event.clientY);
+      }
+      this.isDraggingBox = false;
+      return;
+    }
+
+    // For single selection or new selection, use normal pickBlock behavior
     const additive = event.shiftKey || event.metaKey || event.ctrlKey;
     const hit = this.editor.pickBlock(event.clientX, event.clientY, additive);
 
