@@ -1629,18 +1629,16 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
               <div className={`absolute left-4 top-4 flex max-w-md flex-col gap-1.5 rounded border border-[#1a1a1a] bg-[#323232]/95 text-[#cccccc] ${
                 simpleMode ? 'px-4 py-2.5' : 'px-3 py-2.5'
               }`}>
-                {/* White cross in the top corner - Only visible in normal mode */}
-                {!simpleMode && (
-                  <button 
-                    className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center hover:bg-[#404040] rounded transition-colors pointer-events-auto"
-                    onClick={() => setShowControls(false)}
-                    title="Cerrar controles"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-white">
-                      <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    </svg>
-                  </button>
-                )}
+                {/* White cross in the top corner - Close button */}
+                <button 
+                  className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center hover:bg-[#404040] rounded transition-colors pointer-events-auto"
+                  onClick={() => setShowControls(false)}
+                  title="Cerrar controles"
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-white">
+                    <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </button>
                 {simpleMode ? (
                   <div className="flex flex-col gap-1">
                     <span className="text-[11px] leading-relaxed">
