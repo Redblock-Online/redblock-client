@@ -7,6 +7,10 @@ import SelectInput from "@/features/shared/ui/components/SelectInput";
 import ColorInput from "@/features/shared/ui/components/ColorInput";
 import { AudioManager, type AudioOptions } from "@/utils/AudioManager";
 import { detectMonitorRefreshRate } from "@/utils/displayUtils";
+import MusicControlButton from "./atoms/MusicControlButton";
+import PlayingIndicator from "./atoms/PlayingIndicator";
+import { FaPause, FaPlay, FaRandom, FaStepBackward, FaStepForward } from "react-icons/fa";
+import { getTrackTitle } from "@/config/musicTitles";
 
 type Tab = "game" | "controls" | "audio" | "video" | "gameplay" | "account";
 
@@ -218,6 +222,17 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
 
     return base;
   });
+
+  // Music UI state
+  const [currentTrack, setCurrentTrack] = useState<{ category: MusicCategory; trackName: string | null }>(() => ({
+    category: DEFAULT_AUDIO_SETTINGS.musicCategory,
+    trackName: null,
+  }));
+  const [musicProgress, setMusicProgress] = useState(0);
+  const [musicCurrentSec, setMusicCurrentSec] = useState(0);
+  const [musicDurationSec, setMusicDurationSec] = useState(0);
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const [shuffleEnabled, setShuffleEnabled] = useState(false);
 
   const sensitivityInitialNumeric = (() => {
     const parsed = parseFloat(sensitivity);
@@ -521,6 +536,83 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       }
     }
   }, [audioSettings.musicCategory]);
+
+  // Track/shuffle event listeners from UIRoot
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleCurrentTrackChanged = (event: CustomEvent) => {
+      const { category, trackName } = event.detail as { category: MusicCategory; trackName: string | null };
+      setCurrentTrack({ category, trackName });
+    };
+
+    const handleShuffleChanged = (event: CustomEvent) => {
+      const { category, enabled } = event.detail as { category: MusicCategory; enabled: boolean };
+      if (category === audioSettings.musicCategory) setShuffleEnabled(!!enabled);
+    };
+
+    window.addEventListener("currentTrackChanged", handleCurrentTrackChanged as EventListener);
+    window.addEventListener("musicShuffleChanged", handleShuffleChanged as EventListener);
+    return () => {
+      window.removeEventListener("currentTrackChanged", handleCurrentTrackChanged as EventListener);
+      window.removeEventListener("musicShuffleChanged", handleShuffleChanged as EventListener);
+    };
+  }, [audioSettings.musicCategory]);
+
+  // Poll audio progress while Audio tab is visible
+  useEffect(() => {
+    if (!visible || activeTab !== 'audio') return;
+    const intervalMs = 200;
+    const tick = () => {
+      try {
+        const name = currentTrack.trackName;
+        if (name && audioSettings.musicCategory !== 'none') {
+          const info = AudioManager.getInstance().getProgress(name);
+          setMusicProgress(info?.percent ?? 0);
+          setMusicCurrentSec(info?.current ?? 0);
+          setMusicDurationSec(info?.duration ?? 0);
+          setMusicPlaying(!!info?.playing);
+        } else {
+          setMusicProgress(0);
+          setMusicCurrentSec(0);
+          setMusicDurationSec(0);
+          setMusicPlaying(false);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    tick();
+    const timer = window.setInterval(tick, intervalMs);
+    return () => { if (timer) window.clearInterval(timer); };
+  }, [visible, activeTab, currentTrack.trackName, audioSettings.musicCategory]);
+
+  // Dispatch helpers for music controls
+  const sendPrev = () => {
+    playButtonClick();
+    window.dispatchEvent(new CustomEvent("prevMusicTrack"));
+  };
+  const sendNext = () => {
+    playButtonClick();
+    window.dispatchEvent(new CustomEvent("nextMusicTrack"));
+  };
+  const sendTogglePlay = () => {
+    playButtonClick();
+    window.dispatchEvent(new CustomEvent("toggleMusicPlayback"));
+  };
+  const sendToggleShuffle = () => {
+    playButtonClick();
+    window.dispatchEvent(new CustomEvent("toggleShuffleMusic"));
+  };
+
+  // Format seconds to mm:ss
+  const formatTime = (sec: number) => {
+    if (!Number.isFinite(sec) || sec <= 0) return '0:00';
+    const s = Math.max(0, Math.floor(sec));
+    const m = Math.floor(s / 60);
+    const ss = String(s % 60).padStart(2, '0');
+    return `${m}:${ss}`;
+  };
 
   const onSensitivityInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const numericValue = parseFloat(e.target.value);
@@ -955,37 +1047,78 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 <div className="grid grid-cols-3 gap-2">
                   {MUSIC_CATEGORIES.map((category) => {
                     const selected = audioSettings.musicCategory === category;
+                    const isPlaying = category !== "none" && audioSettings.musicCategory === category;
                     return (
-                      <Button
-                        key={category}
-                        size="sm"
-                        variant="outline"
-                        motion="none"
-                        className={`text-xs tracking-wider w-full ${
-                          selected ? "bg-[#222] text-[#FFF] hover:text-white hover:border-white" : "bg-white text-gray-950"
-                        }`}
-                        onClick={() => setMusicCategory(category)}
-                      >
-                        {MUSIC_CATEGORY_LABELS[category]}
-                      </Button>
+                      <div key={category} className="relative">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          motion="none"
+                          className={`text-xs tracking-wider w-full hover:border-transparent hover:scale-105 transition-transform ${
+                            selected ? "!bg-black !text-white border-gray-950" : "bg-white text-black border-gray-950"
+                          }`}
+                          onClick={() => setMusicCategory(category)}
+                        >
+                          {MUSIC_CATEGORY_LABELS[category]}
+                        </Button>
+                        {isPlaying && (
+                          <div className="absolute -top-1 -right-1 flex items-center justify-center">
+                            <PlayingIndicator enabled={isPlaying} />
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
-                {audioSettings.musicCategory === "energy" && (
-                  <span className="font-mono text-[10px] uppercase opacity-70">
-                    Energy playlist is coming soon.
-                  </span>
-                )}
-                {audioSettings.musicCategory === "calm" && (
-                  <span className="font-mono text-[10px] uppercase opacity-70">
-                    Calm playlist. For long hours of practicing.
-                  </span>
-                )}
-                {audioSettings.musicCategory === "none" && (
-                  <span className="font-mono text-[10px] uppercase opacity-70">
-                    Music is turned off until you pick a playlist.
-                  </span>
-                )}
+
+                {currentTrack.trackName &&
+                  currentTrack.category === audioSettings.musicCategory &&
+                  audioSettings.musicCategory !== "none" && (
+                    <div className="mt-2 px-3">
+                      <p className="font-mono text-[10px] opacity-90">
+                        NOW PLAYING:{" "}
+                        <span className="font-mono font-bold text-[12px]">
+                          {getTrackTitle(currentTrack.trackName) ?? currentTrack.trackName ?? "*"}
+                        </span>
+                      </p>
+
+                      {/* Progress bar */}
+                      <div className="mt-1 flex items-center gap-2">
+                        <span className="font-mono text-[10px] opacity-70 min-w-[34px] text-left">
+                          {formatTime(musicCurrentSec)}
+                        </span>
+                        <div className="flex-1 h-1.5 bg-black/10 overflow-hidden">
+                          <div
+                            className="h-full bg-[#ff0000] transition-[width] duration-150"
+                            style={{ width: `${Math.round(musicProgress * 100)}%` }}
+                          />
+                        </div>
+                        <span className="font-mono text-[10px] opacity-70 min-w-[34px] text-right">
+                          {formatTime(musicDurationSec)}
+                        </span>
+                      </div>
+
+                      {/* Control buttons */}
+                      <div className="mt-2 flex items-center justify-center gap-2 bg-gray-300">
+                        <MusicControlButton title="Previous Track" onClick={sendPrev}>
+                          <FaStepBackward size={12} />
+                        </MusicControlButton>
+                        <MusicControlButton title={musicPlaying ? "Pause" : "Play"} onClick={sendTogglePlay}>
+                          {musicPlaying ? <FaPause size={12} /> : <FaPlay size={12} />}
+                        </MusicControlButton>
+                        <MusicControlButton title="Next Track" onClick={sendNext}>
+                          <FaStepForward size={12} />
+                        </MusicControlButton>
+                        <MusicControlButton
+                          title={shuffleEnabled ? "Disable Shuffle" : "Enable Shuffle"}
+                          onClick={sendToggleShuffle}
+                          active={shuffleEnabled}
+                        >
+                          <FaRandom size={12} />
+                        </MusicControlButton>
+                      </div>
+                    </div>
+                  )}
               </div>
             </div>
           </div>
