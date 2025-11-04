@@ -1,5 +1,5 @@
 import App from "./core/App";
-import { mountUI, type UIController } from "@/ui/react/mountUI";
+import { mountUI, type UIController } from "@/features/menu";
 import { ensureCsrfCookie } from "@/ui/react/api/http";
 
 export function initGame(): void {

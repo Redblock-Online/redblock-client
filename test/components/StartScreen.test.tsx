@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import StartScreen from '@/ui/react/StartScreen';
+import StartScreen from '@/features/menu/components/StartScreen';
 import { SCENARIOS } from '@/config/scenarios';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -23,42 +23,33 @@ describe('StartScreen', () => {
     vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => localStorageMock);
   });
 
-  it('displays all scenario buttons', () => {
+  it('displays main action buttons', () => {
     render(<StartScreen scenarios={SCENARIOS} onStart={mockOnStart} onSettings={mockOnSettings} />);
 
-    // Should show all scenario buttons
-    SCENARIOS.forEach((scenario) => {
-      expect(screen.getByRole('button', { name: scenario.label })).toBeInTheDocument();
-    });
+    // Should show main buttons
+    expect(screen.getByRole('button', { name: /Quick Warmup/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Load Scenarios/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /SETTINGS/i })).toBeInTheDocument();
   });
 
-  it('calls onStart with correct scenario ID when button clicked', async () => {
+  it('calls onStart when Quick Warmup button clicked', async () => {
     const user = userEvent.setup();
     render(<StartScreen scenarios={SCENARIOS} onStart={mockOnStart} onSettings={mockOnSettings} />);
 
-    const firstButton = screen.getByRole('button', { name: SCENARIOS[0].label });
-    await user.click(firstButton);
+    const quickWarmupButton = screen.getByRole('button', { name: /Quick Warmup/i });
+    await user.click(quickWarmupButton);
 
+    // Quick Warmup uses the first scenario's ID
     expect(mockOnStart).toHaveBeenCalledWith(SCENARIOS[0].id);
   });
 
-  it('displays and updates sensitivity slider', async () => {
+  it('calls onSettings when settings button clicked', async () => {
+    const user = userEvent.setup();
     render(<StartScreen scenarios={SCENARIOS} onStart={mockOnStart} onSettings={mockOnSettings} />);
 
-    // Check initial value display
-    const sensitivityValue = screen.getByText('1.50');
-    expect(sensitivityValue).toBeInTheDocument();
+    const settingsButton = screen.getByRole('button', { name: /SETTINGS/i });
+    await user.click(settingsButton);
 
-    // Change slider value using fireEvent.change
-    const slider = screen.getByRole('slider');
-    fireEvent.change(slider, { target: { value: '0.75' } });
-
-    // Should update displayed value (note: may need to wait for state update)
-    await waitFor(() => {
-      expect(screen.getByText('0.75')).toBeInTheDocument();
-    });
-
-    // Should update localStorage
-    expect(window.localStorage.setItem).toHaveBeenCalledWith('mouseSensitivity', '0.75');
+    expect(mockOnSettings).toHaveBeenCalled();
   });
 });

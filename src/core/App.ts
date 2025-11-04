@@ -1,19 +1,19 @@
 import Renderer from "./Renderer";
 import Camera from "./Camera";
-import MainScene from "@/scenes/MainScene";
+import { MainScene } from "@/features/game/scenes";
 import Loop from "./Loop";
-import ControlsWithMovement from "@/systems/ControlsWithMovement";
-import { PhysicsSystem } from "@/systems/PhysicsSystem";
+import { ControlsWithMovement } from "@/features/game/controls";
+import { PhysicsSystem } from "@/features/game/physics";
 import { Raycaster, Vector2, Vector3, BufferGeometry, Line , LineBasicMaterial, BufferAttribute, Mesh, SphereGeometry, MeshBasicMaterial, Box3, Material } from "three";
 import Pistol from "@/objects/Pistol";
 import Target from "@/objects/Target";
 import WSManager, { type PlayerCore } from "@/utils/ws/WSManager";
-import type { UIController } from "@/ui/react/mountUI";
+import type { UIController } from "@/features/menu";
 import { AudioManager, type AudioChannel } from "@/utils/AudioManager";
 import { SCENARIOS, type ScenarioConfig, getScenarioById } from "@/config/scenarios";
-import type { TimerHint, TimerHintTableRow } from "@/ui/react/TimerDisplay";
+import type { TimerHint, TimerHintTableRow } from "@/features/game/ui";
 import gsap from "gsap";
-import type { GeneratorConfig } from "@/editor/types/generatorConfig";
+import type { GeneratorConfig } from "@/features/editor/types/generatorConfig";
 
 
 type StoredMetricSet = {
@@ -167,7 +167,15 @@ export default class App {
       this.pistol = loadedPistol;
       this.pistol.setScene(this.scene);
     });
-    this.loop = new Loop(this.renderer.instance,this.scene,this.camera.instance,this.controls,this.pistol,this.collisionSystem,this.camera);
+    this.loop = new Loop(this.renderer.instance,this.scene,this.camera.instance,this.controls,this.pistol,this.collisionSystem,this.camera,this.renderer);
+    
+    // Setup respawn visual effect callback
+    this.controls.setOnRespawnCallback(() => {
+      if (this.renderer.respawnEffect) {
+        this.renderer.respawnEffect.trigger(0.4); // 0.4 seconds duration
+        console.log("[App] Respawn effect triggered");
+      }
+    });
     
     // Listen for graphics settings changes
     window.addEventListener("graphicsSettingsChanged", ((e: CustomEvent) => {
@@ -636,7 +644,7 @@ export default class App {
       console.log(`[App] Loaded scenario:`, scenarioData.name);
       
       // Import the bootstrap function
-      const { processScenarioForGame } = await import("@/editor/utils/gameBootstrap");
+      const { processScenarioForGame } = await import("@/features/editor/core/gameBootstrap");
       
       // Process the scenario and load it into the game
       await processScenarioForGame(this, scenarioData);
@@ -680,7 +688,7 @@ export default class App {
       this.resetTargets();
       
       // Import the bootstrap function
-      const { processScenarioForGame } = await import("@/editor/utils/gameBootstrap");
+      const { processScenarioForGame } = await import("@/features/editor/core/gameBootstrap");
       
       // Process the scenario and load it into the game
       await processScenarioForGame(this, scenarioData);

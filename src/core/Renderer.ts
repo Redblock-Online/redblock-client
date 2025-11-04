@@ -3,6 +3,7 @@ import { EffectComposer, RenderPass, ShaderPass } from "three/examples/jsm/Addon
 import { FXAAShader } from "three/examples/jsm/shaders/FXAAShader.js";
 import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import CustomOutlinePass from "./CustomPass/CustomOutlinePass";
+import { RespawnEffect } from "@/features/game/respawn";
 
 const minPixelRatio = 1;
 const maxPixelRatio = 2.0; // Increased for better antialiasing quality
@@ -17,6 +18,7 @@ export default class Renderer {
   private outlinePass: CustomOutlinePass;
   private fxaaEnabled: boolean = true;
   private smaaEnabled: boolean = true;
+  public respawnEffect: RespawnEffect | null = null;
 
   constructor(scene: THREE.Scene, camera: THREE.PerspectiveCamera, canvas?: HTMLCanvasElement) {
     this.camera = camera;
@@ -73,6 +75,9 @@ export default class Renderer {
       }
     );
     this.composer.addPass(this.outlinePass);
+    
+    // 2.5) Respawn effect (bloom + noise) - Added before AA passes
+    this.respawnEffect = new RespawnEffect(this.composer);
     
     // 3) SMAA (Subpixel Morphological Anti-Aliasing) - High quality AA
     this.smaaPass = new SMAAPass();
