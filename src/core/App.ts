@@ -9,7 +9,7 @@ import Pistol from "@/objects/Pistol";
 import Target from "@/objects/Target";
 import WSManager, { type PlayerCore } from "@/utils/ws/WSManager";
 import type { UIController } from "@/ui/react/mountUI";
-import { AudioManager } from "@/utils/AudioManager";
+import { AudioManager, type AudioChannel } from "@/utils/AudioManager";
 import { SCENARIOS, type ScenarioConfig, getScenarioById } from "@/config/scenarios";
 import type { TimerHint, TimerHintTableRow } from "@/ui/react/TimerDisplay";
 import gsap from "gsap";
@@ -228,37 +228,33 @@ export default class App {
       
       await this.audioManager.preloadSounds([
         // Weapon sfx
-        ['lazer01_1', '/audio/sfx/events/weapons/pistol/lazer01_1.wav', 'sfx'],
-        ['lazer02_1', '/audio/sfx/events/weapons/pistol/lazer02_1.wav', 'sfx'],
+        ['lazer01_1', '/audio/sfx/events/weapons/pistol/lazer01_1.wav', 'sfx' as AudioChannel],
+        ['lazer02_1', '/audio/sfx/events/weapons/pistol/lazer02_1.wav', 'sfx' as AudioChannel],
 
         // Buttons sfx
-        ['btn-click01', '/audio/sfx/ui/buttons/btn-click01.wav', 'ui'],
-        ['btn-click02', '/audio/sfx/ui/buttons/btn-click02.wav', 'ui'],
-        ['btn-click03', '/audio/sfx/ui/buttons/btn-click03.wav', 'ui'],
-        ['btn-hover', '/audio/sfx/ui/buttons/btn-hover.wav', 'ui'],
-        ['swap-tab01', '/audio/sfx/ui/buttons/swap-tab01.wav', 'ui'],
-        ['swap-tab02', '/audio/sfx/ui/buttons/swap-tab02.wav', 'ui'],
+        ['btn-click01', '/audio/sfx/ui/buttons/btn-click01.wav', 'ui' as AudioChannel],
+        ['btn-click02', '/audio/sfx/ui/buttons/btn-click02.wav', 'ui' as AudioChannel],
+        ['btn-click03', '/audio/sfx/ui/buttons/btn-click03.wav', 'ui' as AudioChannel],
+        ['btn-hover', '/audio/sfx/ui/buttons/btn-hover.wav', 'ui' as AudioChannel],
+        ['swap-tab01', '/audio/sfx/ui/buttons/swap-tab01.wav', 'ui' as AudioChannel],
+        ['swap-tab02', '/audio/sfx/ui/buttons/swap-tab02.wav', 'ui' as AudioChannel],
 
         // Player sfx
-        ['steps', '/audio/sfx/events/steps.wav', 'sfx'],
+        ['steps', '/audio/sfx/events/steps.wav', 'sfx' as AudioChannel],
 
         // Target feedback
-        ['hit01', '/audio/sfx/events/hit-target/hit01.wav', 'sfx'],
+        ['hit01', '/audio/sfx/events/hit-target/hit01.wav', 'sfx' as AudioChannel],
 
         // Events
-        ['escape-event', '/audio/sfx/ui/actions/escape-event.wav', 'ui'],
+        ['escape-event', '/audio/sfx/ui/actions/escape-event.wav', 'ui' as AudioChannel],
 
         // UI Behavior:
           // Slider
-        ['slider-down', '/audio/sfx/ui/slider-change/slider-down.wav', 'ui'],
-        ['slider-up', '/audio/sfx/ui/slider-change/slider-up.wav', 'ui'],
-
-        // Music
-  ['uncausal', '/audio/music/calm/uncasual.ogg', 'music'],
-  ['calm', '/audio/music/calm/voices.ogg', 'music'],
+        ['slider-down', '/audio/sfx/ui/slider-change/slider-down.wav', 'ui' as AudioChannel],
+        ['slider-up', '/audio/sfx/ui/slider-change/slider-up.wav', 'ui' as AudioChannel],
 
         // Ambient loops
-        ['ambient-wind', '/audio/ambiance/wind01.wav', 'ambient'],
+        ['ambient-wind', '/audio/ambiance/wind01.wav', 'ambient' as AudioChannel],
 
         // Add more sounds here as needed
         // ['ui_click', '/audio/sfx/ui_click.mp3', 'ui'],
@@ -698,7 +694,7 @@ export default class App {
       
       // Start audio and timer (same as normal scenario start)
       if (!this.isEditorMode) {
-        this.playPracticeMusic();
+        // Background music is controlled by the React UI (UIRoot) playlist controller to avoid double playback
         this.playAmbientWind();
       }
       this.startTimer();
@@ -1385,7 +1381,7 @@ export default class App {
 
     this.loop.start();
     if (!this.isEditorMode) {
-      this.playPracticeMusic();
+      // Background music is controlled by the React UI (UIRoot) playlist controller to avoid double playback
       this.playAmbientWind();
     }
     this.startTimer();

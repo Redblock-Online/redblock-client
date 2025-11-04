@@ -38,6 +38,8 @@
  * ```
  */
 
+// Removed fading animations; gsap no longer needed here
+
 export type AudioChannel = 'sfx' | 'music' | 'ambient' | 'ui';
 
 export interface AudioOptions {
@@ -102,6 +104,9 @@ export class AudioManager {
   private audioPool: HTMLAudioElement[] = [];
   private readonly poolSize = 20; // Max simultaneous sounds
   
+  // Crossfade duration constant (milliseconds)
+  private readonly CROSSFADE_DURATION_MS = 1000;
+  
   // Volume controls
   private masterVolume = 1.0;
   private channelVolumes = new Map<AudioChannel, number>();
@@ -116,7 +121,9 @@ export class AudioManager {
   private nextSoundId = 0;
   private webAudioUsed = false; // Track if Web Audio has been used
   private lastMissingWarn = new Map<string, number>();
-  
+  // Track paused offsets for sounds that cannot be paused natively (WebAudio one-shots)
+  private pausedOffsets = new Map<string, number>(); // seconds, keyed by sound name
+
   private constructor() {
     // Load volumes from localStorage with defaults
     this.loadVolumesFromStorage();
@@ -325,6 +332,28 @@ export class AudioManager {
         reject(new Error(`Failed to load ${name}`));
       }, { once: true });
     });
+  }
+
+  /**
+   * Preload multiple sounds
+   * @param sounds - Array of [name, url, channel] tuples
+   * @returns Promise that resolves when all sounds are loaded
+   */
+  public async preloadSounds(
+    sounds: Array<[string, string, AudioChannel?]>
+  ): Promise<void> {
+    console.log(`[AudioManager] Preloading ${sounds.length} sounds...`);
+    const promises = sounds.map(([name, url, channel]) => {
+      // Register in known sounds for on-demand fallback
+      this.knownSounds.set(name, { url, channel: (channel ?? 'sfx') });
+      return this.loadSound(name, url, channel);
+    });
+    const results = await Promise.allSettled(promises);
+    const failed = results.filter(r => r.status === 'rejected');
+    if (failed.length > 0) {
+      console.warn(`[AudioManager] Some sounds failed to preload (${failed.length}/${sounds.length}). Others are ready.`);
+    }
+    console.log('[AudioManager] ✓ All sounds loaded and ready for low-latency playback');
   }
 
   /**
@@ -580,6 +609,17 @@ export class AudioManager {
     this.stopAll(name);
   }
 
+  /** Stop all active sounds in a given channel. If exceptName is provided, keep that sound name. */
+  public stopAllInChannelExcept(channel: AudioChannel, exceptName?: string): void {
+    const toStop: string[] = [];
+    this.activeSounds.forEach((snd, id) => {
+      if (snd.channel === channel && (!exceptName || snd.name !== exceptName)) {
+        toStop.push(id);
+      }
+    });
+    toStop.forEach((id) => this.stop(id));
+  }
+
   /**
    * Check if a sound is currently playing
    * @param name - Sound name
@@ -624,6 +664,18 @@ export class AudioManager {
   }
 
   /**
+   * Fade a channel's volume over time
+   * @param channel - Channel to fade
+   * @param targetVolume - Target volume (0.0 to 1.0)
+   * @param durationMs - Fade duration in milliseconds
+   */
+  public fadeChannelVolume(channel: AudioChannel, targetVolume: number, _durationMs: number): void {
+    // Remove fade behavior: set channel volume immediately.
+    const clampedVolume = Math.max(0, Math.min(1, targetVolume));
+    this.setChannelVolume(channel, clampedVolume);
+  }
+
+  /**
    * Get current master volume
    */
   public getMasterVolume(): number {
@@ -652,54 +704,113 @@ export class AudioManager {
   }
 
   /**
-   * Mute/unmute all audio
+   * Get progress info for a currently playing sound by name.
+   * Returns null if the sound is not active or duration is unknown.
    */
-  public setMuted(muted: boolean): void {
-    this.muted = muted;
-    this.updateAllVolumes();
-  }
+  public getProgress(name: string): { current: number; duration: number; percent: number; playing: boolean } | null {
+    // Find the most recent active instance for this name
+    const candidates: ActiveSound[] = [];
+    this.activeSounds.forEach((snd) => { if (snd.name === name) candidates.push(snd); });
+    // Resolve duration from loaded data
+    const duration = this.getSoundDuration(name);
 
-  /**
-   * Check if audio is muted
-   */
-  public isMuted(): boolean {
-    return this.muted;
-  }
-
-  /**
-   * Preload multiple sounds
-   * @param sounds - Array of [name, url, channel] tuples
-   * @returns Promise that resolves when all sounds are loaded
-   */
-  public async preloadSounds(
-    sounds: Array<[string, string, AudioChannel?]>
-  ): Promise<void> {
-    console.log(`[AudioManager] Preloading ${sounds.length} sounds...`);
-    const promises = sounds.map(([name, url, channel]) => {
-      // Register in known sounds for on-demand fallback
-      this.knownSounds.set(name, { url, channel: (channel ?? 'sfx') });
-      return this.loadSound(name, url, channel);
-    });
-    const results = await Promise.allSettled(promises);
-    const failed = results.filter(r => r.status === 'rejected');
-    if (failed.length > 0) {
-      console.warn(`[AudioManager] Some sounds failed to preload (${failed.length}/${sounds.length}). Others are ready.`);
+    if (candidates.length === 0) {
+      // If no active instance, but we have a paused offset, report it as not playing
+      const paused = this.pausedOffsets.get(name);
+      if (typeof paused === 'number' && Number.isFinite(paused) && duration && duration > 0) {
+        const percent = Math.max(0, Math.min(1, paused / duration));
+        return { current: paused, duration, percent, playing: false };
+      }
+      return null;
     }
-    console.log('[AudioManager] ✓ All sounds preloaded');
+
+    const active = candidates.sort((a, b) => b.startedAt - a.startedAt)[0];
+
+    if (typeof duration !== 'number' || !Number.isFinite(duration) || duration <= 0) {
+      return null;
+    }
+
+    let current = 0;
+    let playing = true;
+    if (active.kind === 'html') {
+      try {
+        current = active.audio.currentTime || 0;
+        playing = !active.audio.paused;
+      } catch { /* ignore */ }
+    } else {
+      // WebAudio: approximate using startedAt and playbackRate
+      const nowMs = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+      const elapsedSec = Math.max(0, (nowMs - active.startedAt) / 1000);
+      let rate = 1;
+      try { rate = active.node.playbackRate?.value ?? 1; } catch { /* ignore */ }
+      current = elapsedSec * Math.max(0.0001, rate);
+      // If not looping, clamp to duration
+      try { if (!active.node.loop) { current = Math.min(current, duration); } } catch { current = Math.min(current, duration); }
+      playing = true;
+    }
+
+    const percent = Math.max(0, Math.min(1, duration > 0 ? current / duration : 0));
+    return { current, duration, percent, playing };
   }
 
   /**
-   * Get list of loaded sounds
+   * Pause the most recent active instance of a sound by name. For HTMLAudio, the instance
+   * remains in the active map (so it can be resumed). For WebAudio (one-shot), we compute
+   * the elapsed offset, stop the node, and store the offset so resume can recreate it.
+   * @returns true if any instance was paused.
    */
-  public getLoadedSounds(): string[] {
-    return Array.from(this.sounds.keys());
+  public pauseByName(name: string): boolean {
+    // Find latest instance
+    const candidates: Array<[string, ActiveSound]> = [];
+    this.activeSounds.forEach((snd, id) => { if (snd.name === name) candidates.push([id, snd]); });
+    if (candidates.length === 0) return false;
+    const [id, active] = candidates.sort((a, b) => b[1].startedAt - a[1].startedAt)[0];
+
+    if (active.kind === 'html') {
+      try { active.audio.pause(); return true; } catch { return false; }
+    }
+
+    // WebAudio: compute offset, then stop and remove
+    const duration = this.getSoundDuration(name) ?? 0;
+    const nowMs = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+    const elapsedSec = Math.max(0, (nowMs - active.startedAt) / 1000);
+    let rate = 1;
+    try { rate = (active as ActiveWebSound).node.playbackRate?.value ?? 1; } catch { /* ignore */ }
+    const offset = Math.min(duration, elapsedSec * Math.max(0.0001, rate));
+    this.pausedOffsets.set(name, offset);
+    this.stop(id);
+    return true;
   }
 
   /**
-   * Get count of currently playing sounds
+   * Resume a sound by name if it was paused. For HTMLAudio paused instances, resumes the same element.
+   * For WebAudio, if a paused offset exists, starts a new instance at that offset.
+   * @returns the id of the resumed/started instance, or null if none.
    */
-  public getActiveSoundCount(): number {
-    return this.activeSounds.size;
+  public resumeByName(name: string, options: AudioOptions = {}): string | null {
+    // Try to find a paused HTMLAudio instance first
+    const pausedHtml: Array<ActiveHtmlSound> = [];
+    this.activeSounds.forEach((snd) => { if (snd.name === name && snd.kind === 'html') pausedHtml.push(snd as ActiveHtmlSound); });
+    if (pausedHtml.length > 0) {
+      const latest = pausedHtml.sort((a, b) => b.startedAt - a.startedAt)[0];
+      try {
+        latest.audio.play();
+        return latest.id;
+      } catch {
+        // Fallback to restart via WebAudio path below
+      }
+    }
+
+    // WebAudio: restart at paused offset if available
+    const offset = this.pausedOffsets.get(name);
+    if (typeof offset === 'number' && Number.isFinite(offset)) {
+      // Clear paused offset before starting
+      this.pausedOffsets.delete(name);
+      const id = this.play(name, { maxVoices: 1, ...options, startAtMs: Math.floor(offset * 1000) });
+      return id;
+    }
+
+    return null;
   }
 
   /**

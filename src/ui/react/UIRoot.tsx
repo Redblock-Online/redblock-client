@@ -24,7 +24,24 @@ type MusicCategory = "none" | "energy" | "calm";
 
 const DEFAULT_MUSIC_CATEGORY: MusicCategory = "calm";
 
-const CALM_TRACKS = ["uncausal", "calm"] as const;
+type TrackDef = { name: string; url: string };
+
+// Central definition of playlists (expand as needed)
+const PLAYLISTS: Record<Exclude<MusicCategory, "none">, TrackDef[]> = {
+  // Calm playlist order
+  calm: [
+    { name: "uncausal", url: "/audio/music/calm/uncasual.ogg" },
+    { name: "voices", url: "/audio/music/calm/voices.ogg" },
+  ],
+  // Energy playlist
+  energy: [
+    { name: "signal", url: "/audio/music/energy/signal.ogg" },
+  ],
+};
+
+// Helper: derive track name lists from PLAYLISTS
+const calmTrackNames = () => PLAYLISTS.calm.map(t => t.name);
+const energyTrackNames = () => PLAYLISTS.energy.map(t => t.name);
 
 const isMusicCategory = (value: unknown): value is MusicCategory =>
   value === "none" || value === "energy" || value === "calm";
@@ -68,63 +85,160 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
   const calmPlaybackIdRef = useRef<string | null>(null);
   const calmCurrentTrackRef = useRef<string | null>(null);
   const calmPlaylistIndexRef = useRef<number>(0);
-  const calmNextTimeoutRef = useRef<number | null>(null);
+  const energyPlaybackIdRef = useRef<string | null>(null);
+  const energyCurrentTrackRef = useRef<string | null>(null);
+  const energyPlaylistIndexRef = useRef<number>(0);
   const previousMusicCategoryRef = useRef<MusicCategory>(musicCategory);
+  // Shuffle/order state per playlist
+  const calmOrderRef = useRef<number[]>([]);
+  const energyOrderRef = useRef<number[]>([]);
+  const calmShuffleRef = useRef<boolean>(false);
+  const energyShuffleRef = useRef<boolean>(false);
 
-  const clearCalmTimeout = useCallback(() => {
-    if (calmNextTimeoutRef.current !== null) {
-      window.clearTimeout(calmNextTimeoutRef.current);
-      calmNextTimeoutRef.current = null;
-    }
+  useEffect(() => {
+    // Initialize identity orders
+    calmOrderRef.current = PLAYLISTS.calm.map((_, i) => i);
+    energyOrderRef.current = PLAYLISTS.energy.map((_, i) => i);
   }, []);
 
-  const startCalmTrack = useCallback((index?: number) => {
+  const getAndClampIndex = (list: TrackDef[], idx: number) => {
+    const len = list.length;
+    if (len === 0) return 0;
+    return ((idx % len) + len) % len;
+  };
+
+  const getOrder = (category: Exclude<MusicCategory, 'none'>): number[] => {
+    const list = PLAYLISTS[category];
+    const ref = category === 'calm' ? calmOrderRef : energyOrderRef;
+    return ref.current.length === list.length ? ref.current : list.map((_, i) => i);
+  };
+
+  const persistPlaylistIndex = (category: Exclude<MusicCategory, "none">, idx: number) => {
+    try {
+      localStorage.setItem(`musicPlaylistIndex:${category}`, String(idx));
+    } catch { /* ignore */ }
+  };
+
+  const readPlaylistIndex = (category: Exclude<MusicCategory, "none">): number => {
+    try {
+      const raw = localStorage.getItem(`musicPlaylistIndex:${category}`);
+      if (!raw) return 0;
+      const parsed = parseInt(raw, 10);
+      return Number.isFinite(parsed) ? parsed : 0;
+    } catch {
+      return 0;
+    }
+  };
+
+  const startCalmTrack = useCallback(async (options?: { index?: number }) => {
+    const { index } = options || {};
     if (typeof window === "undefined") return;
     const audio = AudioManager.getInstance();
-    const playlistLength = CALM_TRACKS.length;
+    const calmList = PLAYLISTS.calm;
+    if (calmList.length === 0) return;
 
-    const normalizedIndex = index !== undefined
-      ? ((index % playlistLength) + playlistLength) % playlistLength
-      : calmPlaylistIndexRef.current % playlistLength;
-    calmPlaylistIndexRef.current = (normalizedIndex + 1) % playlistLength;
-    const track = CALM_TRACKS[normalizedIndex];
-    calmCurrentTrackRef.current = track;
+    const baseIdx = index ?? calmPlaylistIndexRef.current ?? 0;
+    const normalizedIndex = getAndClampIndex(calmList, baseIdx);
+    const order = getOrder('calm');
+    const actualIdx = order[normalizedIndex] ?? 0;
+    const current = calmList[actualIdx];
 
-    clearCalmTimeout();
+    calmPlaylistIndexRef.current = normalizedIndex;
+    calmCurrentTrackRef.current = current.name;
+    persistPlaylistIndex("calm", normalizedIndex);
+
+    // Broadcast current track change for UI updates
+    window.dispatchEvent(new CustomEvent("currentTrackChanged", { 
+      detail: { category: "calm", trackName: current.name } 
+    }));
 
     try {
       audio.ensureResumed().catch(() => {});
-      CALM_TRACKS.forEach((name) => {
-        if (name !== track) {
-          audio.stopAllByName(name);
-        }
+      
+      // Stop any other calm tracks to prevent overlaps
+      calmTrackNames().forEach((name) => {
+        if (name !== current.name) audio.stopAllByName(name);
       });
+      
+      // Stop current track if playing
       if (calmPlaybackIdRef.current) {
         audio.stop(calmPlaybackIdRef.current);
         calmPlaybackIdRef.current = null;
       }
-      const id = audio.play(track, {
+
+      // Load and play current track
+      // Load sound (no-op if already loaded)
+      await audio.loadSound(current.name, current.url, "music");
+
+      // Ensure no other music is playing before starting this track
+      audio.stopAllInChannelExcept('music', current.name);
+
+      const id = audio.play(current.name, {
         channel: "music",
         volume: 0.35,
         loop: false,
+        maxVoices: 1,
       });
       calmPlaybackIdRef.current = id ?? calmPlaybackIdRef.current;
+    } catch (error) {
+      console.error('[UIRoot] Error in startCalmTrack:', error);
+    }
+  }, []);
 
-      const duration = audio.getSoundDuration(track);
-      if (duration && duration > 0) {
-        calmNextTimeoutRef.current = window.setTimeout(() => {
-          calmPlaybackIdRef.current = null;
-          calmCurrentTrackRef.current = null;
-          startCalmTrack();
-        }, Math.max(0, Math.floor(duration * 1000)));
-      } else {
-        calmPlaybackIdRef.current = null;
-        calmCurrentTrackRef.current = null;
+  const startEnergyTrack = useCallback(async (options?: { index?: number }) => {
+    const { index } = options || {};
+    if (typeof window === "undefined") return;
+    const audio = AudioManager.getInstance();
+    const list = PLAYLISTS.energy;
+    if (list.length === 0) return;
+
+    const baseIdx = index ?? energyPlaylistIndexRef.current ?? 0;
+    const normalizedIndex = getAndClampIndex(list, baseIdx);
+    const order = getOrder('energy');
+    const actualIdx = order[normalizedIndex] ?? 0;
+    const current = list[actualIdx];
+
+    energyPlaylistIndexRef.current = normalizedIndex;
+    energyCurrentTrackRef.current = current.name;
+    persistPlaylistIndex("energy", normalizedIndex);
+
+    // Broadcast current track change for UI updates
+    window.dispatchEvent(new CustomEvent("currentTrackChanged", { 
+      detail: { category: "energy", trackName: current.name } 
+    }));
+
+    try {
+      audio.ensureResumed().catch(() => {});
+      
+      // Stop any other energy tracks to prevent overlaps
+      energyTrackNames().forEach((name) => {
+        if (name !== current.name) audio.stopAllByName(name);
+      });
+      
+      // Stop current track if playing
+      if (energyPlaybackIdRef.current) {
+        audio.stop(energyPlaybackIdRef.current);
+        energyPlaybackIdRef.current = null;
       }
+
+      // Load and play current track
+      // Load sound (no-op if already loaded)
+      await audio.loadSound(current.name, current.url, "music");
+
+      // Ensure no other music is playing before starting this track
+      audio.stopAllInChannelExcept('music', current.name);
+
+      const id = audio.play(current.name, {
+        channel: "music",
+        volume: 0.35,
+        loop: false,
+        maxVoices: 1,
+      });
+      energyPlaybackIdRef.current = id ?? energyPlaybackIdRef.current;
     } catch {
       /* ignore */
     }
-  }, [clearCalmTimeout]);
+  }, []);
 
   useEffect(() => {
     pausedRef.current = paused;
@@ -137,6 +251,18 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
       const detail = (event as CustomEvent<{ musicCategory?: unknown }>).detail;
       if (detail && isMusicCategory(detail.musicCategory)) {
         setMusicCategory(detail.musicCategory);
+      }
+    };
+
+    const handleJumpToTrack = (event: Event) => {
+      const detail = (event as CustomEvent<{ category: Exclude<MusicCategory, "none">; trackIndex: number }>).detail;
+      if (detail && detail.category === musicCategory) {
+        // Jump to specific track in current playlist with fade in
+        if (detail.category === "calm") {
+          startCalmTrack({ index: detail.trackIndex });
+        } else if (detail.category === "energy") {
+          startEnergyTrack({ index: detail.trackIndex });
+        }
       }
     };
 
@@ -153,13 +279,15 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
     };
 
     window.addEventListener("audioSettingsChanged" as never, handleAudioSettingsChanged as EventListener);
+    window.addEventListener("jumpToMusicTrack" as never, handleJumpToTrack as EventListener);
     window.addEventListener("storage", handleStorage);
 
     return () => {
       window.removeEventListener("audioSettingsChanged" as never, handleAudioSettingsChanged as EventListener);
+      window.removeEventListener("jumpToMusicTrack" as never, handleJumpToTrack as EventListener);
       window.removeEventListener("storage", handleStorage);
     };
-  }, []);
+  }, [musicCategory, startCalmTrack, startEnergyTrack]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -171,38 +299,165 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
       previousMusicCategoryRef.current = musicCategory;
 
       if (musicCategory === "calm") {
+        // Stop energy tracks when switching to calm
+        if (energyPlaybackIdRef.current) {
+          audio.stop(energyPlaybackIdRef.current);
+          energyPlaybackIdRef.current = null;
+        }
+        
         if (previousCategory !== "calm") {
-          calmPlaylistIndexRef.current = 0;
-          calmCurrentTrackRef.current = null;
+          // Resume from persisted index
+          calmPlaylistIndexRef.current = readPlaylistIndex("calm");
         }
 
         const currentTrack = calmCurrentTrackRef.current;
         const isCurrentPlaying = currentTrack ? audio.isPlaying(currentTrack) : false;
         if (!isCurrentPlaying) {
-          startCalmTrack();
+          startCalmTrack({ index: calmPlaylistIndexRef.current });
         }
         return;
       }
 
-      clearCalmTimeout();
+      // Stop calm tracks when switching away from calm
       if (calmPlaybackIdRef.current) {
         audio.stop(calmPlaybackIdRef.current);
         calmPlaybackIdRef.current = null;
       }
-      CALM_TRACKS.forEach((track) => audio.stopAllByName(track));
-      calmCurrentTrackRef.current = null;
-      calmPlaylistIndexRef.current = 0;
-      if (musicCategory === "energy" && process.env.NODE_ENV !== "production") {
-        console.debug("[UIRoot] Energy playlist selected - awaiting tracks");
+
+      if (musicCategory === "energy") {
+        if (previousCategory !== "energy") {
+          energyPlaylistIndexRef.current = readPlaylistIndex("energy");
+        }
+        const currentEnergy = energyCurrentTrackRef.current;
+        const isEnergyPlaying = currentEnergy ? audio.isPlaying(currentEnergy) : false;
+        if (!isEnergyPlaying) {
+          startEnergyTrack({ index: energyPlaylistIndexRef.current });
+        }
+      }
+
+      // Stop all music if none selected
+      if (musicCategory === "none") {
+        calmTrackNames().forEach((track) => audio.stopAllByName(track));
+        energyTrackNames().forEach((name) => audio.stopAllByName(name));
       }
     } catch {
       /* ignore */
     }
-  }, [musicCategory, startCalmTrack, clearCalmTimeout]);
+  }, [musicCategory, startCalmTrack, startEnergyTrack]);
 
-  useEffect(() => () => {
-    clearCalmTimeout();
-  }, [clearCalmTimeout]);
+  // Handle external music control events (prev/next/play-stop/shuffle)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const audio = AudioManager.getInstance();
+
+    const seekRelative = (delta: number) => {
+      const category = previousMusicCategoryRef.current = musicCategory;
+      if (category === 'none') return;
+      if (category === 'calm') {
+        const pos = calmPlaylistIndexRef.current ?? 0;
+        startCalmTrack({ index: pos + delta });
+      } else if (category === 'energy') {
+        const pos = energyPlaylistIndexRef.current ?? 0;
+        startEnergyTrack({ index: pos + delta });
+      }
+    };
+
+    const onPrev = () => seekRelative(-1);
+    const onNext = () => seekRelative(1);
+
+    const onTogglePlayback = () => {
+      const category = previousMusicCategoryRef.current = musicCategory;
+      if (category === 'none') return;
+      const name = category === 'calm' ? calmCurrentTrackRef.current : energyCurrentTrackRef.current;
+      if (!name) {
+        // Nothing has played yet; start current position
+        if (category === 'calm') startCalmTrack({ index: calmPlaylistIndexRef.current ?? 0 });
+        else startEnergyTrack({ index: energyPlaylistIndexRef.current ?? 0 });
+        return;
+      }
+      const isPlaying = audio.isPlaying(name);
+      if (isPlaying) {
+        audio.pauseByName(name);
+      } else {
+        // Guarantee no other music plays concurrently
+        audio.stopAllInChannelExcept('music', name);
+        const resumed = audio.resumeByName(name, { channel: 'music', volume: 0.35, loop: false, maxVoices: 1 });
+        if (!resumed) {
+          // If resume failed (no paused offset), start from current logical index
+          if (category === 'calm') startCalmTrack({ index: calmPlaylistIndexRef.current ?? 0 });
+          else startEnergyTrack({ index: energyPlaylistIndexRef.current ?? 0 });
+        }
+      }
+    };
+
+    const shuffleArray = (arr: number[]) => {
+      const a = arr.slice();
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    };
+
+    const onToggleShuffle = () => {
+      const category = previousMusicCategoryRef.current = musicCategory;
+      if (category === 'none') return;
+      const list = PLAYLISTS[category];
+      const orderRef = category === 'calm' ? calmOrderRef : energyOrderRef;
+      const shuffleRef = category === 'calm' ? calmShuffleRef : energyShuffleRef;
+      const indexRef = category === 'calm' ? calmPlaylistIndexRef : energyPlaylistIndexRef;
+      const oldOrder = getOrder(category);
+      const currentPos = indexRef.current ?? 0;
+      const currentActual = oldOrder[getAndClampIndex(list, currentPos)];
+
+      const enabling = !shuffleRef.current;
+      shuffleRef.current = enabling;
+
+      if (enabling) {
+        orderRef.current = shuffleArray(list.map((_, i) => i));
+      } else {
+        orderRef.current = list.map((_, i) => i);
+      }
+      // Keep current song the same; update logical position to match new order
+      const newPos = orderRef.current.indexOf(currentActual);
+      indexRef.current = newPos >= 0 ? newPos : 0;
+      persistPlaylistIndex(category, indexRef.current);
+
+      // Notify UI of shuffle state
+      window.dispatchEvent(new CustomEvent('musicShuffleChanged', { detail: { category, enabled: shuffleRef.current } }));
+    };
+
+    window.addEventListener('prevMusicTrack', onPrev as EventListener);
+    window.addEventListener('nextMusicTrack', onNext as EventListener);
+    window.addEventListener('toggleMusicPlayback', onTogglePlayback as EventListener);
+    window.addEventListener('toggleShuffleMusic', onToggleShuffle as EventListener);
+
+    return () => {
+      window.removeEventListener('prevMusicTrack', onPrev as EventListener);
+      window.removeEventListener('nextMusicTrack', onNext as EventListener);
+      window.removeEventListener('toggleMusicPlayback', onTogglePlayback as EventListener);
+      window.removeEventListener('toggleShuffleMusic', onToggleShuffle as EventListener);
+    };
+  }, [musicCategory, startCalmTrack, startEnergyTrack]);
+
+  // Broadcast current playing track for UI updates
+  useEffect(() => {
+    const currentTrack = musicCategory === "calm" ? calmCurrentTrackRef.current : 
+                        musicCategory === "energy" ? energyCurrentTrackRef.current : null;
+    window.dispatchEvent(new CustomEvent("currentTrackChanged", { 
+      detail: { category: musicCategory, trackName: currentTrack } 
+    }));
+    // Also broadcast shuffle state for current category
+    const shuffle = musicCategory === 'calm' ? calmShuffleRef.current : musicCategory === 'energy' ? energyShuffleRef.current : false;
+    window.dispatchEvent(new CustomEvent('musicShuffleChanged', { detail: { category: musicCategory, enabled: shuffle } }));
+  }, [musicCategory]); // Update when category changes
+
+  // Ensure music starts on page load if calm is selected
+  useEffect(() => {
+    if (musicCategory === "calm") {
+      startCalmTrack();
+    }
+  }, [musicCategory, startCalmTrack]); // Include dependencies to satisfy linter
 
   useEffect(() => {
     const wasPaused = lastPausedForSoundRef.current;

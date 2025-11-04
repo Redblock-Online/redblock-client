@@ -1,11 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Button from "@/ui/react/components/Button";
+import PlayingIndicator from "@/ui/react/components/atoms/PlayingIndicator";
 import KeybindInput from "@/ui/react/components/KeybindInput";
 import SliderInput from "@/ui/react/components/SliderInput";
 import ToggleInput from "@/ui/react/components/ToggleInput";
 import SelectInput from "@/ui/react/components/SelectInput";
 import ColorInput from "@/ui/react/components/ColorInput";
 import { AudioManager, type AudioOptions } from "@/utils/AudioManager";
+import { getTrackTitle } from "@/config/musicTitles";
+import { FaStepBackward, FaPlay, FaPause, FaStepForward, FaRandom } from "react-icons/fa";
+import MusicControlButton from "@/ui/react/components/atoms/MusicControlButton";
 
 type Tab = "game" | "controls" | "audio" | "video" | "gameplay" | "account";
 
@@ -91,6 +95,21 @@ const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   ambientVolume: 0.5,
   uiVolume: 0.8,
   musicCategory: "calm",
+};
+
+type TrackDef = { name: string; url: string };
+
+// Playlist definitions (mirrored from UIRoot.tsx)
+const _PLAYLISTS: Record<Exclude<MusicCategory, "none">, TrackDef[]> = {
+  // Calm playlist order
+  calm: [
+    { name: "uncausal", url: "/audio/music/calm/uncasual.ogg" },
+    { name: "voices", url: "/audio/music/calm/voices.ogg" },
+  ],
+  // Energy playlist
+  energy: [
+    { name: "signal", url: "/audio/music/energy/signal.ogg" },
+  ],
 };
 
 // Function to detect monitor refresh rate (same logic as Loop.ts)
@@ -229,6 +248,17 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
 
     return base;
   });
+
+  const [currentTrack, setCurrentTrack] = useState<{ category: MusicCategory; trackName: string | null }>({
+    category: audioSettings.musicCategory,
+    trackName: null
+  });
+  // Progress (0..1) for current music track
+  const [musicProgress, setMusicProgress] = useState(0);
+  const [musicCurrentSec, setMusicCurrentSec] = useState(0);
+  const [musicDurationSec, setMusicDurationSec] = useState(0);
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const [shuffleEnabled, setShuffleEnabled] = useState(false);
 
   const sensitivityInitialNumeric = (() => {
     const parsed = parseFloat(sensitivity);
@@ -470,9 +500,6 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
           musicVolume: audio.getChannelVolume('music'),
           ambientVolume: audio.getChannelVolume('ambient'),
           uiVolume: audio.getChannelVolume('ui'),
-          muted: audio.isMuted(),
-          loadedSounds: audio.getLoadedSounds(),
-          activeCount: audio.getActiveSoundCount(),
           latency: audio.getLatencyInfo(),
         });
       }
@@ -535,6 +562,74 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
     }
   }, [audioSettings.musicCategory]);
 
+  // Listen for current track changes from UIRoot
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleCurrentTrackChanged = (event: CustomEvent) => {
+      const { category, trackName } = event.detail;
+      setCurrentTrack({ category, trackName });
+    };
+
+    const handleShuffleChanged = (event: CustomEvent) => {
+      const { category, enabled } = event.detail as { category: MusicCategory; enabled: boolean };
+      if (category === audioSettings.musicCategory) setShuffleEnabled(!!enabled);
+    };
+
+    window.addEventListener("currentTrackChanged", handleCurrentTrackChanged as EventListener);
+    window.addEventListener("musicShuffleChanged", handleShuffleChanged as EventListener);
+    return () => {
+      window.removeEventListener("currentTrackChanged", handleCurrentTrackChanged as EventListener);
+      window.removeEventListener("musicShuffleChanged", handleShuffleChanged as EventListener);
+    };
+  }, [audioSettings.musicCategory]);
+
+  // Poll audio progress while Audio tab is visible
+  useEffect(() => {
+    if (!visible || activeTab !== 'audio') return;
+    const intervalMs = 200;
+    const tick = () => {
+      try {
+        const name = currentTrack.trackName;
+        if (name && audioSettings.musicCategory !== 'none') {
+          const info = AudioManager.getInstance().getProgress(name);
+          setMusicProgress(info?.percent ?? 0);
+          setMusicCurrentSec(info?.current ?? 0);
+          setMusicDurationSec(info?.duration ?? 0);
+          setMusicPlaying(!!info?.playing);
+        } else {
+          setMusicProgress(0);
+          setMusicCurrentSec(0);
+          setMusicDurationSec(0);
+          setMusicPlaying(false);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    tick();
+    const timer = window.setInterval(tick, intervalMs);
+    return () => { if (timer) window.clearInterval(timer); };
+  }, [visible, activeTab, currentTrack.trackName, audioSettings.musicCategory]);
+
+  // Dispatch helpers for music controls
+  const sendPrev = () => {
+    playButtonClick();
+    window.dispatchEvent(new CustomEvent("prevMusicTrack"));
+  };
+  const sendNext = () => {
+    playButtonClick();
+    window.dispatchEvent(new CustomEvent("nextMusicTrack"));
+  };
+  const sendTogglePlay = () => {
+    playButtonClick();
+    window.dispatchEvent(new CustomEvent("toggleMusicPlayback"));
+  };
+  const sendToggleShuffle = () => {
+    playButtonClick();
+    window.dispatchEvent(new CustomEvent("toggleShuffleMusic"));
+  };
+
   const onSensitivityInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const numericValue = parseFloat(e.target.value);
     if (!Number.isNaN(numericValue)) {
@@ -564,6 +659,14 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
     setAudioSettings((prev) => (prev.musicCategory === category ? prev : { ...prev, musicCategory: category }));
   };
 
+  const _jumpToTrack = (category: Exclude<MusicCategory, "none">, trackIndex: number) => {
+    console.log('[SettingsMenu] jumpToTrack called:', { category, trackIndex });
+    // Dispatch custom event to tell UIRoot to jump to specific track
+    window.dispatchEvent(new CustomEvent("jumpToMusicTrack", { 
+      detail: { category, trackIndex } 
+    }));
+  };
+
   const handleResetClick = () => {
     playButtonClick();
     setShowResetConfirm(true);
@@ -578,6 +681,14 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   const cancelReset = () => {
     playButtonClick();
     setShowResetConfirm(false);
+  };
+  // Format seconds to mm:ss
+  const formatTime = (sec: number) => {
+    if (!Number.isFinite(sec) || sec <= 0) return '0:00';
+    const s = Math.max(0, Math.floor(sec));
+    const m = Math.floor(s / 60);
+    const ss = String(s % 60).padStart(2, '0');
+    return `${m}:${ss}`;
   };
 
   if (!visible) return null;
@@ -636,8 +747,10 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   const containerOverflowY = activeScrollHeight > TAB_PANEL_MAX_HEIGHT ? "auto" : "hidden";
 
   return (
-    <div 
-      className={`fixed inset-0 flex items-center justify-center text-black ${hideBackground ? 'z-[60] pointer-events-none' : 'z-20'}`} 
+    <div
+      className={`fixed inset-0 flex items-center justify-center text-black ${
+        hideBackground ? "z-[60] pointer-events-none" : "z-20"
+      }`}
       onClick={hideBackground ? undefined : onClose}
     >
       {/* background grid overlay */}
@@ -648,24 +761,27 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
         </>
       )}
 
-      <div 
+      <div
         className="relative z-30 flex flex-col gap-4 items-center p-6 border-[3px] border-black bg-white/95 min-w-[550px] max-w-[700px] transition-all duration-300 ease-in-out pointer-events-auto"
         onClick={(e) => e.stopPropagation()}
-        style={{ transform: `scale(${scaleValue})`, transformOrigin: 'center' }}
+        style={{ transform: `scale(${scaleValue})`, transformOrigin: "center" }}
       >
         <h2 className="font-mono text-xl font-bold tracking-wider">SETTINGS</h2>
-        
+
         {/* Tabs - Grid layout for better wrapping */}
         <div className="grid grid-cols-3 gap-2 w-full">
-            {tabs.map((tab) => (
+          {tabs.map((tab) => (
             <button
               key={tab}
-              onClick={() => { playSwapTab({ semitones: -3 }); setActiveTab(tab); }}
+              onClick={() => {
+                playSwapTab({ semitones: -3 });
+                setActiveTab(tab);
+              }}
               onMouseEnter={() => playButtonHover()}
               className={`font-mono font-bold tracking-wider border-[3px] border-black px-4 py-2 uppercase transition-all duration-200 text-sm ${
-              activeTab === tab
-                ? "bg-[#ff0000] text-white"
-                : "bg-transparent text-black hover:bg-black/5"
+                activeTab === tab
+                  ? "bg-[#ff0000] text-white"
+                  : "bg-transparent text-black hover:bg-black/5"
               }`}
             >
               {TAB_LABELS[tab]}
@@ -674,16 +790,21 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
         </div>
 
         {/* Tab content area */}
-        <div className="w-full border-[3px] border-black/20 bg-white/50 relative transition-all duration-500 ease-in-out p-4" style={{ 
-          height: containerHeight,
-          maxHeight: "400px",
-          overflowY: containerOverflowY
-        }}>
+        <div
+          className="w-full border-[3px] border-black/20 bg-white/50 relative transition-all duration-500 ease-in-out p-4"
+          style={{
+            height: containerHeight,
+            maxHeight: "400px",
+            overflowY: containerOverflowY,
+          }}
+        >
           {/* Controls content */}
           <div
             ref={controlsContentRef}
             className={`transition-opacity duration-300 ${
-              activeTab === "controls" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
+              activeTab === "controls"
+                ? "opacity-100"
+                : "opacity-0 h-0 overflow-hidden pointer-events-none"
             }`}
           >
             <div className="flex flex-col gap-2">
@@ -703,7 +824,10 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                     className="sensitivity-slider flex-1"
                     id="sensitivityRange"
                   />
-                  <span className="font-mono font-bold text-xs min-w-[40px] text-right" id="sensitivityValue">
+                  <span
+                    className="font-mono font-bold text-xs min-w-[40px] text-right"
+                    id="sensitivityValue"
+                  >
                     {parseFloat(sensitivity || "0").toFixed(2)}
                   </span>
                 </div>
@@ -760,7 +884,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                   onPlayClick={playButtonClick}
                   onPlayHover={playButtonHover}
                 />
-                
+
                 {/* Reset button / Confirmation */}
                 {!showResetConfirm ? (
                   <button
@@ -771,7 +895,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                     RESET CONTROLS TO DEFAULT
                   </button>
                 ) : (
-                  <div 
+                  <div
                     ref={resetConfirmRef}
                     className="mt-2 p-3 border-[3px] border-black bg-white flex flex-col gap-2"
                   >
@@ -802,12 +926,14 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
               </div>
             </div>
           </div>
-          
+
           {/* Game tab content */}
           <div
             ref={gameContentRef}
             className={`transition-opacity duration-300 ${
-              activeTab === "game" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
+              activeTab === "game"
+                ? "opacity-100"
+                : "opacity-0 h-0 overflow-hidden pointer-events-none"
             }`}
           >
             <div className="flex flex-col gap-2">
@@ -820,7 +946,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 unit="°"
                 onChange={(value) => updateGameSetting("fov", value)}
               />
-              
+
               <div className="px-4 py-2 border-[3px] border-black/20 bg-white/30">
                 <p className="font-mono text-[10px] uppercase opacity-70 leading-relaxed">
                   <strong>World FOV:</strong> 60-90° (balanced view).
@@ -834,7 +960,9 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
               <ToggleInput
                 label="Enable Multiplayer"
                 value={gameSettings.multiplayerEnabled}
-                onChange={(value) => updateGameSetting("multiplayerEnabled", value)}
+                onChange={(value) =>
+                  updateGameSetting("multiplayerEnabled", value)
+                }
               />
               <div className="px-4 py-2 border-[3px] border-black/20 bg-white/30">
                 <p className="font-mono text-[10px] uppercase opacity-70 leading-relaxed">
@@ -880,7 +1008,9 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 max={100}
                 step={5}
                 unit="%"
-                onChange={(value) => updateGameSetting("crosshairOpacity", value)}
+                onChange={(value) =>
+                  updateGameSetting("crosshairOpacity", value)
+                }
               />
               {/* DISABLED: Timer hidden for now
               <SliderInput
@@ -910,7 +1040,9 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
           <div
             ref={audioContentRef}
             className={`transition-opacity duration-300 ${
-              activeTab === "audio" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
+              activeTab === "audio"
+                ? "opacity-100"
+                : "opacity-0 h-0 overflow-hidden pointer-events-none"
             }`}
           >
             <div className="flex flex-col gap-2">
@@ -921,7 +1053,9 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 max={100}
                 step={5}
                 unit="%"
-                onChange={(value) => updateAudioSetting("masterVolume", value / 100)}
+                onChange={(value) =>
+                  updateAudioSetting("masterVolume", value / 100)
+                }
               />
               <SliderInput
                 label="SFX Volume"
@@ -930,7 +1064,9 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 max={100}
                 step={5}
                 unit="%"
-                onChange={(value) => updateAudioSetting("sfxVolume", value / 100)}
+                onChange={(value) =>
+                  updateAudioSetting("sfxVolume", value / 100)
+                }
               />
               <SliderInput
                 label="Music Volume"
@@ -939,7 +1075,9 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 max={100}
                 step={5}
                 unit="%"
-                onChange={(value) => updateAudioSetting("musicVolume", value / 100)}
+                onChange={(value) =>
+                  updateAudioSetting("musicVolume", value / 100)
+                }
               />
               <SliderInput
                 label="Ambient Volume"
@@ -948,7 +1086,9 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 max={100}
                 step={5}
                 unit="%"
-                onChange={(value) => updateAudioSetting("ambientVolume", value / 100)}
+                onChange={(value) =>
+                  updateAudioSetting("ambientVolume", value / 100)
+                }
               />
               <SliderInput
                 label="UI Volume"
@@ -957,48 +1097,124 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 max={100}
                 step={5}
                 unit="%"
-                onChange={(value) => updateAudioSetting("uiVolume", value / 100)}
+                onChange={(value) =>
+                  updateAudioSetting("uiVolume", value / 100)
+                }
               />
 
               <div className="mt-3 border-[3px] border-black bg-white p-3 flex flex-col gap-3">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono font-bold text-xs tracking-wider uppercase">Songs</span>
-                  <span className="font-mono text-[10px] uppercase opacity-60">Select background vibe</span>
+                  <span className="font-mono font-bold text-xs tracking-wider uppercase">
+                    Songs
+                  </span>
+                  <span className="font-mono text-[10px] uppercase opacity-60">
+                    Select background vibe
+                  </span>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   {MUSIC_CATEGORIES.map((category) => {
                     const selected = audioSettings.musicCategory === category;
+                    const isPlaying =
+                      category !== "none" &&
+                      audioSettings.musicCategory === category;
+
                     return (
-                      <Button
-                        key={category}
-                        size="sm"
-                        variant="outline"
-                        motion="none"
-                        className={`text-xs tracking-wider w-full ${
-                          selected ? "bg-[#222] text-[#FFF] hover:text-white hover:border-white" : "bg-white text-gray-950"
-                        }`}
-                        onClick={() => setMusicCategory(category)}
-                      >
-                        {MUSIC_CATEGORY_LABELS[category]}
-                      </Button>
+                      <div key={category} className="relative">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          motion="none"
+                          className={`text-xs tracking-wider w-full hover:border-transparent hover:scale-105 transition-transform ${
+                            selected
+                              ? "!bg-black !text-white border-gray-950"
+                              : "bg-white text-black border-gray-950"
+                          }`}
+                          onClick={() => setMusicCategory(category)}
+                        >
+                          {MUSIC_CATEGORY_LABELS[category]}
+                        </Button>
+
+                        {/* Indicator for currently playing music */}
+                        {isPlaying && (
+                          <div className="absolute -top-1 -right-1 flex items-center justify-center">
+                            <PlayingIndicator enabled={isPlaying} />
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
-                {audioSettings.musicCategory === "energy" && (
-                  <span className="font-mono text-[10px] uppercase opacity-70">
-                    Energy playlist is coming soon.
-                  </span>
-                )}
-                {audioSettings.musicCategory === "calm" && (
-                  <span className="font-mono text-[10px] uppercase opacity-70">
-                    Calm playlist. For long hours of practicing.
-                  </span>
-                )}
-                {audioSettings.musicCategory === "none" && (
-                  <span className="font-mono text-[10px] uppercase opacity-70">
-                    Music is turned off until you pick a playlist.
-                  </span>
-                )}
+
+                {/* Now Playing info (visible when current track belongs to the selected category) */}
+                {currentTrack.trackName &&
+                  currentTrack.category === audioSettings.musicCategory &&
+                  audioSettings.musicCategory !== "none" && (
+                    <div className="mt-2 px-3">
+                      <p className="font-mono text-[10px] opacity-90">
+                        NOW PLAYING:{" "}
+                        <span className="font-mono font-bold text-[12px]">
+                          {getTrackTitle(currentTrack.trackName) ??
+                            currentTrack.trackName ??
+                            "*"}
+                        </span>
+                      </p>
+
+                      {/* Progress bar */}
+                      <div className="mt-1 flex items-center gap-2">
+                        <span className="font-mono text-[10px] opacity-70 min-w-[34px] text-left">
+                          {formatTime(musicCurrentSec)}
+                        </span>
+                        <div className="flex-1 h-1.5 bg-black/10 overflow-hidden">
+                          <div
+                            className="h-full bg-[#ff0000] transition-[width] duration-150"
+                            style={{
+                              width: `${Math.round(musicProgress * 100)}%`,
+                            }}
+                          />
+                        </div>
+                        <span className="font-mono text-[10px] opacity-70 min-w-[34px] text-right">
+                          {formatTime(musicDurationSec)}
+                        </span>
+                      </div>
+
+                      {/* Control buttons */}
+                      <div className="mt-2 flex items-center justify-center gap-2 bg-gray-300">
+                        <MusicControlButton
+                          title="Previous Track"
+                          onClick={sendPrev}
+                        >
+                          <FaStepBackward size={12} />
+                        </MusicControlButton>
+                        <MusicControlButton
+                          title={musicPlaying ? "Pause" : "Play"}
+                          onClick={sendTogglePlay}
+                        >
+                          {musicPlaying ? (
+                            <FaPause size={12} />
+                          ) : (
+                            <FaPlay size={12} />
+                          )}
+                        </MusicControlButton>
+                        <MusicControlButton
+                          title="Next Track"
+                          onClick={sendNext}
+                        >
+                          <FaStepForward size={12} />
+                        </MusicControlButton>
+                        <MusicControlButton
+                          title={
+                            shuffleEnabled
+                              ? "Disable Shuffle"
+                              : "Enable Shuffle"
+                          }
+                          onClick={sendToggleShuffle}
+                          active={shuffleEnabled}
+                        >
+                          <FaRandom size={12} />
+                        </MusicControlButton>
+                      </div>
+                    </div>
+                  )}
               </div>
             </div>
           </div>
@@ -1007,16 +1223,18 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
           <div
             ref={videoContentRef}
             className={`transition-opacity duration-300 ${
-              activeTab === "video" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
+              activeTab === "video"
+                ? "opacity-100"
+                : "opacity-0 h-0 overflow-hidden pointer-events-none"
             }`}
           >
             <div className="flex flex-col gap-2">
               <SelectInput
                 label="FPS Limiter"
                 value={graphicsSettings.targetFPS.toString()}
-                options={FPS_OPTIONS.map(opt => ({ 
-                  value: opt.value.toString(), 
-                  label: opt.label 
+                options={FPS_OPTIONS.map((opt) => ({
+                  value: opt.value.toString(),
+                  label: opt.label,
                 }))}
                 onChange={(value) => {
                   const fps = parseInt(value);
@@ -1024,7 +1242,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                   updateGraphicsSetting("vsync", fps > 0);
                 }}
               />
-              
+
               <SliderInput
                 label="Render Scale"
                 value={Math.round(graphicsSettings.pixelRatio * 100)}
@@ -1032,36 +1250,44 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 max={150}
                 step={10}
                 unit="%"
-                onChange={(value) => updateGraphicsSetting("pixelRatio", value / 100)}
+                onChange={(value) =>
+                  updateGraphicsSetting("pixelRatio", value / 100)
+                }
               />
-              
+
               <div className="border-t-[3px] border-black/20 my-2" />
-              
+
               <div className="px-4 py-2 border-[3px] border-black/20 bg-white/30">
-                <p className="font-mono text-[10px] uppercase opacity-70 font-bold mb-1">Antialiasing</p>
+                <p className="font-mono text-[10px] uppercase opacity-70 font-bold mb-1">
+                  Antialiasing
+                </p>
               </div>
-              
+
               <ToggleInput
                 label="FXAA (Fast)"
                 value={graphicsSettings.fxaa}
                 onChange={(value) => updateGraphicsSetting("fxaa", value)}
               />
-              
+
               <ToggleInput
                 label="SMAA (High Quality)"
                 value={graphicsSettings.smaa}
                 onChange={(value) => updateGraphicsSetting("smaa", value)}
               />
-              
+
               <div className="mt-3 border-[3px] border-black bg-white/50 p-3">
                 <p className="font-mono text-[10px] uppercase opacity-70 leading-relaxed">
-                  <strong>FPS Limiter</strong> reduces GPU usage and prevents screen tearing.
+                  <strong>FPS Limiter</strong> reduces GPU usage and prevents
+                  screen tearing.
                   <br />
-                  <strong>Auto-detected:</strong> {detectMonitorRefreshRate()}Hz monitor refresh rate.
+                  <strong>Auto-detected:</strong> {detectMonitorRefreshRate()}Hz
+                  monitor refresh rate.
                   <br />
-                  <strong>Render Scale</strong> affects visual quality and performance.
+                  <strong>Render Scale</strong> affects visual quality and
+                  performance.
                   <br />
-                  <strong>FXAA</strong> is fast but lower quality. <strong>SMAA</strong> is slower but much better quality.
+                  <strong>FXAA</strong> is fast but lower quality.{" "}
+                  <strong>SMAA</strong> is slower but much better quality.
                   <br />
                   Native MSAA is always enabled for best results.
                 </p>
@@ -1072,7 +1298,12 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
           {/* Other tabs content */}
           <div
             className={`transition-opacity duration-300 ${
-              activeTab !== "controls" && activeTab !== "game" && activeTab !== "audio" && activeTab !== "video" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
+              activeTab !== "controls" &&
+              activeTab !== "game" &&
+              activeTab !== "audio" &&
+              activeTab !== "video"
+                ? "opacity-100"
+                : "opacity-0 h-0 overflow-hidden pointer-events-none"
             }`}
           >
             <div className="flex items-center justify-center min-h-[150px]">
