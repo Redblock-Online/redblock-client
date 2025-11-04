@@ -303,28 +303,42 @@ export class AudioManager {
     }
 
     return new Promise(async (resolve, reject) => {
-      const audio = new Audio(url);
+      // Create audio element and set crossOrigin so fetched arrayBuffer decoding works
+      const audio = new Audio();
+      // Ensure same-origin decoding works even if deployed behind a CDN; anonymous is safe for same-origin
+      try { audio.crossOrigin = 'anonymous'; } catch { /* ignore */ }
       audio.preload = 'auto';
-      
+      // Assign src after setting crossOrigin
+      audio.src = url;
+
       audio.addEventListener('canplaythrough', () => {
         const entry: LoadedSound = { url, channel, buffer: audio };
         this.sounds.set(name, entry);
         
         // BLOCKING: Force Web Audio decode to complete before resolving
         if (this.ctx) {
-          fetch(url)
-            .then(r => r.arrayBuffer())
-            .then(ab => this.ctx!.decodeAudioData(ab))
-            .then(decoded => {
-              const s = this.sounds.get(name);
-              if (s) s.audioBuf = decoded;
-              console.log(`[AudioManager] ✓ Loaded '${name}' (${channel}) [Web Audio ready]`);
-              resolve();
-            })
-            .catch((err) => {
-              console.warn(`[AudioManager] Web Audio decode failed for '${name}', using HTML fallback:`, err);
-              resolve();
-            });
+          // Fetch and decode via Web Audio for low-latency playback. Log response status on failure.
+          try {
+            fetch(url)
+              .then(r => {
+                if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
+                return r.arrayBuffer();
+              })
+              .then(ab => this.ctx!.decodeAudioData(ab))
+              .then(decoded => {
+                const s = this.sounds.get(name);
+                if (s) s.audioBuf = decoded;
+                console.log(`[AudioManager] ✓ Loaded '${name}' (${channel}) [Web Audio ready]`);
+                resolve();
+              })
+              .catch((err) => {
+                console.warn(`[AudioManager] Web Audio decode failed for '${name}', using HTML fallback:`, err);
+                resolve();
+              });
+          } catch (err) {
+            console.warn(`[AudioManager] Failed to fetch/decode '${name}':`, err);
+            resolve();
+          }
         } else {
           console.log(`[AudioManager] ✓ Loaded '${name}' (${channel}) [HTML Audio only]`);
           resolve();
