@@ -9,7 +9,7 @@ import { AudioManager, type AudioOptions } from "@/utils/AudioManager";
 import { detectMonitorRefreshRate } from "@/utils/displayUtils";
 import MusicControlButton from "./atoms/MusicControlButton";
 import PlayingIndicator from "./atoms/PlayingIndicator";
-import { FaPause, FaPlay, FaRandom, FaStepBackward, FaStepForward } from "react-icons/fa";
+import { FaInfoCircle, FaPause, FaPlay, FaRandom, FaStepBackward, FaStepForward } from "react-icons/fa";
 import { getTrackTitle } from "@/config/musicTitles";
 
 type Tab = "game" | "controls" | "audio" | "video" | "gameplay" | "account";
@@ -541,9 +541,71 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    // Keep refs to any pending retry timers so we can clear them on change/unmount
+    const progressRetryTimers: number[] = [];
+
+    const clearProgressRetries = () => {
+      for (const t of progressRetryTimers) {
+        try { window.clearTimeout(t); } catch {}
+      }
+      progressRetryTimers.length = 0;
+    };
+
+    const refreshProgressFor = (trackName: string | null) => {
+      // Try to immediately read progress for the provided trackName. If AudioManager
+      // hasn't created the active instance yet, retry a few times with a short delay.
+      try {
+        if (!trackName) {
+          setMusicProgress(0);
+          setMusicCurrentSec(0);
+          setMusicDurationSec(0);
+          setMusicPlaying(false);
+          return;
+        }
+
+        const attempt = (triesLeft: number, delayMs = 120) => {
+          try {
+            const info = AudioManager.getInstance().getProgress(trackName);
+            if (info) {
+              setMusicProgress(info.percent ?? 0);
+              setMusicCurrentSec(info.current ?? 0);
+              setMusicDurationSec(info.duration ?? 0);
+              setMusicPlaying(!!info.playing);
+              return;
+            }
+          } catch {
+            // ignore
+          }
+
+          if (triesLeft > 0) {
+            const t = window.setTimeout(() => attempt(triesLeft - 1, delayMs), delayMs);
+            progressRetryTimers.push(t);
+          } else {
+            // Final fallback: reset values
+            setMusicProgress(0);
+            setMusicCurrentSec(0);
+            setMusicDurationSec(0);
+            setMusicPlaying(false);
+          }
+        };
+
+        // Start with 6 attempts (~720ms total) which should be enough for AudioManager to register
+        attempt(6);
+      } catch {
+        setMusicProgress(0);
+        setMusicCurrentSec(0);
+        setMusicDurationSec(0);
+        setMusicPlaying(false);
+      }
+    };
+
     const handleCurrentTrackChanged = (event: CustomEvent) => {
       const { category, trackName } = event.detail as { category: MusicCategory; trackName: string | null };
+      // Update the currentTrack state immediately
       setCurrentTrack({ category, trackName });
+      // Clear any pending retries and attempt to refresh progress right away
+      clearProgressRetries();
+      refreshProgressFor(trackName);
     };
 
     const handleShuffleChanged = (event: CustomEvent) => {
@@ -554,6 +616,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
     window.addEventListener("currentTrackChanged", handleCurrentTrackChanged as EventListener);
     window.addEventListener("musicShuffleChanged", handleShuffleChanged as EventListener);
     return () => {
+      clearProgressRetries();
       window.removeEventListener("currentTrackChanged", handleCurrentTrackChanged as EventListener);
       window.removeEventListener("musicShuffleChanged", handleShuffleChanged as EventListener);
     };
@@ -607,10 +670,10 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
 
   // Format seconds to mm:ss
   const formatTime = (sec: number) => {
-    if (!Number.isFinite(sec) || sec <= 0) return '0:00';
+    if (!Number.isFinite(sec) || sec <= 0) return "0:00";
     const s = Math.max(0, Math.floor(sec));
     const m = Math.floor(s / 60);
-    const ss = String(s % 60).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, "0");
     return `${m}:${ss}`;
   };
 
@@ -896,15 +959,11 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 min={60}
                 max={90}
                 step={1}
-                unit="┬░"
+                unit="%"
                 onChange={(value) => updateGameSetting("fov", value)}
+                description={"Adjust the field of view for a balanced perspective: 60 - 90 (balanced view)."}
+                descriptionIcon={<FaInfoCircle size={12}/>}
               />
-              
-              <div className="px-4 py-2 border-[3px] border-black/20 bg-white/30">
-                <p className="font-mono text-[10px] uppercase opacity-70 leading-relaxed">
-                  <strong>World FOV:</strong> 60-90┬░ (balanced view).
-                </p>
-              </div>
               <ToggleInput
                 label="Show FPS"
                 value={gameSettings.showFps}
@@ -914,12 +973,9 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 label="Enable Multiplayer"
                 value={gameSettings.multiplayerEnabled}
                 onChange={(value) => updateGameSetting("multiplayerEnabled", value)}
+                description={"Changing Multiplayer requires restarting the session."}
+                descriptionIcon={<FaInfoCircle size={12}/>}
               />
-              <div className="px-4 py-2 border-[3px] border-black/20 bg-white/30">
-                <p className="font-mono text-[10px] uppercase opacity-70 leading-relaxed">
-                  Changing Multiplayer requires restarting the session.
-                </p>
-              </div>
               {/* DISABLED: Ping hidden for now
               <ToggleInput
                 label="Show Ping"
@@ -1044,6 +1100,8 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                   <span className="font-mono font-bold text-xs tracking-wider uppercase">Songs</span>
                   <span className="font-mono text-[10px] uppercase opacity-60">Select background vibe</span>
                 </div>
+
+                {/* Music vibes selection */}
                 <div className="grid grid-cols-3 gap-2">
                   {MUSIC_CATEGORIES.map((category) => {
                     const selected = audioSettings.musicCategory === category;
@@ -1071,6 +1129,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                   })}
                 </div>
 
+                {/* Track visualizer */}
                 {currentTrack.trackName &&
                   currentTrack.category === audioSettings.musicCategory &&
                   audioSettings.musicCategory !== "none" && (
@@ -1084,15 +1143,18 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
 
                       {/* Progress bar */}
                       <div className="mt-1 flex items-center gap-2">
+                        {/* CURRENT TIME */}
                         <span className="font-mono text-[10px] opacity-70 min-w-[34px] text-left">
                           {formatTime(musicCurrentSec)}
                         </span>
+                        {/* BAR */}
                         <div className="flex-1 h-1.5 bg-black/10 overflow-hidden">
                           <div
                             className="h-full bg-[#ff0000] transition-[width] duration-150"
                             style={{ width: `${Math.round(musicProgress * 100)}%` }}
                           />
                         </div>
+                        {/* TOTAL TIME */}
                         <span className="font-mono text-[10px] opacity-70 min-w-[34px] text-right">
                           {formatTime(musicDurationSec)}
                         </span>
@@ -1157,8 +1219,8 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
               
               <div className="border-t-[3px] border-black/20 my-2" />
               
-              <div className="px-4 py-2 border-[3px] border-black/20 bg-white/30">
-                <p className="font-mono text-[10px] uppercase opacity-70 font-bold mb-1">Antialiasing</p>
+              <div className="bg-white/30">
+                <p className="font-mono text-[16px] uppercase opacity-70 font-bold mb-1">Antialiasing</p>
               </div>
               
               <ToggleInput

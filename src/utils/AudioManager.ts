@@ -87,6 +87,10 @@ interface ActiveWebSound {
   channel: AudioChannel;
   kind: 'web';
   startedAt: number;
+  // Precise scheduling/offset bookkeeping for accurate progress/pause/resume
+  startOffsetSec: number;   // buffer offset passed to source.start()
+  startWhenSec: number;     // ctx.currentTime at which start() was scheduled
+  playbackRate: number;     // effective playbackRate used
 }
 
 export class AudioManager {
@@ -456,6 +460,10 @@ export class AudioManager {
       if (chGain) instanceGain.connect(chGain);
       else instanceGain.connect(this.masterGain!);
 
+      const offset = startAtMs / 1000;
+      const startDelaySec = latencyMs / 1000;
+      const when = this.ctx.currentTime + startDelaySec;
+
       const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
       const id = `${name}_${this.nextSoundId++}`;
       this.activeSounds.set(id, {
@@ -466,11 +474,10 @@ export class AudioManager {
         channel,
         kind: 'web',
         startedAt,
+        startOffsetSec: offset,
+        startWhenSec: when,
+        playbackRate: effectivePitch,
       });
-
-      const offset = startAtMs / 1000;
-      const startDelaySec = latencyMs / 1000;
-      const when = this.ctx.currentTime + startDelaySec;
       // Use precise scheduling for low latency while supporting optional delay
       try {
         source.start(when, offset);
@@ -738,15 +745,26 @@ export class AudioManager {
         playing = !active.audio.paused;
       } catch { /* ignore */ }
     } else {
-      // WebAudio: approximate using startedAt and playbackRate
-      const nowMs = (typeof performance !== 'undefined') ? performance.now() : Date.now();
-      const elapsedSec = Math.max(0, (nowMs - active.startedAt) / 1000);
-      let rate = 1;
-      try { rate = active.node.playbackRate?.value ?? 1; } catch { /* ignore */ }
-      current = elapsedSec * Math.max(0.0001, rate);
-      // If not looping, clamp to duration
-      try { if (!active.node.loop) { current = Math.min(current, duration); } } catch { current = Math.min(current, duration); }
-      playing = true;
+      // WebAudio: compute precisely using scheduled start time and start offset
+  const web = active as ActiveWebSound;
+      try {
+        const nowSec = this.ctx ? this.ctx.currentTime : 0;
+        const elapsed = Math.max(0, nowSec - web.startWhenSec);
+        const rate = Math.max(0.0001, web.playbackRate || 1);
+        current = (web.startOffsetSec || 0) + elapsed * rate;
+        // If not looping, clamp to duration
+        try { if (!(web.node as AudioBufferSourceNode).loop) { current = Math.min(current, duration); } } catch { current = Math.min(current, duration); }
+        playing = true;
+      } catch {
+        // Fallback to previous approximation if anything goes wrong
+        const nowMs = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+        const elapsedSec = Math.max(0, (nowMs - web.startedAt) / 1000);
+        let rate = 1;
+        try { rate = web.node.playbackRate?.value ?? 1; } catch { /* ignore */ }
+        current = elapsedSec * Math.max(0.0001, rate);
+        try { if (!web.node.loop) { current = Math.min(current, duration); } } catch { current = Math.min(current, duration); }
+        playing = true;
+      }
     }
 
     const percent = Math.max(0, Math.min(1, duration > 0 ? current / duration : 0));
@@ -770,14 +788,22 @@ export class AudioManager {
       try { active.audio.pause(); return true; } catch { return false; }
     }
 
-    // WebAudio: compute offset, then stop and remove
+    // WebAudio: compute precise offset using scheduled start and initial offset
     const duration = this.getSoundDuration(name) ?? 0;
-    const nowMs = (typeof performance !== 'undefined') ? performance.now() : Date.now();
-    const elapsedSec = Math.max(0, (nowMs - active.startedAt) / 1000);
-    let rate = 1;
-    try { rate = (active as ActiveWebSound).node.playbackRate?.value ?? 1; } catch { /* ignore */ }
-    const offset = Math.min(duration, elapsedSec * Math.max(0.0001, rate));
-    this.pausedOffsets.set(name, offset);
+    const web = active as ActiveWebSound;
+    try {
+      const nowSec = this.ctx ? this.ctx.currentTime : 0;
+      const elapsed = Math.max(0, nowSec - web.startWhenSec);
+      const rate = Math.max(0.0001, web.playbackRate || 1);
+      const offset = Math.min(duration, (web.startOffsetSec || 0) + elapsed * rate);
+      this.pausedOffsets.set(name, offset);
+    } catch {
+      const nowMs = (typeof performance !== 'undefined') ? performance.now() : Date.now();
+      const elapsedSec = Math.max(0, (nowMs - web.startedAt) / 1000);
+      const rate = Math.max(0.0001, web.node.playbackRate?.value ?? 1);
+      const offset = Math.min(duration, elapsedSec * rate);
+      this.pausedOffsets.set(name, offset);
+    }
     this.stop(id);
     return true;
   }
