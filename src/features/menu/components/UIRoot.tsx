@@ -461,7 +461,8 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
     const audio = AudioManager.getInstance();
 
     const seekRelative = (delta: number) => {
-      const category = previousMusicCategoryRef.current = musicCategory;
+      previousMusicCategoryRef.current = musicCategory;
+      const category = musicCategory;
       if (category === 'none') return;
       if (category === 'calm') {
         const pos = calmPlaylistIndexRef.current ?? 0;
@@ -476,7 +477,8 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
     const onNext = () => seekRelative(1);
 
     const onTogglePlayback = () => {
-      const category = previousMusicCategoryRef.current = musicCategory;
+      previousMusicCategoryRef.current = musicCategory;
+      const category = musicCategory;
       if (category === 'none') return;
       const name = category === 'calm' ? calmCurrentTrackRef.current : energyCurrentTrackRef.current;
       if (!name) {
@@ -544,9 +546,9 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
       }
       return a;
     };
-
     const onToggleShuffle = () => {
-      const category = previousMusicCategoryRef.current = musicCategory;
+      previousMusicCategoryRef.current = musicCategory;
+      const category = musicCategory;
       if (category === 'none') return;
       const list = PLAYLISTS[category];
       const orderRef = category === 'calm' ? calmOrderRef : energyOrderRef;

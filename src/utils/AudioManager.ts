@@ -88,7 +88,7 @@ interface ActiveWebSound {
   kind: "web";
   startedAt: number;
   // Precise scheduling/offset bookkeeping for accurate progress/pause/resume
-  startOffsetSec: number; // buffer offset passed to source.start()
+  startOffsetSec: number; // intended/requested offset from play() options (may differ from actual offset passed to source.start())
   startWhenSec: number; // ctx.currentTime at which start() was scheduled
   playbackRate: number; // effective playbackRate used
 }
@@ -110,9 +110,6 @@ export class AudioManager {
   // Audio element pool (for reuse)
   private audioPool: HTMLAudioElement[] = [];
   private readonly poolSize = 20; // Max simultaneous sounds
-
-  // Crossfade duration constant (milliseconds)
-  private readonly CROSSFADE_DURATION_MS = 1000;
 
   // Volume controls
   private masterVolume = 1.0;
@@ -322,7 +319,7 @@ export class AudioManager {
       return;
     }
 
-    return new Promise(async (resolve, reject) => {
+    return new Promise((resolve, reject) => {
       let settled = false;
       const settleResolve = () => {
         if (settled) return;
@@ -345,78 +342,80 @@ export class AudioManager {
         reject(err);
       };
       const timeoutMs = 8000;
-      const timeoutId = window.setTimeout(async () => {
-        try {
-          console.warn(
-            `[AudioManager] ⚠️ load timeout for '${name}', attempting diagnostic fetch/decoder`
-          );
-          if (this.ctx) {
-            // Try fetch+decode as a diagnostic and possible recovery
-            const r = await fetch(url, { cache: "no-cache" });
-            if (!r.ok) {
-              console.warn(
-                `[AudioManager] Diagnostic fetch for '${name}' returned HTTP ${r.status} ${r.statusText}`
-              );
+      const timeoutId = window.setTimeout(() => {
+        (async () => {
+          try {
+            console.warn(
+              `[AudioManager] ⚠️ load timeout for '${name}', attempting diagnostic fetch/decoder`
+            );
+            if (this.ctx) {
+              // Try fetch+decode as a diagnostic and possible recovery
+              const r = await fetch(url, { cache: "no-cache" });
+              if (!r.ok) {
+                console.warn(
+                  `[AudioManager] Diagnostic fetch for '${name}' returned HTTP ${r.status} ${r.statusText}`
+                );
+                settleResolve();
+                return;
+              }
+              const ab = await r.arrayBuffer();
+              try {
+                const decoded = await this.ctx!.decodeAudioData(ab);
+                const s = this.sounds.get(name);
+                if (s) s.audioBuf = decoded;
+                console.log(
+                  `[AudioManager] ✓ Diagnostic decode succeeded for '${name}'`
+                );
+              } catch (err) {
+                console.warn(
+                  `[AudioManager] Diagnostic decode failed for '${name}':`,
+                  err
+                );
+              }
+              settleResolve();
+              return;
+            } else {
+              // Try blob fallback
+              const r = await fetch(url, { cache: "no-cache" });
+              if (!r.ok) {
+                console.warn(
+                  `[AudioManager] Diagnostic fetch for '${name}' returned HTTP ${r.status} ${r.statusText}`
+                );
+                settleResolve();
+                return;
+              }
+              const blob = await r.blob();
+              try {
+                const blobUrl = URL.createObjectURL(blob);
+                console.log(
+                  `[AudioManager] Blob fallback (timeout) for '${name}' - using object URL`
+                );
+                audio.src = blobUrl;
+                audio.load();
+                setTimeout(() => {
+                  try {
+                    URL.revokeObjectURL(blobUrl);
+                  } catch {
+                    /* ignore */
+                  }
+                }, 30000);
+              } catch (err) {
+                console.warn(
+                  `[AudioManager] Blob fallback (timeout) for '${name}' failed:`,
+                  err
+                );
+              }
               settleResolve();
               return;
             }
-            const ab = await r.arrayBuffer();
-            try {
-              const decoded = await this.ctx!.decodeAudioData(ab);
-              const s = this.sounds.get(name);
-              if (s) s.audioBuf = decoded;
-              console.log(
-                `[AudioManager] ✓ Diagnostic decode succeeded for '${name}'`
-              );
-            } catch (err) {
-              console.warn(
-                `[AudioManager] Diagnostic decode failed for '${name}':`,
-                err
-              );
-            }
+          } catch (err) {
+            console.warn(
+              `[AudioManager] Diagnostic timeout attempt for '${name}' failed:`,
+              err
+            );
             settleResolve();
-            return;
-          } else {
-            // Try blob fallback
-            const r = await fetch(url, { cache: "no-cache" });
-            if (!r.ok) {
-              console.warn(
-                `[AudioManager] Diagnostic fetch for '${name}' returned HTTP ${r.status} ${r.statusText}`
-              );
-              settleResolve();
-              return;
-            }
-            const blob = await r.blob();
-            try {
-              const blobUrl = URL.createObjectURL(blob);
-              console.log(
-                `[AudioManager] Blob fallback (timeout) for '${name}' - using object URL`
-              );
-              audio.src = blobUrl;
-              audio.load();
-              setTimeout(() => {
-                try {
-                  URL.revokeObjectURL(blobUrl);
-                } catch {
-                  /* ignore */
-                }
-              }, 30000);
-            } catch (err) {
-              console.warn(
-                `[AudioManager] Blob fallback (timeout) for '${name}' failed:`,
-                err
-              );
-            }
-            settleResolve();
-            return;
           }
-        } catch (err) {
-          console.warn(
-            `[AudioManager] Diagnostic timeout attempt for '${name}' failed:`,
-            err
-          );
-          settleResolve();
-        }
+        })();
       }, timeoutMs);
       // Create audio element and set crossOrigin so fetched arrayBuffer decoding works
       const audio = new Audio();
@@ -447,20 +446,20 @@ export class AudioManager {
                   return r.arrayBuffer();
                 })
                 .then((ab) => this.ctx!.decodeAudioData(ab))
-                .then((decoded) => {
+                .then((audioBuffer) => {
                   const s = this.sounds.get(name);
-                  if (s) s.audioBuf = decoded;
+                  if (s) s.audioBuf = audioBuffer;
                   console.log(
                     `[AudioManager] ✓ Loaded '${name}' (${channel}) [Web Audio ready]`
                   );
-                  resolve();
+                  settleResolve();
                 })
                 .catch((err) => {
                   console.warn(
                     `[AudioManager] Web Audio decode failed for '${name}', using HTML fallback:`,
                     err
                   );
-                  resolve();
+                  settleResolve();
                 });
             } catch (err) {
               console.warn(
@@ -969,16 +968,11 @@ export class AudioManager {
   }
 
   /**
-   * Fade a channel's volume over time
+   * Fade a channel's volume over time (currently sets volume immediately).
    * @param channel - Channel to fade
    * @param targetVolume - Target volume (0.0 to 1.0)
-   * @param durationMs - Fade duration in milliseconds
    */
-  public fadeChannelVolume(
-    channel: AudioChannel,
-    targetVolume: number,
-    _durationMs: number
-  ): void {
+  public fadeChannelVolume(channel: AudioChannel, targetVolume: number): void {
     // Remove fade behavior: set channel volume immediately.
     const clampedVolume = Math.max(0, Math.min(1, targetVolume));
     this.setChannelVolume(channel, clampedVolume);

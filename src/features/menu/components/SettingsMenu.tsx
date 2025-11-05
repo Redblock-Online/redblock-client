@@ -293,12 +293,12 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       AudioManager.getInstance().ensureResumed().catch(() => {});
       // AudioManager.pitch is a playbackRate (1.0 == normal).
       // Previously a negative semitone-like value was used here (e.g. -5, -12),
-      // which gets clamped inside AudioManager ΓÇö and makes overrides confusing.
+      // which gets clamped inside AudioManager - and makes overrides confusing.
       // Use a sensible playback rate (slightly lower) as the default and allow
       // callers to pass a proper playback rate to override it.
       const defaults: Partial<AudioOptions> = {
         volume: 0.3,
-        // Prefer musical semitone offsets for clarity ΓÇö AudioManager will convert
+        // Prefer musical semitone offsets for clarity - AudioManager will convert
         // `semitones` to a playback rate. Negative values lower the pitch.
         semitones: 0,
         randomizePitch: true,
@@ -959,7 +959,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 min={60}
                 max={90}
                 step={1}
-                unit="%"
+                unit="°"
                 onChange={(value) => updateGameSetting("fov", value)}
                 description={"Adjust the field of view for a balanced perspective: 60 - 90 (balanced view)."}
                 descriptionIcon={<FaInfoCircle size={12}/>}
@@ -1219,7 +1219,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
               
               <div className="border-t-[3px] border-black/20 my-2" />
               
-              <div className="bg-white/30">
+              <div className="px-4 py-2 border-[3px] border-black/20 bg-white/30">
                 <p className="font-mono text-[16px] uppercase opacity-70 font-bold mb-1">Antialiasing</p>
               </div>
               
