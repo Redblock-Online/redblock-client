@@ -90,6 +90,7 @@ function createEmptyStats(): StoredStats {
   private practiceMusicId: string | null = null;
   private currentCalmTrack: (typeof CALM_TRACK_NAMES)[number] | null = null;
   private calmTrackRotationIndex = Math.floor(Math.random() * CALM_TRACK_NAMES.length);
+  private practiceMusicTimerId: number | null = null;
   private ambientWindId: string | null = null;
 
   private getPreferredMusicCategory(): 'none' | 'energy' | 'calm' {
@@ -292,10 +293,29 @@ function createEmptyStats(): StoredStats {
       const id = this.audioManager.play(nextTrack, {
         channel: 'music',
         volume: 0.3,
-        loop: true,
+        loop: false,
       });
       this.practiceMusicId = id ?? null;
       this.currentCalmTrack = nextTrack;
+
+      // Schedule next track when this one ends (if we have duration info)
+      try {
+        // Clear any existing timer
+        if (this.practiceMusicTimerId !== null) {
+          window.clearTimeout(this.practiceMusicTimerId);
+          this.practiceMusicTimerId = null;
+        }
+        const dur = this.audioManager.getSoundDuration(nextTrack);
+        if (dur && dur > 0) {
+          // Add small padding to ensure track end
+          const ms = Math.max(100, Math.floor(dur * 1000));
+          this.practiceMusicTimerId = window.setTimeout(() => {
+            this.playPracticeMusic();
+          }, ms + 50);
+        }
+      } catch {
+        /* ignore scheduling errors */
+      }
     } catch (error) {
       console.warn('[App] Failed to start practice music', error);
     }
@@ -307,6 +327,10 @@ function createEmptyStats(): StoredStats {
       this.practiceMusicId = null;
     }
     this.currentCalmTrack = null;
+    if (this.practiceMusicTimerId !== null) {
+      window.clearTimeout(this.practiceMusicTimerId);
+      this.practiceMusicTimerId = null;
+    }
     // Ensure all instances are halted if we lost the handle (e.g., during reloads)
     CALM_TRACK_NAMES.forEach((track) => this.audioManager.stopAllByName(track));
   }
