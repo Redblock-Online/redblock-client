@@ -47,7 +47,7 @@ function createEmptyStats(): StoredStats {
   };
 }
 
-export default class App {
+  export default class App {
   private canvas: HTMLCanvasElement;
   renderer: Renderer;
   camera: Camera;
@@ -249,6 +249,7 @@ export default class App {
 
         // Player sfx
         ['steps', '/audio/sfx/events/steps.wav', 'sfx' as AudioChannel],
+        ['falling-of-the-map', '/audio/sfx/events/terrain/falling-of-the-map.wav', 'sfx' as AudioChannel],
 
         // Target feedback
         ['hit01', '/audio/sfx/events/hit-target/hit01.wav', 'sfx' as AudioChannel],
@@ -263,15 +264,9 @@ export default class App {
 
         // Ambient loops
         ['ambient-wind', '/audio/ambiance/wind01.wav', 'ambient' as AudioChannel],
-
-        // Add more sounds here as needed
-        // ['ui_click', '/audio/sfx/ui_click.mp3', 'ui'],
       ]);
-      
-      console.log('[App] All sounds loaded and ready for low-latency playback');
     } catch (error) {
       console.warn('[App] Some sounds failed to load:', error);
-      // Continue anyway - game can work without audio
     }
   }
 

@@ -91,6 +91,8 @@ export default class Controls {
   private lowestBlockY = -Infinity; // Y position of the lowest block in the scene
   private fallThreshold = 20; // Distance below lowest block before respawn
   private onRespawnCallback: (() => void) | null = null; // Callback for respawn visual effects
+  // Cooldown to prevent multiple fall SFX triggers during a single respawn flow
+  private fallSfxCooldownUntil = 0;
 
   private changeCheckAccumulator = 0;
   private changeCheckInterval = 1 / 20; // Reduced from 24 to 20 Hz for less network overhead
@@ -528,6 +530,19 @@ export default class Controls {
       if (this.yawObject.position.y < fallLimit) {
         console.log("[Controls] Player fell below fall limit:", this.yawObject.position.y, "< ", fallLimit);
         console.log("[Controls] Respawning at spawn point:", this.spawnPoint);
+        // Play falling SFX once per event (guard with short cooldown)
+        const nowMs = performance.now();
+        if (nowMs >= this.fallSfxCooldownUntil) {
+          // Set a small cooldown window to avoid duplicate triggers on consecutive frames
+          this.fallSfxCooldownUntil = nowMs + 750; // 0.75s
+          this.audioManager.play('falling-of-the-map', {
+            channel: 'sfx',
+            volume: 0.9,
+            maxVoices: 1,
+            randomizePitch: true,
+            pitchJitter: 0.03,
+          });
+        }
         
         // Trigger respawn visual effect
         if (this.onRespawnCallback) {
