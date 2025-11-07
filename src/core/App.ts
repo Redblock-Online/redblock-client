@@ -9,7 +9,7 @@ import Pistol from "@/objects/Pistol";
 import Target from "@/objects/Target";
 import WSManager, { type PlayerCore } from "@/utils/ws/WSManager";
 import type { UIController } from "@/features/menu";
-import { AudioManager } from "@/utils/AudioManager";
+import { AudioManager, type AudioChannel } from "@/utils/AudioManager";
 import { SCENARIOS, type ScenarioConfig, getScenarioById } from "@/config/scenarios";
 import type { TimerHint, TimerHintTableRow } from "@/features/game/ui";
 import gsap from "gsap";
@@ -47,7 +47,7 @@ function createEmptyStats(): StoredStats {
   };
 }
 
-export default class App {
+  export default class App {
   private canvas: HTMLCanvasElement;
   renderer: Renderer;
   camera: Camera;
@@ -90,6 +90,7 @@ export default class App {
   private practiceMusicId: string | null = null;
   private currentCalmTrack: (typeof CALM_TRACK_NAMES)[number] | null = null;
   private calmTrackRotationIndex = Math.floor(Math.random() * CALM_TRACK_NAMES.length);
+  private practiceMusicTimerId: number | null = null;
   private ambientWindId: string | null = null;
 
   private getPreferredMusicCategory(): 'none' | 'energy' | 'calm' {
@@ -236,46 +237,37 @@ export default class App {
       
       await this.audioManager.preloadSounds([
         // Weapon sfx
-        ['lazer01_1', '/audio/sfx/events/weapons/pistol/lazer01_1.wav', 'sfx'],
-        ['lazer02_1', '/audio/sfx/events/weapons/pistol/lazer02_1.wav', 'sfx'],
+        ['lazer01_1', '/audio/sfx/events/weapons/pistol/lazer01_1.wav', 'sfx' as AudioChannel],
+        ['lazer02_1', '/audio/sfx/events/weapons/pistol/lazer02_1.wav', 'sfx' as AudioChannel],
 
         // Buttons sfx
-        ['btn-click01', '/audio/sfx/ui/buttons/btn-click01.wav', 'ui'],
-        ['btn-click02', '/audio/sfx/ui/buttons/btn-click02.wav', 'ui'],
-        ['btn-click03', '/audio/sfx/ui/buttons/btn-click03.wav', 'ui'],
-        ['btn-hover', '/audio/sfx/ui/buttons/btn-hover.wav', 'ui'],
-        ['swap-tab01', '/audio/sfx/ui/buttons/swap-tab01.wav', 'ui'],
-        ['swap-tab02', '/audio/sfx/ui/buttons/swap-tab02.wav', 'ui'],
+        ['btn-click01', '/audio/sfx/ui/buttons/btn-click01.wav', 'ui' as AudioChannel],
+        ['btn-click02', '/audio/sfx/ui/buttons/btn-click02.wav', 'ui' as AudioChannel],
+        ['btn-click03', '/audio/sfx/ui/buttons/btn-click03.wav', 'ui' as AudioChannel],
+        ['btn-hover', '/audio/sfx/ui/buttons/btn-hover.wav', 'ui' as AudioChannel],
+        ['swap-tab01', '/audio/sfx/ui/buttons/swap-tab01.wav', 'ui' as AudioChannel],
+        ['swap-tab02', '/audio/sfx/ui/buttons/swap-tab02.wav', 'ui' as AudioChannel],
 
         // Player sfx
-        ['steps', '/audio/sfx/events/steps.wav', 'sfx'],
+        ['steps', '/audio/sfx/events/steps.wav', 'sfx' as AudioChannel],
+        ['falling-of-the-map', '/audio/sfx/events/terrain/falling-of-the-map.wav', 'sfx' as AudioChannel],
 
         // Target feedback
-        ['hit01', '/audio/sfx/events/hit-target/hit01.wav', 'sfx'],
+        ['hit01', '/audio/sfx/events/hit-target/hit01.wav', 'sfx' as AudioChannel],
 
         // Events
-        ['escape-event', '/audio/sfx/ui/actions/escape-event.wav', 'ui'],
+        ['escape-event', '/audio/sfx/ui/actions/escape-event.wav', 'ui' as AudioChannel],
 
         // UI Behavior:
           // Slider
-        ['slider-down', '/audio/sfx/ui/slider-change/slider-down.wav', 'ui'],
-        ['slider-up', '/audio/sfx/ui/slider-change/slider-up.wav', 'ui'],
-
-        // Music
-  ['uncausal', '/audio/music/calm/uncasual.ogg', 'music'],
-  ['calm', '/audio/music/calm/voices.ogg', 'music'],
+        ['slider-down', '/audio/sfx/ui/slider-change/slider-down.wav', 'ui' as AudioChannel],
+        ['slider-up', '/audio/sfx/ui/slider-change/slider-up.wav', 'ui' as AudioChannel],
 
         // Ambient loops
-        ['ambient-wind', '/audio/ambiance/wind01.wav', 'ambient'],
-
-        // Add more sounds here as needed
-        // ['ui_click', '/audio/sfx/ui_click.mp3', 'ui'],
+        ['ambient-wind', '/audio/ambiance/wind01.wav', 'ambient' as AudioChannel],
       ]);
-      
-      console.log('[App] All sounds loaded and ready for low-latency playback');
     } catch (error) {
       console.warn('[App] Some sounds failed to load:', error);
-      // Continue anyway - game can work without audio
     }
   }
 
@@ -301,10 +293,29 @@ export default class App {
       const id = this.audioManager.play(nextTrack, {
         channel: 'music',
         volume: 0.3,
-        loop: true,
+        loop: false,
       });
       this.practiceMusicId = id ?? null;
       this.currentCalmTrack = nextTrack;
+
+      // Schedule next track when this one ends (if we have duration info)
+      try {
+        // Clear any existing timer
+        if (this.practiceMusicTimerId !== null) {
+          window.clearTimeout(this.practiceMusicTimerId);
+          this.practiceMusicTimerId = null;
+        }
+        const dur = this.audioManager.getSoundDuration(nextTrack);
+        if (dur && dur > 0) {
+          // Add small padding to ensure track end
+          const ms = Math.max(100, Math.floor(dur * 1000));
+          this.practiceMusicTimerId = window.setTimeout(() => {
+            this.playPracticeMusic();
+          }, ms + 50);
+        }
+      } catch {
+        /* ignore scheduling errors */
+      }
     } catch (error) {
       console.warn('[App] Failed to start practice music', error);
     }
@@ -316,6 +327,10 @@ export default class App {
       this.practiceMusicId = null;
     }
     this.currentCalmTrack = null;
+    if (this.practiceMusicTimerId !== null) {
+      window.clearTimeout(this.practiceMusicTimerId);
+      this.practiceMusicTimerId = null;
+    }
     // Ensure all instances are halted if we lost the handle (e.g., during reloads)
     CALM_TRACK_NAMES.forEach((track) => this.audioManager.stopAllByName(track));
   }
@@ -706,7 +721,7 @@ export default class App {
       
       // Start audio and timer (same as normal scenario start)
       if (!this.isEditorMode) {
-        this.playPracticeMusic();
+        // Background music is controlled by the React UI (UIRoot) playlist controller to avoid double playback
         this.playAmbientWind();
       }
       this.startTimer();
@@ -1393,7 +1408,7 @@ export default class App {
 
     this.loop.start();
     if (!this.isEditorMode) {
-      this.playPracticeMusic();
+      // Background music is controlled by the React UI (UIRoot) playlist controller to avoid double playback
       this.playAmbientWind();
     }
     this.startTimer();

@@ -22,6 +22,7 @@ export default function ColorInput({ label, value, onChange, disabled = false }:
       <span className="font-mono font-bold text-xs tracking-wider uppercase">
         {label}
       </span>
+
       <div className="flex items-center gap-2 flex-wrap">
         {PRESET_COLORS.map((color) => (
           <button
@@ -35,6 +36,7 @@ export default function ColorInput({ label, value, onChange, disabled = false }:
             title={color}
           />
         ))}
+
         <input
           type="color"
           value={value}

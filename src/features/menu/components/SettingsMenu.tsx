@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+﻿import { useState, useEffect, useRef, useCallback } from "react";
 import Button from "@/features/shared/ui/components/Button";
 import KeybindInput from "@/features/shared/ui/components/KeybindInput";
 import SliderInput from "@/features/shared/ui/components/SliderInput";
@@ -7,6 +7,10 @@ import SelectInput from "@/features/shared/ui/components/SelectInput";
 import ColorInput from "@/features/shared/ui/components/ColorInput";
 import { AudioManager, type AudioOptions } from "@/utils/AudioManager";
 import { detectMonitorRefreshRate } from "@/utils/displayUtils";
+import MusicControlButton from "./atoms/MusicControlButton";
+import PlayingIndicator from "./atoms/PlayingIndicator";
+import { FaInfoCircle, FaPause, FaPlay, FaRandom, FaStepBackward, FaStepForward } from "react-icons/fa";
+import { getTrackTitle } from "@/config/musicTitles";
 
 type Tab = "game" | "controls" | "audio" | "video" | "gameplay" | "account";
 
@@ -219,6 +223,17 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
     return base;
   });
 
+  // Music UI state
+  const [currentTrack, setCurrentTrack] = useState<{ category: MusicCategory; trackName: string | null }>(() => ({
+    category: DEFAULT_AUDIO_SETTINGS.musicCategory,
+    trackName: null,
+  }));
+  const [musicProgress, setMusicProgress] = useState(0);
+  const [musicCurrentSec, setMusicCurrentSec] = useState(0);
+  const [musicDurationSec, setMusicDurationSec] = useState(0);
+  const [musicPlaying, setMusicPlaying] = useState(false);
+  const [shuffleEnabled, setShuffleEnabled] = useState(false);
+
   const sensitivityInitialNumeric = (() => {
     const parsed = parseFloat(sensitivity);
     return Number.isFinite(parsed) ? parsed : 1;
@@ -278,12 +293,12 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       AudioManager.getInstance().ensureResumed().catch(() => {});
       // AudioManager.pitch is a playbackRate (1.0 == normal).
       // Previously a negative semitone-like value was used here (e.g. -5, -12),
-      // which gets clamped inside AudioManager — and makes overrides confusing.
+      // which gets clamped inside AudioManager - and makes overrides confusing.
       // Use a sensible playback rate (slightly lower) as the default and allow
       // callers to pass a proper playback rate to override it.
       const defaults: Partial<AudioOptions> = {
         volume: 0.3,
-        // Prefer musical semitone offsets for clarity — AudioManager will convert
+        // Prefer musical semitone offsets for clarity - AudioManager will convert
         // `semitones` to a playback rate. Negative values lower the pitch.
         semitones: 0,
         randomizePitch: true,
@@ -459,9 +474,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
           musicVolume: audio.getChannelVolume('music'),
           ambientVolume: audio.getChannelVolume('ambient'),
           uiVolume: audio.getChannelVolume('ui'),
-          muted: audio.isMuted(),
-          loadedSounds: audio.getLoadedSounds(),
-          activeCount: audio.getActiveSoundCount(),
+          // muted: audio.isMuted(), // removed: method not available in current AudioManager
           latency: audio.getLatencyInfo(),
         });
       }
@@ -523,6 +536,146 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       }
     }
   }, [audioSettings.musicCategory]);
+
+  // Track/shuffle event listeners from UIRoot
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Keep refs to any pending retry timers so we can clear them on change/unmount
+    const progressRetryTimers: number[] = [];
+
+    const clearProgressRetries = () => {
+      for (const t of progressRetryTimers) {
+        try { window.clearTimeout(t); } catch {}
+      }
+      progressRetryTimers.length = 0;
+    };
+
+    const refreshProgressFor = (trackName: string | null) => {
+      // Try to immediately read progress for the provided trackName. If AudioManager
+      // hasn't created the active instance yet, retry a few times with a short delay.
+      try {
+        if (!trackName) {
+          setMusicProgress(0);
+          setMusicCurrentSec(0);
+          setMusicDurationSec(0);
+          setMusicPlaying(false);
+          return;
+        }
+
+        const attempt = (triesLeft: number, delayMs = 120) => {
+          try {
+            const info = AudioManager.getInstance().getProgress(trackName);
+            if (info) {
+              setMusicProgress(info.percent ?? 0);
+              setMusicCurrentSec(info.current ?? 0);
+              setMusicDurationSec(info.duration ?? 0);
+              setMusicPlaying(!!info.playing);
+              return;
+            }
+          } catch {
+            // ignore
+          }
+
+          if (triesLeft > 0) {
+            const t = window.setTimeout(() => attempt(triesLeft - 1, delayMs), delayMs);
+            progressRetryTimers.push(t);
+          } else {
+            // Final fallback: reset values
+            setMusicProgress(0);
+            setMusicCurrentSec(0);
+            setMusicDurationSec(0);
+            setMusicPlaying(false);
+          }
+        };
+
+        // Start with 6 attempts (~720ms total) which should be enough for AudioManager to register
+        attempt(6);
+      } catch {
+        setMusicProgress(0);
+        setMusicCurrentSec(0);
+        setMusicDurationSec(0);
+        setMusicPlaying(false);
+      }
+    };
+
+    const handleCurrentTrackChanged = (event: CustomEvent) => {
+      const { category, trackName } = event.detail as { category: MusicCategory; trackName: string | null };
+      // Update the currentTrack state immediately
+      setCurrentTrack({ category, trackName });
+      // Clear any pending retries and attempt to refresh progress right away
+      clearProgressRetries();
+      refreshProgressFor(trackName);
+    };
+
+    const handleShuffleChanged = (event: CustomEvent) => {
+      const { category, enabled } = event.detail as { category: MusicCategory; enabled: boolean };
+      if (category === audioSettings.musicCategory) setShuffleEnabled(!!enabled);
+    };
+
+    window.addEventListener("currentTrackChanged", handleCurrentTrackChanged as EventListener);
+    window.addEventListener("musicShuffleChanged", handleShuffleChanged as EventListener);
+    return () => {
+      clearProgressRetries();
+      window.removeEventListener("currentTrackChanged", handleCurrentTrackChanged as EventListener);
+      window.removeEventListener("musicShuffleChanged", handleShuffleChanged as EventListener);
+    };
+  }, [audioSettings.musicCategory]);
+
+  // Poll audio progress while Audio tab is visible
+  useEffect(() => {
+    if (!visible || activeTab !== 'audio') return;
+    const intervalMs = 200;
+    const tick = () => {
+      try {
+        const name = currentTrack.trackName;
+        if (name && audioSettings.musicCategory !== 'none') {
+          const info = AudioManager.getInstance().getProgress(name);
+          setMusicProgress(info?.percent ?? 0);
+          setMusicCurrentSec(info?.current ?? 0);
+          setMusicDurationSec(info?.duration ?? 0);
+          setMusicPlaying(!!info?.playing);
+        } else {
+          setMusicProgress(0);
+          setMusicCurrentSec(0);
+          setMusicDurationSec(0);
+          setMusicPlaying(false);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    tick();
+    const timer = window.setInterval(tick, intervalMs);
+    return () => { if (timer) window.clearInterval(timer); };
+  }, [visible, activeTab, currentTrack.trackName, audioSettings.musicCategory]);
+
+  // Dispatch helpers for music controls
+  const sendPrev = () => {
+    playButtonClick();
+    window.dispatchEvent(new CustomEvent("prevMusicTrack"));
+  };
+  const sendNext = () => {
+    playButtonClick();
+    window.dispatchEvent(new CustomEvent("nextMusicTrack"));
+  };
+  const sendTogglePlay = () => {
+    playButtonClick();
+    window.dispatchEvent(new CustomEvent("toggleMusicPlayback"));
+  };
+  const sendToggleShuffle = () => {
+    playButtonClick();
+    window.dispatchEvent(new CustomEvent("toggleShuffleMusic"));
+  };
+
+  // Format seconds to mm:ss
+  const formatTime = (sec: number) => {
+    if (!Number.isFinite(sec) || sec <= 0) return "0:00";
+    const s = Math.max(0, Math.floor(sec));
+    const m = Math.floor(s / 60);
+    const ss = String(s % 60).padStart(2, "0");
+    return `${m}:${ss}`;
+  };
 
   const onSensitivityInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const numericValue = parseFloat(e.target.value);
@@ -808,13 +961,9 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 step={1}
                 unit="°"
                 onChange={(value) => updateGameSetting("fov", value)}
+                description={"Adjust the field of view for a balanced perspective: 60 - 90 (balanced view)."}
+                descriptionIcon={<FaInfoCircle size={12}/>}
               />
-              
-              <div className="px-4 py-2 border-[3px] border-black/20 bg-white/30">
-                <p className="font-mono text-[10px] uppercase opacity-70 leading-relaxed">
-                  <strong>World FOV:</strong> 60-90° (balanced view).
-                </p>
-              </div>
               <ToggleInput
                 label="Show FPS"
                 value={gameSettings.showFps}
@@ -824,12 +973,9 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                 label="Enable Multiplayer"
                 value={gameSettings.multiplayerEnabled}
                 onChange={(value) => updateGameSetting("multiplayerEnabled", value)}
+                description={"Changing Multiplayer requires restarting the session."}
+                descriptionIcon={<FaInfoCircle size={12}/>}
               />
-              <div className="px-4 py-2 border-[3px] border-black/20 bg-white/30">
-                <p className="font-mono text-[10px] uppercase opacity-70 leading-relaxed">
-                  Changing Multiplayer requires restarting the session.
-                </p>
-              </div>
               {/* DISABLED: Ping hidden for now
               <ToggleInput
                 label="Show Ping"
@@ -954,40 +1100,87 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                   <span className="font-mono font-bold text-xs tracking-wider uppercase">Songs</span>
                   <span className="font-mono text-[10px] uppercase opacity-60">Select background vibe</span>
                 </div>
+
+                {/* Music vibes selection */}
                 <div className="grid grid-cols-3 gap-2">
                   {MUSIC_CATEGORIES.map((category) => {
                     const selected = audioSettings.musicCategory === category;
+                    const isPlaying = category !== "none" && audioSettings.musicCategory === category;
                     return (
-                      <Button
-                        key={category}
-                        size="sm"
-                        variant="outline"
-                        motion="none"
-                        className={`text-xs tracking-wider w-full ${
-                          selected ? "bg-[#222] text-[#FFF] hover:text-white hover:border-white" : "bg-white text-gray-950"
-                        }`}
-                        onClick={() => setMusicCategory(category)}
-                      >
-                        {MUSIC_CATEGORY_LABELS[category]}
-                      </Button>
+                      <div key={category} className="relative">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          motion="none"
+                          className={`text-xs tracking-wider w-full hover:border-transparent hover:scale-105 transition-transform ${
+                            selected ? "!bg-black !text-white border-gray-950" : "bg-white text-black border-gray-950"
+                          }`}
+                          onClick={() => setMusicCategory(category)}
+                        >
+                          {MUSIC_CATEGORY_LABELS[category]}
+                        </Button>
+                        {isPlaying && (
+                          <div className="absolute -top-1 -right-1 flex items-center justify-center">
+                            <PlayingIndicator enabled={isPlaying} />
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
-                {audioSettings.musicCategory === "energy" && (
-                  <span className="font-mono text-[10px] uppercase opacity-70">
-                    Energy playlist is coming soon.
-                  </span>
-                )}
-                {audioSettings.musicCategory === "calm" && (
-                  <span className="font-mono text-[10px] uppercase opacity-70">
-                    Calm playlist. For long hours of practicing.
-                  </span>
-                )}
-                {audioSettings.musicCategory === "none" && (
-                  <span className="font-mono text-[10px] uppercase opacity-70">
-                    Music is turned off until you pick a playlist.
-                  </span>
-                )}
+
+                {/* Track visualizer */}
+                {currentTrack.trackName &&
+                  currentTrack.category === audioSettings.musicCategory &&
+                  audioSettings.musicCategory !== "none" && (
+                    <div className="mt-2 px-3">
+                      <p className="font-mono text-[10px] opacity-90">
+                        NOW PLAYING:{" "}
+                        <span className="font-mono font-bold text-[12px]">
+                          {getTrackTitle(currentTrack.trackName) ?? currentTrack.trackName ?? "*"}
+                        </span>
+                      </p>
+
+                      {/* Progress bar */}
+                      <div className="mt-1 flex items-center gap-2">
+                        {/* CURRENT TIME */}
+                        <span className="font-mono text-[10px] opacity-70 min-w-[34px] text-left">
+                          {formatTime(musicCurrentSec)}
+                        </span>
+                        {/* BAR */}
+                        <div className="flex-1 h-1.5 bg-black/10 overflow-hidden">
+                          <div
+                            className="h-full bg-[#ff0000] transition-[width] duration-150"
+                            style={{ width: `${Math.round(musicProgress * 100)}%` }}
+                          />
+                        </div>
+                        {/* TOTAL TIME */}
+                        <span className="font-mono text-[10px] opacity-70 min-w-[34px] text-right">
+                          {formatTime(musicDurationSec)}
+                        </span>
+                      </div>
+
+                      {/* Control buttons */}
+                      <div className="mt-2 flex items-center justify-center gap-2 bg-gray-300">
+                        <MusicControlButton title="Previous Track" onClick={sendPrev}>
+                          <FaStepBackward size={12} />
+                        </MusicControlButton>
+                        <MusicControlButton title={musicPlaying ? "Pause" : "Play"} onClick={sendTogglePlay}>
+                          {musicPlaying ? <FaPause size={12} /> : <FaPlay size={12} />}
+                        </MusicControlButton>
+                        <MusicControlButton title="Next Track" onClick={sendNext}>
+                          <FaStepForward size={12} />
+                        </MusicControlButton>
+                        <MusicControlButton
+                          title={shuffleEnabled ? "Disable Shuffle" : "Enable Shuffle"}
+                          onClick={sendToggleShuffle}
+                          active={shuffleEnabled}
+                        >
+                          <FaRandom size={12} />
+                        </MusicControlButton>
+                      </div>
+                    </div>
+                  )}
               </div>
             </div>
           </div>
@@ -1027,7 +1220,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
               <div className="border-t-[3px] border-black/20 my-2" />
               
               <div className="px-4 py-2 border-[3px] border-black/20 bg-white/30">
-                <p className="font-mono text-[10px] uppercase opacity-70 font-bold mb-1">Antialiasing</p>
+                <p className="font-mono text-[16px] uppercase opacity-70 font-bold mb-1">Antialiasing</p>
               </div>
               
               <ToggleInput
@@ -1082,3 +1275,4 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
     </div>
   );
 }
+
