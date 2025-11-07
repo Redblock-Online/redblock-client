@@ -13,6 +13,7 @@ import { PropertiesPanel } from "./PropertiesPanel";
 import { useHistoryStack, type GroupMember } from "../hooks/useHistoryStack";
 import type { EditorModeManager, TransformMode, AxisConstraint } from "@/features/editor/core";
 import { ScenarioModal } from "./ScenarioModal";
+import { PublishModal } from "./PublishModal";
 import { Portal } from "./Portal";
 import { ComponentDeleteModal } from "./ComponentDeleteModal";
 import { GameTab } from "./GameTab";
@@ -84,6 +85,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const [activeScenarioName, setActiveScenarioName] = useState<string>(AUTO_SAVE_SCENARIO_NAME);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isScenarioModalOpen, setIsScenarioModalOpen] = useState(false);
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ left: number; top: number; width: number } | null>(null);
   const menuAnchors = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -437,6 +439,11 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     setIsScenarioModalOpen(true);
   }, [refreshScenarios, closeMenus]);
 
+  const handlePublishScenario = useCallback(() => {
+    closeMenus();
+    setIsPublishModalOpen(true);
+  }, [closeMenus]);
+
   const handleSaveCurrentScenario = useCallback(() => {
     const trimmed = activeScenarioName.trim();
     const name = trimmed === "" ? AUTO_SAVE_SCENARIO_NAME : trimmed;
@@ -575,6 +582,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
           },
           { id: "scenario-save-as", label: "Save As…", action: handleSaveScenarioAs },
           { id: "scenario-load", label: "Load…", action: handleLoadScenario },
+          { id: "scenario-publish", label: "Publish…", action: handlePublishScenario },
         ],
       },
       {
@@ -604,7 +612,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         items: [{ id: "components-refresh", label: "Refresh list", action: handleRefreshComponentsMenu }],
       },
     ],
-    [handleLoadScenario, handleNewScenario, handleRefreshComponentsMenu, handleSaveCurrentScenario, handleSaveScenarioAs, hasUnsavedChanges, showSidebar, showInspector, showControls],
+    [handleLoadScenario, handleNewScenario, handlePublishScenario, handleRefreshComponentsMenu, handleSaveCurrentScenario, handleSaveScenarioAs, hasUnsavedChanges, showSidebar, showInspector, showControls],
   );
 
   const activeMenu = useMemo(() => {
@@ -1568,6 +1576,12 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       onDeleteScenario={handleDeleteScenario}
       onDownloadScenario={handleDownloadScenario}
       onImportFiles={handleImportScenarioFiles}
+    />
+    <PublishModal
+      isOpen={isPublishModalOpen}
+      onClose={() => setIsPublishModalOpen(false)}
+      scenarioData={editor.exportScenario(activeScenarioName)}
+      scenarioName={activeScenarioName}
     />
     <ComponentDeleteModal
       open={componentPendingDelete !== null}

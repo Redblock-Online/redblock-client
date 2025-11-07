@@ -3,9 +3,10 @@ import React, { useState, useEffect } from "react";
 import Button from "@/features/shared/ui/components/Button";
 import type { ScenarioConfig } from "@/config/scenarios";
 import { listScenarios, type StoredScenario } from "@/features/editor/scenarios";
-import { FaTwitter, FaTelegram, FaYoutube, FaGithub, FaPencilAlt } from "react-icons/fa";
+import { FaTwitter, FaTelegram, FaYoutube, FaGithub, FaPencilAlt, FaGlobe } from "react-icons/fa";
 import { RiInstagramFill } from "react-icons/ri";
 import socials from "@/config/socials.json";
+import { fetchWorlds, type World } from "@/ui/react/api/worlds";
 
 type Props = {
   scenarios: ScenarioConfig[];
@@ -36,7 +37,11 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
 
   const [showScenarioMenu, setShowScenarioMenu] = useState(false);
   const [savedScenarios, setSavedScenarios] = useState<StoredScenario[]>([]);
+  const [communityWorlds, setCommunityWorlds] = useState<World[]>([]);
+  const [isLoadingWorlds, setIsLoadingWorlds] = useState(false);
+  const [worldsLoaded, setWorldsLoaded] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState<"my-scenarios" | "community">("my-scenarios");
 
   useEffect(() => {
     // Load saved scenarios from localStorage
@@ -44,9 +49,34 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
     setSavedScenarios(scenarios);
   }, []);
 
+  useEffect(() => {
+    // Load community worlds when community tab is active (only once)
+    if (activeTab === "community" && !worldsLoaded && !isLoadingWorlds) {
+      setIsLoadingWorlds(true);
+      fetchWorlds()
+        .then((response) => {
+          setCommunityWorlds(response.data || []);
+          setWorldsLoaded(true);
+        })
+        .catch((error) => {
+          console.error("Failed to load community worlds:", error);
+          setCommunityWorlds([]);
+          setWorldsLoaded(true); // Mark as loaded even on error to prevent retry loop
+        })
+        .finally(() => {
+          setIsLoadingWorlds(false);
+        });
+    }
+  }, [activeTab, worldsLoaded, isLoadingWorlds]);
+
   // Filter scenarios based on search query
   const filteredScenarios = savedScenarios.filter((scenario) =>
     scenario.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Filter community worlds based on search query
+  const filteredWorlds = (communityWorlds || []).filter((world) =>
+    world.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const requestPointerLockOnCanvas = () => {
@@ -98,6 +128,20 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
     
     // Navigate to editor
     window.location.href = "/editor";
+  };
+
+  const onLoadWorldClick = (world: World) => {
+    // Create a custom scenario config that will load from the world data
+    const customScenarioId = `world-${world.id}`;
+    
+    // Store the world data temporarily for the game to load
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(`scenario-${customScenarioId}`, JSON.stringify(world.world_data));
+    }
+    
+    // Start the game with this world
+    onStartClick(customScenarioId);
+    setShowScenarioMenu(false);
   };
 
   const onExitClick = () => {
@@ -265,20 +309,48 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
                     )}
                   </div>
                   
+                  {/* Tabs */}
+                  <div className="mt-4 flex gap-2 border-b-2 border-black/20">
+                    <button
+                      onClick={() => setActiveTab("my-scenarios")}
+                      className={`px-6 py-3 font-bold transition-all duration-200 border-b-4 ${
+                        activeTab === "my-scenarios"
+                          ? "border-black text-black"
+                          : "border-transparent text-black/40 hover:text-black/60"
+                      }`}
+                    >
+                      📁 My Scenarios
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("community")}
+                      className={`px-6 py-3 font-bold transition-all duration-200 border-b-4 flex items-center gap-2 ${
+                        activeTab === "community"
+                          ? "border-black text-black"
+                          : "border-transparent text-black/40 hover:text-black/60"
+                      }`}
+                    >
+                      <FaGlobe /> Community
+                    </button>
+                  </div>
+
                   {/* Results count */}
                   <div className="mt-4 flex items-center gap-2">
                     <div className="h-1 w-1 rounded-full bg-black/40"></div>
                     <p className="text-sm font-medium opacity-60">
-                      {filteredScenarios.length} scenario{filteredScenarios.length !== 1 ? 's' : ''} found
+                      {activeTab === "my-scenarios" 
+                        ? `${filteredScenarios.length} scenario${filteredScenarios.length !== 1 ? 's' : ''} found`
+                        : `${filteredWorlds.length} world${filteredWorlds.length !== 1 ? 's' : ''} found`
+                      }
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Scenarios List */}
+              {/* Scenarios/Worlds List */}
               <div className="relative z-10 flex-1 overflow-y-auto p-6">
                 <div className="max-w-4xl mx-auto">
-                  {savedScenarios.length === 0 ? (
+                  {activeTab === "my-scenarios" ? (
+                    savedScenarios.length === 0 ? (
                     <div className="text-center py-20">
                       <div className="text-5xl mb-4 opacity-20">📦</div>
                       <p className="text-2xl font-bold opacity-70 mb-2">No saved scenarios found</p>
@@ -347,6 +419,68 @@ export default function StartScreen({ scenarios, onStart, onSettings }: Props) {
                         </div>
                       ))}
                     </div>
+                  )
+                  ) : (
+                    // Community tab
+                    isLoadingWorlds ? (
+                      <div className="text-center py-20">
+                        <div className="text-5xl mb-4 opacity-20">⏳</div>
+                        <p className="text-2xl font-bold opacity-70 mb-2">Loading community worlds...</p>
+                      </div>
+                    ) : communityWorlds.length === 0 ? (
+                      <div className="text-center py-20">
+                        <div className="text-5xl mb-4 opacity-20">🌍</div>
+                        <p className="text-2xl font-bold opacity-70 mb-2">No community worlds available</p>
+                        <p className="text-lg opacity-50">Be the first to share a world!</p>
+                      </div>
+                    ) : filteredWorlds.length === 0 ? (
+                      <div className="text-center py-20">
+                        <div className="text-5xl mb-4 opacity-20">🔍</div>
+                        <p className="text-2xl font-bold opacity-70 mb-2">No worlds match your search</p>
+                        <p className="text-lg opacity-50">Try a different search term</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filteredWorlds.map((world) => (
+                          <div
+                            key={world.id}
+                            onClick={() => onLoadWorldClick(world)}
+                            className="group relative border-4 border-black bg-white p-6 text-left hover:bg-gray-100 hover:text-black transition-colors duration-200 cursor-pointer"
+                          >
+                            <h3 className="text-xl font-bold mb-3 break-words">
+                              {world.title}
+                            </h3>
+                            
+                            {world.description && (
+                              <p className="text-sm opacity-60 mb-3 line-clamp-2">
+                                {world.description}
+                              </p>
+                            )}
+                            
+                            <div className="space-y-1 text-sm">
+                              <div className="flex items-center gap-2 opacity-60 group-hover:opacity-80">
+                                <span>⭐</span>
+                                <span>{world.statistics.rating_avg.toFixed(1)} ({world.statistics.plays} plays)</span>
+                              </div>
+                              <div className="flex items-center gap-2 opacity-60 group-hover:opacity-80">
+                                <span>📅</span>
+                                <span>
+                                  {new Date(world.created_at).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric'
+                                  })}
+                                </span>
+                              </div>
+                            </div>
+                            
+                            <div className="mt-4 text-xs opacity-40 group-hover:opacity-60">
+                              Click to play
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
                   )}
                 </div>
               </div>

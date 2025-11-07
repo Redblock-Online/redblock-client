@@ -28,6 +28,15 @@ export default function RegisterForm() {
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
+      // Check if we should return to editor
+      if (typeof window !== "undefined") {
+        const returnToEditor = sessionStorage.getItem("editor-return-after-login");
+        if (returnToEditor) {
+          sessionStorage.removeItem("editor-return-after-login");
+          router.push("/editor");
+          return;
+        }
+      }
       router.push("/");
     }
   }, [isAuthenticated, router]);
