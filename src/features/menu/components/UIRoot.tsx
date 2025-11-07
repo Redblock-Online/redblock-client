@@ -108,12 +108,11 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
   const calmPlaybackIdRef = useRef<string | null>(null);
   const calmCurrentTrackRef = useRef<string | null>(null);
   const calmPlaylistIndexRef = useRef<number>(0);
-  const calmAdvanceTimerRef = useRef<number | null>(null);
   const energyPlaybackIdRef = useRef<string | null>(null);
   const energyCurrentTrackRef = useRef<string | null>(null);
   const energyPlaylistIndexRef = useRef<number>(0);
-  const energyAdvanceTimerRef = useRef<number | null>(null);
   const previousMusicCategoryRef = useRef<MusicCategory>(musicCategory);
+  const musicCategoryRef = useRef<MusicCategory>(musicCategory);
   // Shuffle/order state per playlist
   const calmOrderRef = useRef<number[]>([]);
   const energyOrderRef = useRef<number[]>([]);
@@ -191,12 +190,6 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
         calmPlaybackIdRef.current = null;
       }
 
-      // Clear any pending auto-advance timers before starting a new track
-      if (calmAdvanceTimerRef.current !== null) {
-        window.clearTimeout(calmAdvanceTimerRef.current);
-        calmAdvanceTimerRef.current = null;
-      }
-
       // Load and play current track
       // Load sound (no-op if already loaded)
       await audio.loadSound(current.name, current.url, "music");
@@ -211,28 +204,6 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
         maxVoices: 1,
       });
       calmPlaybackIdRef.current = id ?? calmPlaybackIdRef.current;
-
-      // Schedule auto-advance to next track (wraps around)
-      try {
-        const prog = audio.getProgress(current.name);
-        const dur = prog?.duration ?? (audio.getSoundDuration(current.name) ?? 0);
-        let remainingMs = 0;
-        if (prog && dur > 0) {
-          remainingMs = Math.max(100, Math.floor((dur - prog.current) * 1000));
-        } else if (dur > 0) {
-          remainingMs = Math.max(100, Math.floor(dur * 1000));
-        } else {
-          // Fallback: 2 minutes if duration unknown
-          remainingMs = 120_000;
-        }
-        calmAdvanceTimerRef.current = window.setTimeout(() => {
-          // Advance logical index by +1 (getAndClampIndex handles wrap-around)
-          const nextIndex = (calmPlaylistIndexRef.current ?? 0) + 1;
-          startCalmTrack({ index: nextIndex });
-        }, remainingMs + 100); // small padding to ensure the track ended
-      } catch {
-        /* ignore scheduling errors */
-      }
     } catch (error) {
       console.error('[UIRoot] Error in startCalmTrack:', error);
     }
@@ -274,12 +245,6 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
         energyPlaybackIdRef.current = null;
       }
 
-      // Clear any pending auto-advance timers before starting a new track
-      if (energyAdvanceTimerRef.current !== null) {
-        window.clearTimeout(energyAdvanceTimerRef.current);
-        energyAdvanceTimerRef.current = null;
-      }
-
       // Load and play current track
       // Load sound (no-op if already loaded)
       await audio.loadSound(current.name, current.url, "music");
@@ -294,25 +259,6 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
         maxVoices: 1,
       });
       energyPlaybackIdRef.current = id ?? energyPlaybackIdRef.current;
-      // Schedule auto-advance to next energy track
-      try {
-        const prog = audio.getProgress(current.name);
-        const dur = prog?.duration ?? (audio.getSoundDuration(current.name) ?? 0);
-        let remainingMs = 0;
-        if (prog && dur > 0) {
-          remainingMs = Math.max(100, Math.floor((dur - prog.current) * 1000));
-        } else if (dur > 0) {
-          remainingMs = Math.max(100, Math.floor(dur * 1000));
-        } else {
-          remainingMs = 120_000;
-        }
-        energyAdvanceTimerRef.current = window.setTimeout(() => {
-          const nextIndex = (energyPlaylistIndexRef.current ?? 0) + 1;
-          startEnergyTrack({ index: nextIndex });
-        }, remainingMs + 100);
-      } catch {
-        /* ignore scheduling errors */
-      }
     } catch {
       /* ignore */
     }
@@ -321,6 +267,33 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
   useEffect(() => {
     pausedRef.current = paused;
   }, [paused]);
+
+  useEffect(() => {
+    musicCategoryRef.current = musicCategory;
+  }, [musicCategory]);
+
+  useEffect(() => {
+    const audio = AudioManager.getInstance();
+    const unsubscribe = audio.onSoundEnded((soundName) => {
+      const category = musicCategoryRef.current;
+      if (category === "calm") {
+        const current = calmCurrentTrackRef.current;
+        if (current && current === soundName) {
+          const nextIndex = (calmPlaylistIndexRef.current ?? 0) + 1;
+          startCalmTrack({ index: nextIndex }).catch(() => {});
+        }
+      } else if (category === "energy") {
+        const current = energyCurrentTrackRef.current;
+        if (current && current === soundName) {
+          const nextIndex = (energyPlaylistIndexRef.current ?? 0) + 1;
+          startEnergyTrack({ index: nextIndex }).catch(() => {});
+        }
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [startCalmTrack, startEnergyTrack]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -377,11 +350,6 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
       previousMusicCategoryRef.current = musicCategory;
 
       if (musicCategory === "calm") {
-        // Switching to calm: clear energy auto-advance timer
-        if (energyAdvanceTimerRef.current !== null) {
-          window.clearTimeout(energyAdvanceTimerRef.current);
-          energyAdvanceTimerRef.current = null;
-        }
         // Stop energy tracks when switching to calm
         if (energyPlaybackIdRef.current) {
           audio.stop(energyPlaybackIdRef.current);
@@ -406,13 +374,8 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
         audio.stop(calmPlaybackIdRef.current);
         calmPlaybackIdRef.current = null;
       }
-      if (calmAdvanceTimerRef.current !== null) {
-        window.clearTimeout(calmAdvanceTimerRef.current);
-        calmAdvanceTimerRef.current = null;
-      }
 
       if (musicCategory === "energy") {
-        // Switching to energy: clear calm auto-advance timer handled above
         if (previousCategory !== "energy") {
           energyPlaylistIndexRef.current = readPlaylistIndex("energy");
         }
@@ -427,33 +390,11 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
       if (musicCategory === "none") {
         calmTrackNames().forEach((track) => audio.stopAllByName(track));
         energyTrackNames().forEach((name) => audio.stopAllByName(name));
-        if (calmAdvanceTimerRef.current !== null) {
-          window.clearTimeout(calmAdvanceTimerRef.current);
-          calmAdvanceTimerRef.current = null;
-        }
-        if (energyAdvanceTimerRef.current !== null) {
-          window.clearTimeout(energyAdvanceTimerRef.current);
-          energyAdvanceTimerRef.current = null;
-        }
       }
     } catch {
       /* ignore */
     }
   }, [musicCategory, startCalmTrack, startEnergyTrack]);
-
-  // Cleanup timers on unmount
-  useEffect(() => {
-    return () => {
-      if (calmAdvanceTimerRef.current !== null) {
-        window.clearTimeout(calmAdvanceTimerRef.current);
-        calmAdvanceTimerRef.current = null;
-      }
-      if (energyAdvanceTimerRef.current !== null) {
-        window.clearTimeout(energyAdvanceTimerRef.current);
-        energyAdvanceTimerRef.current = null;
-      }
-    };
-  }, []);
 
   // Handle external music control events (prev/next/play-stop/shuffle)
   useEffect(() => {
@@ -490,18 +431,6 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
       const isPlaying = audio.isPlaying(name);
       if (isPlaying) {
         audio.pauseByName(name);
-        // Clear auto-advance timers when pausing
-        if (category === 'calm') {
-          if (calmAdvanceTimerRef.current !== null) {
-            window.clearTimeout(calmAdvanceTimerRef.current);
-            calmAdvanceTimerRef.current = null;
-          }
-        } else if (category === 'energy') {
-          if (energyAdvanceTimerRef.current !== null) {
-            window.clearTimeout(energyAdvanceTimerRef.current);
-            energyAdvanceTimerRef.current = null;
-          }
-        }
       } else {
         // Guarantee no other music plays concurrently
         audio.stopAllInChannelExcept('music', name);
@@ -510,30 +439,6 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
           // If resume failed (no paused offset), start from current logical index
           if (category === 'calm') startCalmTrack({ index: calmPlaylistIndexRef.current ?? 0 });
           else startEnergyTrack({ index: energyPlaylistIndexRef.current ?? 0 });
-        } else {
-          // Resumed successfully: re-schedule auto-advance based on remaining time
-          try {
-            const prog = audio.getProgress(name);
-            const dur = prog?.duration ?? (audio.getSoundDuration(name) ?? 0);
-            if (dur > 0 && prog) {
-              const remainingMs = Math.max(100, Math.floor((dur - prog.current) * 1000));
-              if (category === 'calm') {
-                if (calmAdvanceTimerRef.current !== null) window.clearTimeout(calmAdvanceTimerRef.current);
-                calmAdvanceTimerRef.current = window.setTimeout(() => {
-                  const nextIndex = (calmPlaylistIndexRef.current ?? 0) + 1;
-                  startCalmTrack({ index: nextIndex });
-                }, remainingMs + 100);
-              } else if (category === 'energy') {
-                if (energyAdvanceTimerRef.current !== null) window.clearTimeout(energyAdvanceTimerRef.current);
-                energyAdvanceTimerRef.current = window.setTimeout(() => {
-                  const nextIndex = (energyPlaylistIndexRef.current ?? 0) + 1;
-                  startEnergyTrack({ index: nextIndex });
-                }, remainingMs + 100);
-              }
-            }
-          } catch {
-            /* ignore */
-          }
         }
       }
     };

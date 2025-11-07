@@ -127,6 +127,7 @@ export class AudioManager {
   private lastMissingWarn = new Map<string, number>();
   // Track paused offsets for sounds that cannot be paused natively (WebAudio one-shots)
   private pausedOffsets = new Map<string, number>(); // seconds, keyed by sound name
+  private soundEndedListeners = new Set<(name: string) => void>();
 
   private constructor() {
     // Load volumes from localStorage with defaults
@@ -265,6 +266,34 @@ export class AudioManager {
         /* ignore */
       }
     }
+  }
+
+  /**
+   * Subscribe to natural sound completion events (non-looping playback).
+   * Returns an unsubscribe function for convenience.
+   */
+  public onSoundEnded(listener: (name: string) => void): () => void {
+    this.soundEndedListeners.add(listener);
+    return () => {
+      this.soundEndedListeners.delete(listener);
+    };
+  }
+
+  public removeSoundEndedListener(listener: (name: string) => void): void {
+    this.soundEndedListeners.delete(listener);
+  }
+
+  private emitSoundEnded(name: string): void {
+    if (this.soundEndedListeners.size === 0) return;
+    this.soundEndedListeners.forEach((listener) => {
+      try {
+        listener(name);
+      } catch (error) {
+        if (process.env.NODE_ENV !== "production") {
+          console.warn("[AudioManager] soundEnded listener threw:", error);
+        }
+      }
+    });
   }
 
   // Ensure the audio context is resumed at most once. Returns a promise that resolves
@@ -754,6 +783,7 @@ export class AudioManager {
         source.addEventListener(
           "ended",
           () => {
+            this.emitSoundEnded(name);
             this.stop(id);
           },
           { once: true }
@@ -841,6 +871,7 @@ export class AudioManager {
       audio.addEventListener(
         "ended",
         () => {
+          this.emitSoundEnded(name);
           this.stop(id);
         },
         { once: true }
