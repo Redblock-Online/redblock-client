@@ -1270,6 +1270,16 @@ function createEmptyStats(): StoredStats {
     console.log('[App] Targets reset via TargetManager');
   }
 
+  public resetCustomScenarioState(): void {
+    // Clear any generator metadata or completion state from previous custom loads
+    this.generatorMetadata = new Map();
+    this.completedGenerators.clear();
+
+    // Reset target references so fresh custom targets can populate cleanly
+    this.targets = [];
+    this.scene.targets = this.targets;
+  }
+
   private clearScenarioPortals() {
     // Hide portals instead of removing them (for reuse)
     this.scenarioPortals.forEach((portal) => {
