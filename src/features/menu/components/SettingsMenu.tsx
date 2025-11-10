@@ -12,7 +12,7 @@ import PlayingIndicator from "./atoms/PlayingIndicator";
 import { FaInfoCircle, FaPause, FaPlay, FaRandom, FaStepBackward, FaStepForward } from "react-icons/fa";
 import { getTrackTitle } from "@/config/musicTitles";
 
-type Tab = "game" | "controls" | "audio" | "video" | "gameplay" | "account";
+type Tab = "game" | "controls" | "sensitivity" | "audio" | "video" | "gameplay" | "account";
 
 type Props = {
   visible: boolean;
@@ -120,6 +120,7 @@ const FPS_OPTIONS = [
 const TAB_LABELS: Record<Tab, string> = {
   game: "GAME",
   controls: "CONTROLS",
+  sensitivity: "SENSITIVITY",
   audio: "AUDIO",
   video: "VIDEO",
   gameplay: "GAMEPLAY",
@@ -133,6 +134,108 @@ const MUSIC_CATEGORY_LABELS: Record<MusicCategory, string> = {
 };
 
 const MUSIC_CATEGORIES: MusicCategory[] = ["none", "energy", "calm"];
+
+type SensitivityMode = "manual" | "preset";
+
+interface GamePreset {
+  id: string;
+  name: string;
+  sensitivity: number;
+}
+
+// Game sensitivity presets
+// Each game has its own sensitivity value that should be used directly
+const GAME_PRESETS: GamePreset[] = [
+  { id: "apex-legends", name: "Apex Legends", sensitivity: 1 },
+  { id: "arc-raiders", name: "ARC Raiders", sensitivity: 16.165 },
+  { id: "arena-breakout-infinite", name: "Arena Breakout: Infinite", sensitivity: 0.215 },
+  { id: "ark-survival-evolved", name: "ARK: Survival Evolved", sensitivity: 0.126 },
+  { id: "back-4-blood", name: "Back 4 Blood", sensitivity: 16.165 },
+  { id: "battlebit-remastered", name: "BattleBit Remastered", sensitivity: 44 },
+  { id: "battlefield-1", name: "Battlefield 1", sensitivity: 3.066 },
+  { id: "battlefield-2042", name: "Battlefield 2042", sensitivity: 3.066 },
+  { id: "battlefield-4", name: "Battlefield 4", sensitivity: 3.066 },
+  { id: "battlefield-6", name: "Battlefield 6", sensitivity: 11.338 },
+  { id: "battlefield-v", name: "Battlefield V", sensitivity: 3.066 },
+  { id: "black-squad", name: "Black Squad", sensitivity: 4.005 },
+  { id: "borderlands-3", name: "Borderlands 3", sensitivity: 3.143 },
+  { id: "call-of-duty-black-ops-4", name: "Call of Duty: Black Ops 4", sensitivity: 3.333 },
+  { id: "call-of-duty-black-ops-6", name: "Call of Duty: Black Ops 6", sensitivity: 3.333 },
+  { id: "call-of-duty-black-ops-7", name: "Call of Duty: Black Ops 7", sensitivity: 3.333 },
+  { id: "call-of-duty-black-ops-cold-war", name: "Call of Duty: Black Ops Cold War", sensitivity: 3.333 },
+  { id: "call-of-duty-modern-warfare-2019", name: "Call of Duty: Modern Warfare (2019)", sensitivity: 3.333 },
+  { id: "call-of-duty-modern-warfare-2-2022", name: "Call of Duty: Modern Warfare 2 (2022)", sensitivity: 3.333 },
+  { id: "call-of-duty-modern-warfare-3-2023", name: "Call of Duty: Modern Warfare 3 (2023)", sensitivity: 3.333 },
+  { id: "call-of-duty-vanguard", name: "Call of Duty: Vanguard", sensitivity: 3.333 },
+  { id: "call-of-duty-warzone", name: "Call of Duty: Warzone", sensitivity: 3.333 },
+  { id: "combat-master", name: "Combat Master", sensitivity: 22 },
+  { id: "cs-1-6", name: "CS 1.6", sensitivity: 1 },
+  { id: "cs2", name: "CS2", sensitivity: 1 },
+  { id: "csgo", name: "CS:GO", sensitivity: 1 },
+  { id: "css", name: "CS:S", sensitivity: 1 },
+  { id: "cyberpunk-2077", name: "Cyberpunk 2077", sensitivity: 2.2 },
+  { id: "deadlock", name: "Deadlock", sensitivity: 0.5 },
+  { id: "delta-force", name: "Delta Force", sensitivity: 2.2 },
+  { id: "destiny-2", name: "Destiny 2", sensitivity: 3.333 },
+  { id: "doom-eternal", name: "DOOM Eternal", sensitivity: 1 },
+  { id: "doom-the-dark-ages", name: "DOOM: The Dark Ages", sensitivity: 1 },
+  { id: "dying-light-2", name: "Dying Light 2", sensitivity: 2.64 },
+  { id: "escape-from-tarkov", name: "Escape From Tarkov", sensitivity: 0.176 },
+  { id: "fallout-4", name: "Fallout 4", sensitivity: 0.006 },
+  { id: "fallout-76", name: "Fallout 76", sensitivity: 0.006 },
+  { id: "far-cry-5", name: "Far Cry 5", sensitivity: 12.225 },
+  { id: "fortnite", name: "Fortnite", sensitivity: 3.96 },
+  { id: "fragpunk", name: "FragPunk", sensitivity: 0.396 },
+  { id: "garrys-mod", name: "Garry's Mod", sensitivity: 1 },
+  { id: "gray-zone-warfare", name: "Gray Zone Warfare", sensitivity: 0.349 },
+  { id: "gta-5-tpp", name: "GTA 5 (TPP)", sensitivity: -1.983 },
+  { id: "half-life-2", name: "Half-Life 2", sensitivity: 1 },
+  { id: "halo-infinite", name: "Halo Infinite", sensitivity: 0.978 },
+  { id: "halo-reach", name: "Halo: Reach", sensitivity: 0.99 },
+  { id: "helldivers-2", name: "Helldivers 2", sensitivity: 0.038 },
+  { id: "heroes-generals", name: "Heroes & Generals", sensitivity: 0.145 },
+  { id: "hunt-showdown", name: "Hunt: Showdown", sensitivity: 0.512 },
+  { id: "insurgency-sandstorm", name: "Insurgency: Sandstorm", sensitivity: 0.157 },
+  { id: "left-4-dead-2", name: "Left 4 Dead 2", sensitivity: 1 },
+  { id: "marvel-rivals", name: "Marvel Rivals", sensitivity: 1.257 },
+  { id: "minecraft-java-edition", name: "Minecraft: Java Edition", sensitivity: 21.227 },
+  { id: "off-the-grid", name: "Off The Grid", sensitivity: 0.314 },
+  { id: "osu", name: "osu!", sensitivity: 0.276 },
+  { id: "overwatch-2", name: "Overwatch 2", sensitivity: 3.333 },
+  { id: "paladins", name: "Paladins", sensitivity: 2.403 },
+  { id: "palworld", name: "Palworld", sensitivity: 0.503 },
+  { id: "payday-2", name: "PAYDAY 2", sensitivity: 1.467 },
+  { id: "pubg-tpp", name: "PUBG (TPP)", sensitivity: 31.714 },
+  { id: "quake-champions", name: "Quake Champions", sensitivity: 1 },
+  { id: "rainbow-six-extraction", name: "Rainbow Six Extraction", sensitivity: 3.84 },
+  { id: "rainbow-six-siege", name: "Rainbow Six Siege", sensitivity: 3.84 },
+  { id: "redmatch-2", name: "Redmatch 2", sensitivity: 0.44 },
+  { id: "rematch", name: "REMATCH", sensitivity: 0.199 },
+  { id: "roblox", name: "Roblox", sensitivity: 0.055 },
+  { id: "rust", name: "Rust", sensitivity: 0.196 },
+  { id: "spectre-divide", name: "Spectre Divide", sensitivity: 0.308 },
+  { id: "spellbreak", name: "Spellbreak", sensitivity: 2.75 },
+  { id: "splitgate", name: "Splitgate", sensitivity: 1.969 },
+  { id: "splitgate-2", name: "Splitgate 2", sensitivity: 1.969 },
+  { id: "squad", name: "Squad", sensitivity: 0.126 },
+  { id: "stalker-2", name: "STALKER 2", sensitivity: 0.476 },
+  { id: "straftat", name: "STRAFTAT", sensitivity: 0.22 },
+  { id: "strinova", name: "Strinova", sensitivity: 1.585 },
+  { id: "team-fortress-2", name: "Team Fortress 2", sensitivity: 1 },
+  { id: "the-finals", name: "THE FINALS", sensitivity: 22 },
+  { id: "the-first-descendant", name: "The First Descendant", sensitivity: 4.601 },
+  { id: "titanfall-2", name: "Titanfall 2", sensitivity: 1 },
+  { id: "unturned", name: "Unturned", sensitivity: 0.044 },
+  { id: "valheim", name: "Valheim", sensitivity: 0.44 },
+  { id: "valorant", name: "Valorant", sensitivity: 0.314 },
+  { id: "warface", name: "Warface", sensitivity: 6.607 },
+  { id: "xdefiant", name: "XDefiant", sensitivity: 12.208 },
+  { id: "aimlabs", name: "Aimlabs", sensitivity: 0.44 },
+];
+
+// Use all game presets (including negative values like GTA 5)
+const VALID_GAME_PRESETS = GAME_PRESETS;
+
 const TAB_PANEL_MAX_HEIGHT = 400;
 const TAB_PANEL_VERTICAL_PADDING = 32; // accounts for p-4 (top+bottom) + small buffer
 
@@ -140,12 +243,14 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   const [activeTab, setActiveTab] = useState<Tab>("game");
   const [controlsHeight, setControlsHeight] = useState(0);
   const [gameHeight, setGameHeight] = useState(0);
+  const [sensitivityHeight, setSensitivityHeight] = useState(0);
   const [audioHeight, setAudioHeight] = useState(0);
   const [videoHeight, setVideoHeight] = useState(0);
   const [otherTabsHeight, setOtherTabsHeight] = useState(198);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const controlsContentRef = useRef<HTMLDivElement>(null);
   const gameContentRef = useRef<HTMLDivElement>(null);
+  const sensitivityContentRef = useRef<HTMLDivElement>(null);
   const audioContentRef = useRef<HTMLDivElement>(null);
   const videoContentRef = useRef<HTMLDivElement>(null);
   const otherTabsContentRef = useRef<HTMLDivElement>(null);
@@ -157,6 +262,16 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   const [sensitivity, setSensitivity] = useState<string>(() => {
     const saved = localStorage.getItem("mouseSensitivity");
     return saved ?? "1";
+  });
+
+  const [sensitivityMode, setSensitivityMode] = useState<SensitivityMode>(() => {
+    const saved = localStorage.getItem("sensitivityMode");
+    return (saved === "manual" || saved === "preset") ? saved : "manual";
+  });
+
+  const [selectedGameId, setSelectedGameId] = useState<string | null>(() => {
+    const saved = localStorage.getItem("selectedSensitivityGame");
+    return saved || "cs2";
   });
 
   const [keybindings, setKeybindings] = useState<Keybindings>(() => {
@@ -364,6 +479,10 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
         const height = gameContentRef.current.scrollHeight;
         setGameHeight(height);
         console.log("Game height set to:", height);
+      } else if (activeTab === "sensitivity" && sensitivityContentRef.current) {
+        const height = sensitivityContentRef.current.scrollHeight;
+        setSensitivityHeight(height);
+        console.log("Sensitivity height set to:", height);
       } else if (activeTab === "audio" && audioContentRef.current) {
         const height = audioContentRef.current.scrollHeight;
         setAudioHeight(height);
@@ -372,7 +491,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
         const height = videoContentRef.current.scrollHeight;
         setVideoHeight(height);
         console.log("Video height set to:", height);
-      } else if (activeTab !== "controls" && activeTab !== "game" && activeTab !== "audio" && activeTab !== "video" && otherTabsContentRef.current) {
+      } else if (activeTab !== "controls" && activeTab !== "game" && activeTab !== "sensitivity" && activeTab !== "audio" && activeTab !== "video" && otherTabsContentRef.current) {
         const height = otherTabsContentRef.current.scrollHeight;
         setOtherTabsHeight(height);
         console.log("Other tabs height set to:", height);
@@ -428,6 +547,18 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       return () => clearTimeout(timer);
     }
   }, [graphicsSettings, activeTab, visible]);
+
+  // Recalculate sensitivity height when sensitivity, mode, or selected game changes
+  useEffect(() => {
+    if (activeTab === "sensitivity" && sensitivityContentRef.current && visible) {
+      const timer = setTimeout(() => {
+        const height = sensitivityContentRef.current?.scrollHeight || 0;
+        setSensitivityHeight(height);
+        console.log("Sensitivity height recalculated:", height);
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [sensitivity, sensitivityMode, selectedGameId, activeTab, visible]);
 
   // Scroll reset confirmation into view when it appears
   useEffect(() => {
@@ -489,6 +620,29 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   useEffect(() => {
     localStorage.setItem("mouseSensitivity", sensitivity);
   }, [sensitivity]);
+
+  useEffect(() => {
+    localStorage.setItem("sensitivityMode", sensitivityMode);
+  }, [sensitivityMode]);
+
+  useEffect(() => {
+    if (selectedGameId) {
+      localStorage.setItem("selectedSensitivityGame", selectedGameId);
+    } else {
+      localStorage.removeItem("selectedSensitivityGame");
+    }
+  }, [selectedGameId]);
+
+  // Initialize sensitivity when switching to preset mode or when game is selected
+  useEffect(() => {
+    if (sensitivityMode === "preset" && selectedGameId) {
+      const selectedGame = VALID_GAME_PRESETS.find(g => g.id === selectedGameId);
+      if (selectedGame) {
+        const gameSensitivity = selectedGame.sensitivity.toString();
+        setSensitivity(gameSensitivity);
+      }
+    }
+  }, [sensitivityMode, selectedGameId]);
 
   useEffect(() => {
     localStorage.setItem("keybindings", JSON.stringify(keybindings));
@@ -724,7 +878,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
 
   if (!visible) return null;
 
-  const tabs: Tab[] = ["game", "controls", "audio", "video"];
+  const tabs: Tab[] = ["game", "controls", "sensitivity", "audio", "video"];
   const scaleValue = hudScale / 100;
 
   const computeDisplayHeight = (height: number, fallback: number) => {
@@ -736,6 +890,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
 
   const controlsDisplayHeight = computeDisplayHeight(controlsHeight, TAB_PANEL_MAX_HEIGHT);
   const gameDisplayHeight = computeDisplayHeight(gameHeight, TAB_PANEL_MAX_HEIGHT);
+  const sensitivityDisplayHeight = computeDisplayHeight(sensitivityHeight, TAB_PANEL_MAX_HEIGHT);
   const audioDisplayHeight = computeDisplayHeight(audioHeight, 300);
   const videoDisplayHeight = computeDisplayHeight(videoHeight, 300);
   const otherDisplayHeight = computeDisplayHeight(otherTabsHeight, 198);
@@ -745,6 +900,8 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       ? controlsHeight
       : activeTab === "game"
       ? gameHeight
+      : activeTab === "sensitivity"
+      ? sensitivityHeight
       : activeTab === "audio"
       ? audioHeight
       : activeTab === "video"
@@ -760,6 +917,8 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       ? controlsDisplayHeight
       : activeTab === "game"
       ? gameDisplayHeight
+      : activeTab === "sensitivity"
+      ? sensitivityDisplayHeight
       : activeTab === "video"
       ? videoDisplayHeight
       : otherDisplayHeight;
@@ -769,6 +928,8 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       ? `${controlsDisplayHeight}px`
       : activeTab === "game"
       ? `${gameDisplayHeight}px`
+      : activeTab === "sensitivity"
+      ? `${sensitivityDisplayHeight}px`
       : activeTab === "audio"
       ? `${audioDisplayHeight}px`
       : activeTab === "video"
@@ -829,28 +990,6 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
             }`}
           >
             <div className="flex flex-col gap-2">
-              {/* Sensitivity slider */}
-              <div className="flex items-center justify-between gap-3 px-4 py-2 border-[3px] border-black bg-white">
-                <span className="font-mono font-bold text-xs tracking-wider uppercase whitespace-nowrap">
-                  Mouse Sensitivity
-                </span>
-                <div className="flex items-center gap-3 flex-1 max-w-[300px]">
-                  <input
-                    type="range"
-                    min="0.01"
-                    max="2.0"
-                    step="0.01"
-                    value={sensitivity}
-                    onChange={onSensitivityInput}
-                    className="sensitivity-slider flex-1"
-                    id="sensitivityRange"
-                  />
-                  <span className="font-mono font-bold text-xs min-w-[40px] text-right" id="sensitivityValue">
-                    {parseFloat(sensitivity || "0").toFixed(2)}
-                  </span>
-                </div>
-              </div>
-
               {/* Keybindings section */}
               <div className="flex flex-col gap-2 mt-2">
                 <KeybindInput
@@ -942,6 +1081,82 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* Sensitivity tab content */}
+          <div
+            ref={sensitivityContentRef}
+            className={`transition-opacity duration-300 ${
+              activeTab === "sensitivity" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
+            }`}
+          >
+            <div className="flex flex-col gap-2">
+              {/* Mode selector */}
+              <SelectInput
+                label="Sensitivity Mode"
+                value={sensitivityMode}
+                options={[
+                  { value: "manual", label: "Manual" },
+                  { value: "preset", label: "Preset" },
+                ]}
+                onChange={(value) => {
+                  setSensitivityMode(value as SensitivityMode);
+                  playButtonClick();
+                }}
+              />
+
+              {/* Manual mode - Slider */}
+              {sensitivityMode === "manual" && (
+                <div className="flex items-center justify-between gap-3 px-4 py-2 border-[3px] border-black bg-white">
+                  <span className="font-mono font-bold text-xs tracking-wider uppercase whitespace-nowrap">
+                    Mouse Sensitivity
+                  </span>
+                  <div className="flex items-center gap-3 flex-1 max-w-[300px]">
+                    <input
+                      type="range"
+                      min="-5"
+                      max="50"
+                      step="0.001"
+                      value={sensitivity}
+                      onChange={onSensitivityInput}
+                      className="sensitivity-slider flex-1"
+                      id="sensitivityRange"
+                    />
+                    <span className="font-mono font-bold text-xs min-w-[40px] text-right" id="sensitivityValue">
+                      {parseFloat(sensitivity || "0").toFixed(3)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Preset mode - Game Select */}
+              {sensitivityMode === "preset" && (
+                <SelectInput
+                  label="Select Game"
+                  value={selectedGameId || "cs2"}
+                  options={VALID_GAME_PRESETS.map(game => ({
+                    value: game.id,
+                    label: game.name,
+                  }))}
+                  onChange={(value) => {
+                    if (value) {
+                      const selectedGame = VALID_GAME_PRESETS.find(g => g.id === value);
+                      if (selectedGame) {
+                        setSelectedGameId(value);
+                        const sensitivityValue = selectedGame.sensitivity.toString();
+                        setSensitivity(sensitivityValue);
+                        playButtonClick();
+                        // Trigger the same event that the slider would
+                        const numericValue = parseFloat(sensitivityValue);
+                        if (!Number.isNaN(numericValue)) {
+                          playSensitivitySliderSound(numericValue);
+                        }
+                      }
+                    }
+                  }}
+                />
+              )}
             </div>
           </div>
           
@@ -1254,7 +1469,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
           {/* Other tabs content */}
           <div
             className={`transition-opacity duration-300 ${
-              activeTab !== "controls" && activeTab !== "game" && activeTab !== "audio" && activeTab !== "video" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
+              activeTab !== "controls" && activeTab !== "game" && activeTab !== "sensitivity" && activeTab !== "audio" && activeTab !== "video" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
             }`}
           >
             <div className="flex items-center justify-center min-h-[150px]">
