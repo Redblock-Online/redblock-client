@@ -12,7 +12,7 @@ import PlayingIndicator from "./atoms/PlayingIndicator";
 import { FaInfoCircle, FaPause, FaPlay, FaRandom, FaStepBackward, FaStepForward } from "react-icons/fa";
 import { getTrackTitle } from "@/config/musicTitles";
 
-type Tab = "game" | "controls" | "audio" | "video" | "gameplay" | "account";
+type Tab = "game" | "controls" | "sensitivity" | "audio" | "video" | "gameplay" | "account";
 
 type Props = {
   visible: boolean;
@@ -120,6 +120,7 @@ const FPS_OPTIONS = [
 const TAB_LABELS: Record<Tab, string> = {
   game: "GAME",
   controls: "CONTROLS",
+  sensitivity: "SENSITIVITY",
   audio: "AUDIO",
   video: "VIDEO",
   gameplay: "GAMEPLAY",
@@ -140,12 +141,14 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   const [activeTab, setActiveTab] = useState<Tab>("game");
   const [controlsHeight, setControlsHeight] = useState(0);
   const [gameHeight, setGameHeight] = useState(0);
+  const [sensitivityHeight, setSensitivityHeight] = useState(0);
   const [audioHeight, setAudioHeight] = useState(0);
   const [videoHeight, setVideoHeight] = useState(0);
   const [otherTabsHeight, setOtherTabsHeight] = useState(198);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const controlsContentRef = useRef<HTMLDivElement>(null);
   const gameContentRef = useRef<HTMLDivElement>(null);
+  const sensitivityContentRef = useRef<HTMLDivElement>(null);
   const audioContentRef = useRef<HTMLDivElement>(null);
   const videoContentRef = useRef<HTMLDivElement>(null);
   const otherTabsContentRef = useRef<HTMLDivElement>(null);
@@ -364,6 +367,10 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
         const height = gameContentRef.current.scrollHeight;
         setGameHeight(height);
         console.log("Game height set to:", height);
+      } else if (activeTab === "sensitivity" && sensitivityContentRef.current) {
+        const height = sensitivityContentRef.current.scrollHeight;
+        setSensitivityHeight(height);
+        console.log("Sensitivity height set to:", height);
       } else if (activeTab === "audio" && audioContentRef.current) {
         const height = audioContentRef.current.scrollHeight;
         setAudioHeight(height);
@@ -372,7 +379,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
         const height = videoContentRef.current.scrollHeight;
         setVideoHeight(height);
         console.log("Video height set to:", height);
-      } else if (activeTab !== "controls" && activeTab !== "game" && activeTab !== "audio" && activeTab !== "video" && otherTabsContentRef.current) {
+      } else if (activeTab !== "controls" && activeTab !== "game" && activeTab !== "sensitivity" && activeTab !== "audio" && activeTab !== "video" && otherTabsContentRef.current) {
         const height = otherTabsContentRef.current.scrollHeight;
         setOtherTabsHeight(height);
         console.log("Other tabs height set to:", height);
@@ -428,6 +435,18 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       return () => clearTimeout(timer);
     }
   }, [graphicsSettings, activeTab, visible]);
+
+  // Recalculate sensitivity height when sensitivity changes
+  useEffect(() => {
+    if (activeTab === "sensitivity" && sensitivityContentRef.current && visible) {
+      const timer = setTimeout(() => {
+        const height = sensitivityContentRef.current?.scrollHeight || 0;
+        setSensitivityHeight(height);
+        console.log("Sensitivity height recalculated:", height);
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [sensitivity, activeTab, visible]);
 
   // Scroll reset confirmation into view when it appears
   useEffect(() => {
@@ -724,7 +743,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
 
   if (!visible) return null;
 
-  const tabs: Tab[] = ["game", "controls", "audio", "video"];
+  const tabs: Tab[] = ["game", "controls", "sensitivity", "audio", "video"];
   const scaleValue = hudScale / 100;
 
   const computeDisplayHeight = (height: number, fallback: number) => {
@@ -736,6 +755,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
 
   const controlsDisplayHeight = computeDisplayHeight(controlsHeight, TAB_PANEL_MAX_HEIGHT);
   const gameDisplayHeight = computeDisplayHeight(gameHeight, TAB_PANEL_MAX_HEIGHT);
+  const sensitivityDisplayHeight = computeDisplayHeight(sensitivityHeight, TAB_PANEL_MAX_HEIGHT);
   const audioDisplayHeight = computeDisplayHeight(audioHeight, 300);
   const videoDisplayHeight = computeDisplayHeight(videoHeight, 300);
   const otherDisplayHeight = computeDisplayHeight(otherTabsHeight, 198);
@@ -745,6 +765,8 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       ? controlsHeight
       : activeTab === "game"
       ? gameHeight
+      : activeTab === "sensitivity"
+      ? sensitivityHeight
       : activeTab === "audio"
       ? audioHeight
       : activeTab === "video"
@@ -760,6 +782,8 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       ? controlsDisplayHeight
       : activeTab === "game"
       ? gameDisplayHeight
+      : activeTab === "sensitivity"
+      ? sensitivityDisplayHeight
       : activeTab === "video"
       ? videoDisplayHeight
       : otherDisplayHeight;
@@ -769,6 +793,8 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       ? `${controlsDisplayHeight}px`
       : activeTab === "game"
       ? `${gameDisplayHeight}px`
+      : activeTab === "sensitivity"
+      ? `${sensitivityDisplayHeight}px`
       : activeTab === "audio"
       ? `${audioDisplayHeight}px`
       : activeTab === "video"
@@ -829,28 +855,6 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
             }`}
           >
             <div className="flex flex-col gap-2">
-              {/* Sensitivity slider */}
-              <div className="flex items-center justify-between gap-3 px-4 py-2 border-[3px] border-black bg-white">
-                <span className="font-mono font-bold text-xs tracking-wider uppercase whitespace-nowrap">
-                  Mouse Sensitivity
-                </span>
-                <div className="flex items-center gap-3 flex-1 max-w-[300px]">
-                  <input
-                    type="range"
-                    min="0.01"
-                    max="2.0"
-                    step="0.01"
-                    value={sensitivity}
-                    onChange={onSensitivityInput}
-                    className="sensitivity-slider flex-1"
-                    id="sensitivityRange"
-                  />
-                  <span className="font-mono font-bold text-xs min-w-[40px] text-right" id="sensitivityValue">
-                    {parseFloat(sensitivity || "0").toFixed(2)}
-                  </span>
-                </div>
-              </div>
-
               {/* Keybindings section */}
               <div className="flex flex-col gap-2 mt-2">
                 <KeybindInput
@@ -941,6 +945,38 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+
+          {/* Sensitivity tab content */}
+          <div
+            ref={sensitivityContentRef}
+            className={`transition-opacity duration-300 ${
+              activeTab === "sensitivity" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
+            }`}
+          >
+            <div className="flex flex-col gap-2">
+              {/* Sensitivity slider */}
+              <div className="flex items-center justify-between gap-3 px-4 py-2 border-[3px] border-black bg-white">
+                <span className="font-mono font-bold text-xs tracking-wider uppercase whitespace-nowrap">
+                  Mouse Sensitivity
+                </span>
+                <div className="flex items-center gap-3 flex-1 max-w-[300px]">
+                  <input
+                    type="range"
+                    min="0.01"
+                    max="2.0"
+                    step="0.01"
+                    value={sensitivity}
+                    onChange={onSensitivityInput}
+                    className="sensitivity-slider flex-1"
+                    id="sensitivityRange"
+                  />
+                  <span className="font-mono font-bold text-xs min-w-[40px] text-right" id="sensitivityValue">
+                    {parseFloat(sensitivity || "0").toFixed(2)}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -1254,7 +1290,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
           {/* Other tabs content */}
           <div
             className={`transition-opacity duration-300 ${
-              activeTab !== "controls" && activeTab !== "game" && activeTab !== "audio" && activeTab !== "video" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
+              activeTab !== "controls" && activeTab !== "game" && activeTab !== "sensitivity" && activeTab !== "audio" && activeTab !== "video" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
             }`}
           >
             <div className="flex items-center justify-center min-h-[150px]">
