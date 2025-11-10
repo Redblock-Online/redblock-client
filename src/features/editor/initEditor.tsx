@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { StrictMode } from "react";
+import { AudioManager } from "@/utils/AudioManager";
 import { EditorApp } from "./core";
 import { EditorRoot } from "./ui/components";
 import { AUTO_SAVE_SCENARIO_NAME, findScenarioByName, saveScenario } from "./scenarios";
@@ -8,6 +9,79 @@ import { AUTO_SAVE_SCENARIO_NAME, findScenarioByName, saveScenario } from "./sce
 let editorAppSingleton: EditorApp | null = null;
 let reactRootSingleton: Root | null = null;
 let reactRootHostEl: HTMLElement | null = null;
+const EDITOR_MUSIC_TRACK = {
+  name: "creation-theme",
+  url: "/audio/music/creation/creation.ogg",
+} as const;
+let editorMusicId: string | null = null;
+
+function playEditorMusic(): void {
+  if (typeof window === "undefined") return;
+  const audio = AudioManager.getInstance();
+  audio.ensureResumed().catch(() => {});
+
+  const startPlayback = () => {
+    try {
+      audio.stopAllInChannelExcept("music", EDITOR_MUSIC_TRACK.name);
+    } catch {
+      /* ignore */
+    }
+    if (editorMusicId) {
+      try {
+        audio.stop(editorMusicId);
+      } catch {
+        /* ignore */
+      }
+      editorMusicId = null;
+    }
+    const id = audio.play(EDITOR_MUSIC_TRACK.name, {
+      channel: "music",
+      volume: 0.35,
+      loop: true,
+      maxVoices: 1,
+    });
+    editorMusicId = id ?? editorMusicId;
+  };
+
+  try {
+    const maybePromise = audio.loadSound(
+      EDITOR_MUSIC_TRACK.name,
+      EDITOR_MUSIC_TRACK.url,
+      "music",
+    );
+    if (maybePromise && typeof (maybePromise as Promise<void>).then === "function") {
+      (maybePromise as Promise<void>)
+        .then(startPlayback)
+        .catch((error) => {
+          console.warn("[Editor] Failed to load editor soundtrack:", error);
+          startPlayback();
+        });
+    } else {
+      startPlayback();
+    }
+  } catch (error) {
+    console.warn("[Editor] Error loading editor soundtrack:", error);
+    startPlayback();
+  }
+}
+
+function stopEditorMusic(): void {
+  if (typeof window === "undefined") return;
+  const audio = AudioManager.getInstance();
+  if (editorMusicId) {
+    try {
+      audio.stop(editorMusicId);
+    } catch {
+      /* ignore */
+    }
+    editorMusicId = null;
+  }
+  try {
+    audio.stopAllByName(EDITOR_MUSIC_TRACK.name);
+  } catch {
+    /* ignore */
+  }
+}
 
 export function initEditor(): void {
   const originalCanvas = document.getElementById("canvas");
@@ -94,9 +168,12 @@ export function initEditor(): void {
       <EditorRoot editor={editorAppSingleton} />
     </StrictMode>,
   );
+
+  playEditorMusic();
 }
 
 export function disposeEditor(): void {
+  stopEditorMusic();
   try {
     reactRootSingleton?.unmount();
   } catch {}

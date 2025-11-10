@@ -20,6 +20,32 @@ export interface GameInstance {
  */
 export async function processScenarioForGame(app: App, scenario: SerializedScenario): Promise<void> {
   console.log("[processScenarioForGame] Loading scenario:", scenario.name);
+
+  const appWithCustomGroup = app as App & { editorCubesGroup?: THREE.Group };
+
+  // Clean up any previously loaded custom scenario before loading a new one
+  const previousGroup = appWithCustomGroup.editorCubesGroup ?? (app.scene.getObjectByName("CustomScenario") as THREE.Group | undefined);
+  if (previousGroup) {
+    const targetsToDispose: Target[] = [];
+    previousGroup.traverse((obj) => {
+      app.collisionSystem.removeCollidersForObject(obj);
+      if (obj instanceof Target) {
+        targetsToDispose.push(obj);
+      }
+    });
+
+    targetsToDispose.forEach((target) => {
+      target.visible = false;
+      target.dispose();
+    });
+
+    if (previousGroup.parent) {
+      previousGroup.parent.remove(previousGroup);
+    }
+  }
+
+  appWithCustomGroup.editorCubesGroup = undefined;
+  app.resetCustomScenarioState();
   
   // Create a group to hold all custom scenario objects
   const customGroup = new THREE.Group();
@@ -80,7 +106,7 @@ export async function processScenarioForGame(app: App, scenario: SerializedScena
   });
   
   // Store reference to custom group for raycast detection
-  (app as typeof app & { editorCubesGroup?: THREE.Group }).editorCubesGroup = customGroup;
+  appWithCustomGroup.editorCubesGroup = customGroup;
   console.log("[processScenarioForGame] Stored editorCubesGroup reference for raycasting");
   
   // Wait for collision system to initialize
@@ -100,6 +126,10 @@ export async function processScenarioForGame(app: App, scenario: SerializedScena
     const spawnYaw = spawnBlock.transform.rotation.y;
     
     app.controls.teleportTo(spawnX, spawnY, spawnZ, spawnYaw);
+    const safePosition = app.collisionSystem.pushOutOfColliders(app.controls.object.position, false);
+    if (!safePosition.equals(app.controls.object.position)) {
+      app.controls.object.position.copy(safePosition);
+    }
     console.log(`[processScenarioForGame] Teleported to spawn: (${spawnX}, ${spawnY}, ${spawnZ}), yaw: ${spawnYaw}`);
   }
   
