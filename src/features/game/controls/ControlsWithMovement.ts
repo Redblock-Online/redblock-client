@@ -12,7 +12,7 @@ export default class Controls {
   private yawObject = new THREE.Object3D();
   private paused = false;
   private targets: Target[] = [];
-  private sensitivity = 0.0002;
+  private sensitivity = 0.0002; // Default sensitivity (CS2 = 1.0 maps to this value)
   private PI_2 = Math.PI / 2;
   private moveSpeed = 8;
   private velocity = new THREE.Vector3();
@@ -126,16 +126,20 @@ export default class Controls {
     this.isEditorMode = isEditorMode;
     this.audioManager = AudioManager.getInstance();
 
-    const VALORANT_M_YAW = 0.07; 
+    // CS2 sensitivity multiplier (CS2 = 1.0 is Redblock's default/base sensitivity)
+    // All game sensitivity values from the preset list are already calculated and should be used directly
+    // The multiplier converts the preset value to the internal sensitivity value
+    const CS2_M_YAW = 0.07; 
     const DEG_TO_RAD = Math.PI / 180;
-    const valorantMultiplier = VALORANT_M_YAW * DEG_TO_RAD;
+    const cs2Multiplier = CS2_M_YAW * DEG_TO_RAD;
 
-    // Initialize sensitivity from localStorage, fallback to default
+    // Initialize sensitivity from localStorage, fallback to default (CS2 = 1.0)
     const saved = localStorage.getItem("mouseSensitivity");
     if (saved !== null) {
       const v = parseFloat(saved);
       if (!Number.isNaN(v)) {
-        this.sensitivity = v * valorantMultiplier;
+        // Values are used directly as provided (already calculated relative to CS2)
+        this.sensitivity = v * cs2Multiplier;
       }
     }
     // Bind input changes (works even if slider mounts later)
@@ -144,7 +148,8 @@ export default class Controls {
       if (target && target.id === "sensitivityRange") {
         const value = parseFloat(target.value);
         if (!Number.isNaN(value)) {
-          this.sensitivity = value * valorantMultiplier;
+          // Values are used directly as provided (already calculated relative to CS2)
+          this.sensitivity = value * cs2Multiplier;
         }
       }
     };
