@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback } from "react";
+﻿import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import Button from "@/features/shared/ui/components/Button";
 import KeybindInput from "@/features/shared/ui/components/KeybindInput";
 import SliderInput from "@/features/shared/ui/components/SliderInput";
@@ -135,8 +135,6 @@ const MUSIC_CATEGORY_LABELS: Record<MusicCategory, string> = {
 
 const MUSIC_CATEGORIES: MusicCategory[] = ["none", "energy", "calm"];
 
-type SensitivityMode = "manual" | "preset";
-
 interface GamePreset {
   id: string;
   name: string;
@@ -259,20 +257,26 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   const HOVER_COOLDOWN_MS = 80;
   const lastHoverRef = useRef<number>(0);
   
-  const [sensitivity, setSensitivity] = useState<string>(() => {
-    const saved = localStorage.getItem("mouseSensitivity");
-    return saved ?? "1";
-  });
-
-  const [sensitivityMode, setSensitivityMode] = useState<SensitivityMode>(() => {
-    const saved = localStorage.getItem("sensitivityMode");
-    return (saved === "manual" || saved === "preset") ? saved : "manual";
-  });
-
-  const [selectedGameId, setSelectedGameId] = useState<string | null>(() => {
+  // Selected game for sensitivity base
+  const [selectedGameId, setSelectedGameId] = useState<string>(() => {
     const saved = localStorage.getItem("selectedSensitivityGame");
     return saved || "cs2";
   });
+
+  // Sensitivity multiplier (slider value, defaults to 1.0)
+  const [sensitivityMultiplier, setSensitivityMultiplier] = useState<string>(() => {
+    const saved = localStorage.getItem("sensitivityMultiplier");
+    return saved ?? "1.0";
+  });
+
+  // Calculate final sensitivity: game base sensitivity * multiplier
+  const finalSensitivity = useMemo(() => {
+    const selectedGame = VALID_GAME_PRESETS.find(g => g.id === selectedGameId);
+    if (!selectedGame) return "1";
+    const multiplier = parseFloat(sensitivityMultiplier) || 1.0;
+    const final = selectedGame.sensitivity * multiplier;
+    return final.toString();
+  }, [selectedGameId, sensitivityMultiplier]);
 
   const [keybindings, setKeybindings] = useState<Keybindings>(() => {
     const saved = localStorage.getItem("keybindings");
@@ -350,8 +354,16 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   const [shuffleEnabled, setShuffleEnabled] = useState(false);
 
   const sensitivityInitialNumeric = (() => {
-    const parsed = parseFloat(sensitivity);
-    return Number.isFinite(parsed) ? parsed : 1;
+    // Read from localStorage or use default multiplier
+    const saved = localStorage.getItem("sensitivityMultiplier");
+    const multiplier = saved ? parseFloat(saved) : 1.0;
+    // Get selected game sensitivity
+    const savedGame = localStorage.getItem("selectedSensitivityGame") || "cs2";
+    const selectedGame = VALID_GAME_PRESETS.find(g => g.id === savedGame);
+    const gameSensitivity = selectedGame?.sensitivity || 1;
+    // Calculate final sensitivity
+    const final = gameSensitivity * (Number.isFinite(multiplier) ? multiplier : 1.0);
+    return Number.isFinite(final) ? final : 1;
   })();
   const sensitivityPrevRef = useRef<number>(sensitivityInitialNumeric);
   const sensitivityLastSoundRef = useRef<number>(0);
@@ -548,17 +560,28 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
     }
   }, [graphicsSettings, activeTab, visible]);
 
-  // Recalculate sensitivity height when sensitivity, mode, or selected game changes
+  // Recalculate sensitivity height when sensitivity multiplier or selected game changes
   useEffect(() => {
-    if (activeTab === "sensitivity" && sensitivityContentRef.current && visible) {
+    if (sensitivityContentRef.current && visible) {
       const timer = setTimeout(() => {
-        const height = sensitivityContentRef.current?.scrollHeight || 0;
-        setSensitivityHeight(height);
-        console.log("Sensitivity height recalculated:", height);
+        // Temporarily remove h-0 to calculate height
+        const element = sensitivityContentRef.current;
+        if (element) {
+          const wasHidden = element.classList.contains("h-0");
+          if (wasHidden) {
+            element.classList.remove("h-0", "overflow-hidden");
+          }
+          const height = element.scrollHeight || 0;
+          if (wasHidden) {
+            element.classList.add("h-0", "overflow-hidden");
+          }
+          setSensitivityHeight(height);
+          console.log("Sensitivity height recalculated:", height);
+        }
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [sensitivity, sensitivityMode, selectedGameId, activeTab, visible]);
+  }, [sensitivityMultiplier, selectedGameId, activeTab, visible]);
 
   // Scroll reset confirmation into view when it appears
   useEffect(() => {
@@ -617,32 +640,20 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   // NOTE: UI sounds are preloaded at app bootstrap in `src/core/App.ts`.
   // We intentionally do not lazy-preload here to avoid repeated network/CPU work.
 
+  // Save selected game
   useEffect(() => {
-    localStorage.setItem("mouseSensitivity", sensitivity);
-  }, [sensitivity]);
-
-  useEffect(() => {
-    localStorage.setItem("sensitivityMode", sensitivityMode);
-  }, [sensitivityMode]);
-
-  useEffect(() => {
-    if (selectedGameId) {
-      localStorage.setItem("selectedSensitivityGame", selectedGameId);
-    } else {
-      localStorage.removeItem("selectedSensitivityGame");
-    }
+    localStorage.setItem("selectedSensitivityGame", selectedGameId);
   }, [selectedGameId]);
 
-  // Initialize sensitivity when switching to preset mode or when game is selected
+  // Save sensitivity multiplier
   useEffect(() => {
-    if (sensitivityMode === "preset" && selectedGameId) {
-      const selectedGame = VALID_GAME_PRESETS.find(g => g.id === selectedGameId);
-      if (selectedGame) {
-        const gameSensitivity = selectedGame.sensitivity.toString();
-        setSensitivity(gameSensitivity);
-      }
-    }
-  }, [sensitivityMode, selectedGameId]);
+    localStorage.setItem("sensitivityMultiplier", sensitivityMultiplier);
+  }, [sensitivityMultiplier]);
+
+  // Save final sensitivity to localStorage (for ControlsWithMovement)
+  useEffect(() => {
+    localStorage.setItem("mouseSensitivity", finalSensitivity);
+  }, [finalSensitivity]);
 
   useEffect(() => {
     localStorage.setItem("keybindings", JSON.stringify(keybindings));
@@ -831,12 +842,12 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
     return `${m}:${ss}`;
   };
 
-  const onSensitivityInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onSensitivityMultiplierInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const numericValue = parseFloat(e.target.value);
     if (!Number.isNaN(numericValue)) {
       playSensitivitySliderSound(numericValue);
     }
-    setSensitivity(e.target.value);
+    setSensitivityMultiplier(e.target.value);
     // ControlsWithMovement listens to #sensitivityRange input event
   };
 
@@ -1091,72 +1102,44 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
               activeTab === "sensitivity" ? "opacity-100" : "opacity-0 h-0 overflow-hidden pointer-events-none"
             }`}
           >
-            <div className="flex flex-col gap-2">
-              {/* Mode selector */}
+            <div className="flex flex-col gap-2 p-4">
+              {/* Game selector */}
               <SelectInput
-                label="Sensitivity Mode"
-                value={sensitivityMode}
-                options={[
-                  { value: "manual", label: "Manual" },
-                  { value: "preset", label: "Preset" },
-                ]}
+                label="Select Game"
+                value={selectedGameId}
+                options={VALID_GAME_PRESETS.map(game => ({
+                  value: game.id,
+                  label: game.name,
+                }))}
                 onChange={(value) => {
-                  setSensitivityMode(value as SensitivityMode);
-                  playButtonClick();
+                  if (value) {
+                    setSelectedGameId(value);
+                    playButtonClick();
+                  }
                 }}
               />
 
-              {/* Manual mode - Slider */}
-              {sensitivityMode === "manual" && (
-                <div className="flex items-center justify-between gap-3 px-4 py-2 border-[3px] border-black bg-white">
-                  <span className="font-mono font-bold text-xs tracking-wider uppercase whitespace-nowrap">
-                    Mouse Sensitivity
+              {/* Sensitivity multiplier slider */}
+              <div className="flex items-center justify-between gap-3 px-4 py-2 border-[3px] border-black bg-white">
+                <span className="font-mono font-bold text-xs tracking-wider uppercase whitespace-nowrap">
+                  Mouse Sensitivity
+                </span>
+                <div className="flex items-center gap-3 flex-1 max-w-[300px]">
+                  <input
+                    type="range"
+                    min="0.01"
+                    max="5.0"
+                    step="0.01"
+                    value={sensitivityMultiplier}
+                    onChange={onSensitivityMultiplierInput}
+                    className="sensitivity-slider flex-1"
+                    id="sensitivityRange"
+                  />
+                  <span className="font-mono font-bold text-xs min-w-[40px] text-right" id="sensitivityValue">
+                    {parseFloat(sensitivityMultiplier || "0").toFixed(2)}
                   </span>
-                  <div className="flex items-center gap-3 flex-1 max-w-[300px]">
-                    <input
-                      type="range"
-                      min="-5"
-                      max="50"
-                      step="0.001"
-                      value={sensitivity}
-                      onChange={onSensitivityInput}
-                      className="sensitivity-slider flex-1"
-                      id="sensitivityRange"
-                    />
-                    <span className="font-mono font-bold text-xs min-w-[40px] text-right" id="sensitivityValue">
-                      {parseFloat(sensitivity || "0").toFixed(3)}
-                    </span>
-                  </div>
                 </div>
-              )}
-
-              {/* Preset mode - Game Select */}
-              {sensitivityMode === "preset" && (
-                <SelectInput
-                  label="Select Game"
-                  value={selectedGameId || "cs2"}
-                  options={VALID_GAME_PRESETS.map(game => ({
-                    value: game.id,
-                    label: game.name,
-                  }))}
-                  onChange={(value) => {
-                    if (value) {
-                      const selectedGame = VALID_GAME_PRESETS.find(g => g.id === value);
-                      if (selectedGame) {
-                        setSelectedGameId(value);
-                        const sensitivityValue = selectedGame.sensitivity.toString();
-                        setSensitivity(sensitivityValue);
-                        playButtonClick();
-                        // Trigger the same event that the slider would
-                        const numericValue = parseFloat(sensitivityValue);
-                        if (!Number.isNaN(numericValue)) {
-                          playSensitivitySliderSound(numericValue);
-                        }
-                      }
-                    }
-                  }}
-                />
-              )}
+              </div>
             </div>
           </div>
           
