@@ -30,3 +30,4 @@ dist-ssr
 # Next.js
 .next
 tsconfig.tsbuildinfo
+next-env.d.ts
