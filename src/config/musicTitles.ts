@@ -10,6 +10,11 @@ export const MUSIC_TRACK_TITLES: Record<string, string> = {
   // energy playlist
   // ---------------
   signal: "Signal",
+
+  // test songs
+  test1: "test1",
+  test2: "test2",
+  test3: "test3",
 };
 
 /**
@@ -27,9 +32,9 @@ export function getTrackTitle(
   let base = parts[parts.length - 1] || name;
   base = base.replace(/\.[^.]+$/, ""); // remove extension like .ogg
   const key = base.toLowerCase();
-  const mapped = MUSIC_TRACK_TITLES[key];
+  const musicMapped = MUSIC_TRACK_TITLES[key];
 
-  if (mapped) return mapped;
+  if (musicMapped) return musicMapped;
 
   // Fallback: humanize the base name (replace separators, title-case words)
   const human = base

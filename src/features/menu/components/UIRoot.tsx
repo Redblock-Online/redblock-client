@@ -21,7 +21,7 @@ type Props = {
   onExit?: () => void;
 };
 
-type MusicCategory = "none" | "energy" | "calm";
+type MusicCategory = "none" | "energy" | "calm" |  "test";
 
 const DEFAULT_MUSIC_CATEGORY: MusicCategory = "calm";
 
@@ -34,10 +34,18 @@ const PLAYLISTS: Record<Exclude<MusicCategory, "none">, TrackDef[]> = {
     { name: "uncausal", url: "/audio/music/calm/uncasual.ogg" },
     { name: "voices", url: "/audio/music/calm/voices.ogg" },
   ],
+
   // Energy playlist
   energy: [
     { name: "signal", url: "/audio/music/energy/signal.ogg" },
   ],
+
+  // Test playlist for tobbleshoot
+  test: [
+    { name: "test1", url: "/audio/music/test/test1.ogg" },
+    { name: "test2", url: "/audio/music/test/test2.ogg" },
+    { name: "test3", url: "/audio/music/test/test3.ogg" },
+  ]
 };
 
 // Helper: derive track name lists from PLAYLISTS

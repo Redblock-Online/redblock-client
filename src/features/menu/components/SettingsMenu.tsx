@@ -95,7 +95,7 @@ const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   musicVolume: 0.7,
   ambientVolume: 0.5,
   uiVolume: 0.8,
-  musicCategory: "calm",
+  musicCategory: "none",
 };
 
 
@@ -352,6 +352,25 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
   const [musicDurationSec, setMusicDurationSec] = useState(0);
   const [musicPlaying, setMusicPlaying] = useState(false);
   const [shuffleEnabled, setShuffleEnabled] = useState(false);
+
+  // Loading indicator for currently requested track
+  const [loadingTrackName, setLoadingTrackName] = useState<string | null>(null);
+
+  // NOTE: spinner is rendered inline below; keyframes injected once via useMemo
+
+  // Inject keyframes once to avoid depending on global CSS
+  useMemo(() => {
+    try {
+      const id = 'rb-spinner-keyframes';
+      if (!document.getElementById(id)) {
+        const style = document.createElement('style');
+        style.id = id;
+        style.innerHTML = `@keyframes rb-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`;
+        document.head.appendChild(style);
+      }
+    } catch { /* ignore */ }
+    return () => {};
+  }, []);
 
   const sensitivityInitialNumeric = (() => {
     // Read from localStorage or use default multiplier
@@ -700,7 +719,7 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
         /* ignore */
       }
     }
-  }, [audioSettings.musicCategory]);
+  }, [audioSettings.musicCategory, currentTrack.trackName]);
 
   // Track/shuffle event listeners from UIRoot
   useEffect(() => {
@@ -778,14 +797,30 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
       if (category === audioSettings.musicCategory) setShuffleEnabled(!!enabled);
     };
 
+    const handleLoadingChanged = (event: Event) => {
+      try {
+        const ev = event as CustomEvent<{ name: string; loading: boolean }>;
+        const detail = ev.detail;
+        if (!detail) return;
+        const cur = currentTrack.trackName;
+        if (!cur) return;
+        if (detail.name === cur && detail.loading) setLoadingTrackName(cur);
+        else if (detail.name === cur && !detail.loading) setLoadingTrackName((prev) => (prev === cur ? null : prev));
+      } catch {
+        /* ignore */
+      }
+    };
+
     window.addEventListener("currentTrackChanged", handleCurrentTrackChanged as EventListener);
     window.addEventListener("musicShuffleChanged", handleShuffleChanged as EventListener);
+    window.addEventListener("audioLoadingChanged", handleLoadingChanged as EventListener);
     return () => {
       clearProgressRetries();
       window.removeEventListener("currentTrackChanged", handleCurrentTrackChanged as EventListener);
       window.removeEventListener("musicShuffleChanged", handleShuffleChanged as EventListener);
+      window.removeEventListener("audioLoadingChanged", handleLoadingChanged as EventListener);
     };
-  }, [audioSettings.musicCategory]);
+  }, [audioSettings.musicCategory, currentTrack.trackName]);
 
   // Poll audio progress while Audio tab is visible
   useEffect(() => {
@@ -1332,10 +1367,21 @@ export default function SettingsMenu({ visible, onClose, hudScale = 100, hideBac
                   currentTrack.category === audioSettings.musicCategory &&
                   audioSettings.musicCategory !== "none" && (
                     <div className="mt-2 px-3">
-                      <p className="font-mono text-[10px] opacity-90">
-                        NOW PLAYING:{" "}
-                        <span className="font-mono font-bold text-[12px]">
+                      <p className="font-mono text-[10px] opacity-90 flex items-center gap-2">
+                        <span>NOW PLAYING:</span>
+                        <span className="font-mono font-bold text-[12px] flex items-center gap-2">
                           {getTrackTitle(currentTrack.trackName) ?? currentTrack.trackName ?? "*"}
+                          {loadingTrackName === currentTrack.trackName && (
+                            <span className="ml-1" title="Downloading song">
+                              <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                {/* spinner */}
+                                <span style={{ width: 12, height: 12 }}>
+                                  {/* Render via inline block to avoid extra components */}
+                                  <span style={{ width: 12, height: 12, display: 'inline-block', borderRadius: 9999, borderStyle: 'solid', borderWidth: 2, borderColor: '#000', borderTopColor: 'transparent', animation: 'rb-spin 800ms linear infinite' }} />
+                                </span>
+                              </span>
+                            </span>
+                          )}
                         </span>
                       </p>
 

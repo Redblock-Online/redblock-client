@@ -103,6 +103,8 @@ export class AudioManager {
     { url: string; channel: AudioChannel }
   >();
   private loadingSounds = new Set<string>();
+  // Deduplicate concurrent load requests and expose loading status
+  private pendingLoads = new Map<string, Promise<void>>();
 
   // Active playing sounds
   private activeSounds = new Map<string, ActiveSound>();
@@ -341,14 +343,26 @@ export class AudioManager {
     url: string,
     channel: AudioChannel = "sfx"
   ): Promise<void> {
+    // Deduplicate concurrent loads
+    if (this.pendingLoads.has(name)) {
+      return this.pendingLoads.get(name)!;
+    }
     // Track known mapping for on-demand loads
     this.knownSounds.set(name, { url, channel });
     if (this.sounds.has(name)) {
       console.warn(`[AudioManager] Sound '${name}' already loaded`);
-      return;
+      return Promise.resolve();
     }
 
-    return new Promise((resolve, reject) => {
+    const p = new Promise<void>((resolve, reject) => {
+      // Mark as loading for external UI to observe
+      try {
+        this.loadingSounds.add(name);
+        try {
+          // Notify listeners that a sound started loading
+          window.dispatchEvent(new CustomEvent("audioLoadingChanged", { detail: { name, loading: true } }));
+        } catch { /* ignore */ }
+      } catch { /* ignore */ }
       let settled = false;
       const settleResolve = () => {
         if (settled) return;
@@ -371,7 +385,7 @@ export class AudioManager {
         reject(err);
       };
       const timeoutMs = 8000;
-      const timeoutId = window.setTimeout(() => {
+  const timeoutId = window.setTimeout(() => {
         (async () => {
           try {
             console.warn(
@@ -446,7 +460,7 @@ export class AudioManager {
           }
         })();
       }, timeoutMs);
-      // Create audio element and set crossOrigin so fetched arrayBuffer decoding works
+  // Create audio element and set crossOrigin so fetched arrayBuffer decoding works
       const audio = new Audio();
       // Ensure same-origin decoding works even if deployed behind a CDN; anonymous is safe for same-origin
       try {
@@ -585,6 +599,41 @@ export class AudioManager {
       // Assign src after listeners are attached so immediate errors are caught
       audio.src = url;
     });
+
+    // Wrap settle to cleanup loading markers
+    const wrapped = p.then(
+      (v) => {
+        try {
+          this.loadingSounds.delete(name);
+          this.pendingLoads.delete(name);
+          try {
+            window.dispatchEvent(new CustomEvent("audioLoadingChanged", { detail: { name, loading: false } }));
+          } catch {}
+        } catch {}
+        return v;
+      },
+      (err) => {
+        try {
+          this.loadingSounds.delete(name);
+          this.pendingLoads.delete(name);
+          try {
+            window.dispatchEvent(new CustomEvent("audioLoadingChanged", { detail: { name, loading: false } }));
+          } catch {}
+        } catch {}
+        throw err;
+      }
+    );
+    this.pendingLoads.set(name, wrapped);
+    return wrapped;
+  }
+
+  /**
+   * Check whether a sound (or any sound) is currently loading
+   * @param name - optional sound name to check, omit to check if any sounds are loading
+   */
+  public isLoading(name?: string): boolean {
+    if (typeof name === "string" && name.length > 0) return this.loadingSounds.has(name);
+    return this.loadingSounds.size > 0;
   }
 
   /**
