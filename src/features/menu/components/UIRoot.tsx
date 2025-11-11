@@ -135,7 +135,6 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
   const testOrderRef = useRef<number[]>([]);
   const calmShuffleRef = useRef<boolean>(false);
   const energyShuffleRef = useRef<boolean>(false);
-  const testShuffleRef = useRef<boolean>(false);
 
   useEffect(() => {
     // Initialize identity orders
@@ -477,8 +476,25 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
         }
       }
 
-      if (musicCategory === "none" || musicCategory === "test") {
-        // Stop calm and energy tracks when switching to test/none
+      if (musicCategory === "none") {
+        // Stop all music when switching to none
+        if (calmPlaybackIdRef.current) {
+          audio.stop(calmPlaybackIdRef.current);
+          calmPlaybackIdRef.current = null;
+        }
+        if (energyPlaybackIdRef.current) {
+          audio.stop(energyPlaybackIdRef.current);
+          energyPlaybackIdRef.current = null;
+        }
+        if (testPlaybackIdRef.current) {
+          audio.stop(testPlaybackIdRef.current);
+          testPlaybackIdRef.current = null;
+        }
+        return;
+      }
+
+      if (musicCategory === "test") {
+        // Stop calm and energy tracks when switching to test
         if (calmPlaybackIdRef.current) {
           audio.stop(calmPlaybackIdRef.current);
           calmPlaybackIdRef.current = null;
@@ -488,7 +504,7 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
           energyPlaybackIdRef.current = null;
         }
         
-        if (previousCategory !== "none" && previousCategory !== "test") {
+        if (previousCategory !== "test") {
           testPlaylistIndexRef.current = readPlaylistIndex("test");
         }
         const currentTest = testCurrentTrackRef.current;
@@ -510,7 +526,7 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
     const seekRelative = (delta: number) => {
       previousMusicCategoryRef.current = musicCategory;
       const category = musicCategory;
-      if (category === 'none' || category === 'test') {
+      if (category === 'test') {
         const pos = testPlaylistIndexRef.current ?? 0;
         startTestTrack({ index: pos + delta });
       } else if (category === 'calm') {
@@ -520,6 +536,7 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
         const pos = energyPlaylistIndexRef.current ?? 0;
         startEnergyTrack({ index: pos + delta });
       }
+      // none category does nothing
     };
 
     const onPrev = () => seekRelative(-1);
@@ -528,7 +545,7 @@ export default function UIRoot({ onStart, onPauseChange, bindTimerController, on
     const onTogglePlayback = () => {
       previousMusicCategoryRef.current = musicCategory;
       const category = musicCategory;
-      if (category === 'none' || category === 'test') {
+      if (category === 'test') {
         const name = testCurrentTrackRef.current;
         if (!name) {
           // Nothing has played yet; start current position
