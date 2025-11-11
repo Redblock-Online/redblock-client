@@ -12,9 +12,10 @@ export const MUSIC_TRACK_TITLES: Record<string, string> = {
   signal: "Signal",
 
   // test songs
-  test1: "song_test1",
-  test2: "song_test2",
-  test3: "song_test3",
+  // ----------
+  test1: "Song Test 1",
+  test2: "Song Test 2",
+  test3: "Song Test 3",
 };
 
 /**
