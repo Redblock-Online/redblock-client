@@ -360,9 +360,17 @@ export class AudioManager {
         this.loadingSounds.add(name);
         try {
           // Notify listeners that a sound started loading
-          window.dispatchEvent(new CustomEvent("audioLoadingChanged", { detail: { name, loading: true } }));
-        } catch { /* ignore */ }
-      } catch { /* ignore */ }
+          window.dispatchEvent(
+            new CustomEvent("audioLoadingChanged", {
+              detail: { name, loading: true },
+            })
+          );
+        } catch {
+          /* ignore */
+        }
+      } catch {
+        /* ignore */
+      }
       let settled = false;
       const settleResolve = () => {
         if (settled) return;
@@ -385,7 +393,7 @@ export class AudioManager {
         reject(err);
       };
       const timeoutMs = 8000;
-  const timeoutId = window.setTimeout(() => {
+      const timeoutId = window.setTimeout(() => {
         (async () => {
           try {
             console.warn(
@@ -460,7 +468,7 @@ export class AudioManager {
           }
         })();
       }, timeoutMs);
-  // Create audio element and set crossOrigin so fetched arrayBuffer decoding works
+      // Create audio element and set crossOrigin so fetched arrayBuffer decoding works
       const audio = new Audio();
       // Ensure same-origin decoding works even if deployed behind a CDN; anonymous is safe for same-origin
       try {
@@ -607,7 +615,11 @@ export class AudioManager {
           this.loadingSounds.delete(name);
           this.pendingLoads.delete(name);
           try {
-            window.dispatchEvent(new CustomEvent("audioLoadingChanged", { detail: { name, loading: false } }));
+            window.dispatchEvent(
+              new CustomEvent("audioLoadingChanged", {
+                detail: { name, loading: false },
+              })
+            );
           } catch {}
         } catch {}
         return v;
@@ -617,7 +629,11 @@ export class AudioManager {
           this.loadingSounds.delete(name);
           this.pendingLoads.delete(name);
           try {
-            window.dispatchEvent(new CustomEvent("audioLoadingChanged", { detail: { name, loading: false } }));
+            window.dispatchEvent(
+              new CustomEvent("audioLoadingChanged", {
+                detail: { name, loading: false },
+              })
+            );
           } catch {}
         } catch {}
         throw err;
@@ -632,7 +648,8 @@ export class AudioManager {
    * @param name - optional sound name to check, omit to check if any sounds are loading
    */
   public isLoading(name?: string): boolean {
-    if (typeof name === "string" && name.length > 0) return this.loadingSounds.has(name);
+    if (typeof name === "string" && name.length > 0)
+      return this.loadingSounds.has(name);
     return this.loadingSounds.size > 0;
   }
 
