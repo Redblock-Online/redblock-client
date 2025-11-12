@@ -109,11 +109,13 @@ export class PhysicsSystem {
 
   /**
    * Add a collision box to the system
+   * @param box - Collision box definition
+   * @param rotation - Optional rotation quaternion for rotated colliders
    */
-  public addCollider(box: CollisionBox): void {
+  public addCollider(box: CollisionBox, rotation?: THREE.Quaternion): void {
     if (!this.initialized) {
       console.warn("[PhysicsSystem] Not initialized yet, queueing collider");
-      setTimeout(() => this.addCollider(box), 50);
+      setTimeout(() => this.addCollider(box, rotation), 50);
       return;
     }
 
@@ -123,6 +125,13 @@ export class PhysicsSystem {
     // Create static rigid body
     const bodyDesc = RAPIER.RigidBodyDesc.fixed()
       .setTranslation(center.x, center.y, center.z);
+    
+    // Apply rotation if provided
+    if (rotation) {
+      const rapierRotation = new RAPIER.Quaternion(rotation.x, rotation.y, rotation.z, rotation.w);
+      bodyDesc.setRotation(rapierRotation);
+    }
+    
     const body = this.world.createRigidBody(bodyDesc);
     
     // Create cuboid collider (explicitly not a sensor, solid for raycasts)
@@ -148,16 +157,50 @@ export class PhysicsSystem {
 
   /**
    * Add a collision box from a THREE.Object3D
+   * For rotated/scaled objects, uses actual dimensions and rotation instead of AABB
    */
-  public addColliderFromObject(object: THREE.Object3D): CollisionBox {
-    const box = new THREE.Box3().setFromObject(object);
-    const collider: CollisionBox = {
-      min: box.min.clone(),
-      max: box.max.clone(),
-      object,
-    };
-    this.addCollider(collider);
-    return collider;
+  public addColliderFromObject(object: THREE.Object3D, useActualShape: boolean = false): CollisionBox {
+    if (useActualShape && object instanceof THREE.Mesh) {
+      // Get the actual scale and rotation from the object
+      const worldScale = new THREE.Vector3();
+      const worldRotation = new THREE.Quaternion();
+      const worldPosition = new THREE.Vector3();
+      
+      object.updateWorldMatrix(true, false);
+      object.matrixWorld.decompose(worldPosition, worldRotation, worldScale);
+      
+      // Get base geometry size (assuming BoxGeometry with size 1x1x1)
+      // For Cube class, the base geometry is 1x1x1, then scaled by baseScale (0.4)
+      // Then further scaled by object.scale
+      const baseSize = 1.0;
+      const actualSize = new THREE.Vector3(
+        baseSize * Math.abs(worldScale.x),
+        baseSize * Math.abs(worldScale.y),
+        baseSize * Math.abs(worldScale.z)
+      );
+      
+      // Calculate min/max from center and size
+      const halfSize = actualSize.clone().multiplyScalar(0.5);
+      const box: CollisionBox = {
+        min: worldPosition.clone().sub(halfSize),
+        max: worldPosition.clone().add(halfSize),
+        object,
+      };
+      
+      // Add collider with rotation
+      this.addCollider(box, worldRotation);
+      return box;
+    } else {
+      // Fallback to AABB for non-mesh objects or when useActualShape is false
+      const box = new THREE.Box3().setFromObject(object);
+      const collider: CollisionBox = {
+        min: box.min.clone(),
+        max: box.max.clone(),
+        object,
+      };
+      this.addCollider(collider);
+      return collider;
+    }
   }
 
   /**

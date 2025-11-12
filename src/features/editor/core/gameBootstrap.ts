@@ -319,17 +319,33 @@ function processBlockRecursively(
     
     parentGroup.add(cube);
     
-    // Add collider using world coordinates
+    // Add collider using actual shape (dimensions and rotation) instead of AABB
     cube.updateWorldMatrix(true, true);
-    const boundingBox = new THREE.Box3().setFromObject(cube);
+    
+    // Get world transform for the cube mesh
+    const worldScale = new THREE.Vector3();
+    const worldRotation = new THREE.Quaternion();
+    const worldPosition = new THREE.Vector3();
+    cube.matrixWorld.decompose(worldPosition, worldRotation, worldScale);
+    
+    // Cube base geometry is 1x1x1, then scaled by baseScale (0.4), then by object scale
+    const baseSize = 1.0;
+    const actualSize = new THREE.Vector3(
+      baseSize * Math.abs(worldScale.x),
+      baseSize * Math.abs(worldScale.y),
+      baseSize * Math.abs(worldScale.z)
+    );
+    
+    // Calculate collision box from center and size
+    const halfSize = actualSize.clone().multiplyScalar(0.5);
     const collider = {
-      min: boundingBox.min.clone(),
-      max: boundingBox.max.clone(),
+      min: worldPosition.clone().sub(halfSize),
+      max: worldPosition.clone().add(halfSize),
       object: cube
     };
     
     app.collisionSystem.waitForInit().then(() => {
-      app.collisionSystem.addCollider(collider);
+      app.collisionSystem.addCollider(collider, worldRotation);
     });
   } else if (block.type === "group" && block.children) {
     // Groups have world transform, children have local transform
@@ -438,17 +454,33 @@ function expandComponentInstance(
     
     componentContainer.add(cube);
     
-    // Add collider using world coordinates
+    // Add collider using actual shape (dimensions and rotation) instead of AABB
     cube.updateWorldMatrix(true, true);
-    const boundingBox = new THREE.Box3().setFromObject(cube);
+    
+    // Get world transform for the cube mesh
+    const worldScale = new THREE.Vector3();
+    const worldRotation = new THREE.Quaternion();
+    const worldPosition = new THREE.Vector3();
+    cube.matrixWorld.decompose(worldPosition, worldRotation, worldScale);
+    
+    // Cube base geometry is 1x1x1, then scaled by baseScale (0.4), then by object scale
+    const baseSize = 1.0;
+    const actualSize = new THREE.Vector3(
+      baseSize * Math.abs(worldScale.x),
+      baseSize * Math.abs(worldScale.y),
+      baseSize * Math.abs(worldScale.z)
+    );
+    
+    // Calculate collision box from center and size
+    const halfSize = actualSize.clone().multiplyScalar(0.5);
     const collider = {
-      min: boundingBox.min.clone(),
-      max: boundingBox.max.clone(),
+      min: worldPosition.clone().sub(halfSize),
+      max: worldPosition.clone().add(halfSize),
       object: cube
     };
     
     app.collisionSystem.waitForInit().then(() => {
-      app.collisionSystem.addCollider(collider);
+      app.collisionSystem.addCollider(collider, worldRotation);
     });
   });
 }
