@@ -250,13 +250,13 @@ function createEmptyStats(): StoredStats {
 
         // Player sfx
         ['steps', '/audio/sfx/events/steps.wav', 'sfx' as AudioChannel],
-        ['falling-of-the-map', '/audio/sfx/events/terrain/falling-of-the-map.wav', 'sfx' as AudioChannel],
 
         // Target feedback
         ['hit01', '/audio/sfx/events/hit-target/hit01.wav', 'sfx' as AudioChannel],
 
         // Events
         ['escape-event', '/audio/sfx/ui/actions/escape-event.wav', 'ui' as AudioChannel],
+        ['falling-of-the-map', '/audio/sfx/events/terrain/falling-of-the-map.wav', 'sfx' as AudioChannel],
 
         // UI Behavior:
           // Slider
