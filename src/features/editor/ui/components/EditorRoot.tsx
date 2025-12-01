@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type SetStateAction } from "react";
-import { Euler, Group, Vector3, Object3D, Quaternion as ThreeQuaternion } from "three";
+import { Euler, Group, Vector3, Vector2, Object3D, Quaternion as ThreeQuaternion, Raycaster, Quaternion, Matrix3, Mesh, LineSegments } from "three";
 import { FaPlay, FaStop } from "react-icons/fa";
 import { EditorApp } from "@/features/editor/core";
 import type { EditorBlock, EditorSelection, SelectionTransform, SerializedNode } from "@/features/editor/types";
@@ -77,6 +77,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const [showSidebar, setShowSidebar] = useState(true);
   const [showInspector, setShowInspector] = useState(true);
   const [showControls, setShowControls] = useState(true);
+  const [simpleMode, setSimpleMode] = useState(false);
 
   const selectedItemRef = useRef<EditorItem | null>(null);
 
@@ -884,6 +885,225 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     };
   }, [autoSaveScenario, editor, editingActive, pushHistory]);
 
+  // Simple mode: Minecraft-style block placement on left click, deletion on middle click (wheel button)
+  useEffect(() => {
+    if (!simpleMode) return;
+    
+    const canvas = editor.getCanvas();
+    
+    const handlePointerDown = (event: PointerEvent) => {
+      // Only handle left clicks (place) or middle clicks (delete)
+      if (event.button !== 0 && event.button !== 1) return;
+      
+      // Only handle clicks on canvas
+      const target = event.target as Node;
+      if (target !== canvas && !canvas.contains(target)) {
+        return;
+      }
+      
+      // Don't handle if editing
+      if (editingActive) return;
+      
+      // Prevent other handlers from interfering
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      
+      // Handle middle click (wheel button) for deletion
+      if (event.button === 1) {
+        const hit = editor.pickBlock(event.clientX, event.clientY, false);
+        
+        if (hit) {
+          // Serialize block before deletion for history
+          const payload = editor.serializeBlocksByIds([hit.id]);
+          
+          if (editor.removeBlock(hit.id)) {
+            // Add to history
+            if (payload.nodes.length > 0) {
+              pushHistory({ 
+                type: "delete", 
+                ids: [hit.id], 
+                payload 
+              });
+            }
+            
+            // Clear selection and update state
+            editor.clearSelection();
+            setSelection(null);
+            
+            // Clear clipboard if deleted block was in clipboard
+            clipboardRef.current = null;
+            pasteOffsetRef.current = 0;
+            
+            // Update spawn point status
+            setHasSpawnPoint(editor.hasSpawnPoint());
+            
+            // Auto-save scenario
+            autoSaveScenario();
+          }
+        }
+        return;
+      }
+      
+      // Handle left click for placement
+      // Check if we clicked on an existing block and get face normal
+      const hit = editor.pickBlock(event.clientX, event.clientY, false);
+      
+      let placed: EditorBlock | null = null;
+      
+      if (hit) {
+        // Get raycaster intersection to determine which face was clicked
+        const rect = canvas.getBoundingClientRect();
+        const pointer = new Vector2();
+        pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+        
+        // Raycast manually to get the face normal
+        const tempRaycaster = new Raycaster();
+        const camera = editor.getCamera();
+        tempRaycaster.setFromCamera(pointer, camera);
+        
+        // Find the actual Mesh object (not LineSegments or Group)
+        // The mesh might have outline children that we need to skip
+        let targetMesh: Object3D | null = null;
+        
+        if (hit.mesh instanceof Group) {
+          // If it's a group, find the first Mesh child (skip LineSegments)
+          hit.mesh.traverse((child) => {
+            if (child instanceof Mesh && !(child instanceof LineSegments)) {
+              if (!targetMesh) {
+                targetMesh = child;
+              }
+            }
+          });
+        } else if (hit.mesh instanceof Mesh) {
+          targetMesh = hit.mesh;
+        }
+        
+        if (!targetMesh) {
+          // Fallback: try to use hit.mesh directly
+          targetMesh = hit.mesh;
+        }
+        
+        // Intersect only with the mesh (not children like outline LineSegments)
+        const intersects = tempRaycaster.intersectObject(targetMesh, false);
+        
+        let faceNormal = new Vector3(0, 1, 0); // Default to top
+        
+        if (intersects.length > 0 && intersects[0].face) {
+          // Get face normal in world space
+          const normal = intersects[0].face.normal.clone();
+          
+          // Transform normal to world space
+          if (intersects[0].object instanceof Object3D) {
+            const worldQuaternion = new Quaternion();
+            intersects[0].object.getWorldQuaternion(worldQuaternion);
+            normal.applyQuaternion(worldQuaternion);
+          }
+          
+          faceNormal = normal.normalize();
+          
+          // Debug log
+          console.log('[SimpleMode] Face normal (world):', faceNormal.x.toFixed(3), faceNormal.y.toFixed(3), faceNormal.z.toFixed(3));
+          console.log('[SimpleMode] Intersect distance:', intersects[0].distance.toFixed(2));
+        } else {
+          console.warn('[SimpleMode] No face found in intersection, using default (top)');
+        }
+        
+        // Calculate block position based on face normal
+        const blockPosition = hit.mesh.position.clone();
+        const blockScale = hit.mesh.scale.clone();
+        
+        // Determine which direction based on the dominant component of the normal
+        const absX = Math.abs(faceNormal.x);
+        const absY = Math.abs(faceNormal.y);
+        const absZ = Math.abs(faceNormal.z);
+        
+        console.log('[SimpleMode] Normal components - absX:', absX.toFixed(3), 'absY:', absY.toFixed(3), 'absZ:', absZ.toFixed(3));
+        
+        const offset = new Vector3(0, 0, 0);
+        const blockSize = 1; // Standard block size
+        
+        // Find the component with the maximum absolute value (dominant direction)
+        const maxAbs = Math.max(absX, absY, absZ);
+        
+        // Use a threshold to determine the dominant direction
+        // If the dominant component is significantly larger, use it
+        if (Math.abs(absY - maxAbs) < 0.1) {
+          // Y is dominant (top or bottom)
+          if (faceNormal.y > 0) {
+            // Top face - place above
+            offset.y = blockScale.y / 2 + blockSize / 2;
+            console.log('[SimpleMode] ✅ Placing block on TOP');
+          } else {
+            // Bottom face - place below
+            offset.y = -(blockScale.y / 2 + blockSize / 2);
+            console.log('[SimpleMode] ✅ Placing block on BOTTOM');
+          }
+        } else if (Math.abs(absX - maxAbs) < 0.1) {
+          // X is dominant (left or right)
+          if (faceNormal.x > 0) {
+            // Right face - place to the right
+            offset.x = blockScale.x / 2 + blockSize / 2;
+            console.log('[SimpleMode] ✅ Placing block on RIGHT');
+          } else {
+            // Left face - place to the left
+            offset.x = -(blockScale.x / 2 + blockSize / 2);
+            console.log('[SimpleMode] ✅ Placing block on LEFT');
+          }
+        } else if (Math.abs(absZ - maxAbs) < 0.1) {
+          // Z is dominant (front or back)
+          if (faceNormal.z > 0) {
+            // Front face - place in front
+            offset.z = blockScale.z / 2 + blockSize / 2;
+            console.log('[SimpleMode] ✅ Placing block on FRONT');
+          } else {
+            // Back face - place behind
+            offset.z = -(blockScale.z / 2 + blockSize / 2);
+            console.log('[SimpleMode] ✅ Placing block on BACK');
+          }
+        } else {
+          // Fallback: if unclear, use Y (top)
+          offset.y = blockScale.y / 2 + blockSize / 2;
+          console.log('[SimpleMode] ⚠️ Unclear direction, defaulting to TOP');
+        }
+        
+        const newPosition = blockPosition.clone().add(offset);
+        
+        // Create block at calculated position
+        placed = editor.createBlock({
+          position: newPosition,
+          rotation: new Euler(0, 0, 0),
+          scale: new Vector3(1, 1, 1)
+        });
+        
+        // Select the new block
+        editor.setSelectionByIds([placed.id]);
+      } else {
+        // Click on empty space: place on ground
+        placed = editor.placeBlockAt(event.clientX, event.clientY);
+      }
+      
+      if (placed) {
+        const transform = editor.getSelectionTransform();
+        if (transform) {
+          pushHistory({ 
+            type: "add", 
+            id: placed.id, 
+            transform 
+          });
+        }
+        autoSaveScenario();
+      }
+    };
+    
+    // Use capture phase at document level to intercept before other handlers
+    document.addEventListener("pointerdown", handlePointerDown, { capture: true, passive: false });
+    
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, { capture: true });
+    };
+  }, [simpleMode, editor, editingActive, pushHistory, autoSaveScenario]);
+
   useEffect(() => {
     const removeListener = editor.addDragCommitListener((changes) => {
       if (changes.length === 0) {
@@ -1286,6 +1506,13 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         </div>
         <div className="flex items-center gap-4">
           <AlertIcon alerts={alerts} />
+          <button
+            onClick={() => setSimpleMode(!simpleMode)}
+            className="rounded px-3 py-1.5 text-[11px] transition bg-[#4a4a4a] text-[#cccccc] hover:bg-[#555555]"
+            title={simpleMode ? "Switch to full editor mode" : "Switch to simple mode"}
+          >
+            {simpleMode ? "Switch to Full Mode" : "Switch to Simple Mode"}
+          </button>
           {!isGameActive ? (
             <button
               onClick={handleStartGame}
@@ -1377,7 +1604,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         
         {/* Editor Content */}
         <div className="relative flex flex-1 gap-2 overflow-hidden px-2 pb-2 pt-2">
-              {showSidebar && (
+              {showSidebar && !simpleMode && (
                 <aside className="relative z-10 flex w-64 flex-col rounded border border-[#1a1a1a] bg-[#383838] pointer-events-auto overflow-auto">
           <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2 border-b border-[#1a1a1a]">
             <div className="text-[11px] text-[#999999] font-medium">Components</div>
@@ -1417,8 +1644,10 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         <main className="pointer-events-none relative flex-1">
           <div className="pointer-events-none absolute inset-0">
             {showControls && (
-              <div className="absolute left-4 top-4 flex max-w-md flex-col gap-1.5 rounded border border-[#1a1a1a] bg-[#323232]/95 px-3 py-2.5 text-[11px] text-[#cccccc]">
-                {/* Cruz blanca en la esquina superior */}
+              <div className={`absolute left-4 top-4 flex max-w-md flex-col gap-1.5 rounded border border-[#1a1a1a] bg-[#323232]/95 text-[#cccccc] ${
+                simpleMode ? 'px-4 py-2.5' : 'px-3 py-2.5'
+              }`}>
+                {/* White cross in the top corner - Close button */}
                 <button 
                   className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center hover:bg-[#404040] rounded transition-colors pointer-events-auto"
                   onClick={() => setShowControls(false)}
@@ -1428,22 +1657,35 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
                     <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
                 </button>
-                <span className="text-[10px] text-[#999999] mb-0.5">
-                  Controls
-                </span>
-                <span className="leading-relaxed text-[10px]">
-                  Orbit with right click · Pan with Shift + right click · Zoom with scroll
-                </span>
-                <span className="leading-relaxed text-[10px]">
-                  Select with left click · Move (G) · Rotate (R) · Scale (F) · constrain with X / Y / Z
-                </span>
-                <span className="leading-relaxed text-[10px]">Move camera with WASD</span>
-                <span className="leading-relaxed text-[10px]">Toggle Components (B) · Toggle Inspector (I) · Toggle Controls (C)</span>
-                {transformLabel ? (
-                  <span className="mt-1 w-fit rounded border border-[#1a1a1a] bg-[#4772b3] px-2.5 py-1 text-[10px] text-white">
-                    {transformLabel}
-                  </span>
-                ) : null}
+                {simpleMode ? (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[11px] leading-relaxed">
+                      Left click to place block
+                    </span>
+                    <span className="text-[11px] leading-relaxed">
+                      Middle click (wheel) to delete block
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <span className="text-[10px] text-[#999999] mb-0.5">
+                      Controls
+                    </span>
+                    <span className="leading-relaxed text-[10px]">
+                      Orbit with right click · Pan with Shift + right click · Zoom with scroll
+                    </span>
+                    <span className="leading-relaxed text-[10px]">
+                      Select with left click · Move (G) · Rotate (R) · Scale (F) · constrain with X / Y / Z
+                    </span>
+                    <span className="leading-relaxed text-[10px]">Move camera with WASD</span>
+                    <span className="leading-relaxed text-[10px]">Toggle Components (B) · Toggle Inspector (I) · Toggle Controls (C)</span>
+                    {transformLabel ? (
+                      <span className="mt-1 w-fit rounded border border-[#1a1a1a] bg-[#4772b3] px-2.5 py-1 text-[10px] text-white">
+                        {transformLabel}
+                      </span>
+                    ) : null}
+                  </>
+                )}
               </div>
             )}
             {activeItem ? (
@@ -1458,7 +1700,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             ) : null}
           </div>
         </main>
-        {showInspector && (
+        {showInspector && !simpleMode && (
           <aside
             className={`relative z-10 w-72 rounded border border-[#1a1a1a] bg-[#383838] p-3 transition-opacity overflow-auto ${
               inspectorVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-40"
