@@ -80,7 +80,7 @@ export function EditorLayout(props: EditorLayoutProps): ReactElement {
         onMouseEnter={() => props.onMenuHover(props.openMenuId ?? "")}
         onMouseLeave={props.onMenuLeave}
       />
-      <div className="flex flex-1 overflow-hidden px-2 pb-2 pt-2 gap-2">
+      <div className="flex flex-1 overflow-hidden px-3 pb-3 pt-3 gap-3">
         <EditorSidebar
           items={props.items}
           activeItem={props.activeItem}
@@ -91,10 +91,25 @@ export function EditorLayout(props: EditorLayoutProps): ReactElement {
         />
         <EditorOverlays activeItem={props.activeItem} editingActive={props.editingActive} transformLabel={props.transformLabel} />
         <aside
-          className={`relative z-50 w-72 rounded border border-[#1a1a1a] bg-[#383838] p-3 transition-opacity ${
-            inspectorVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-40"
-          }`}
+          className={`
+            relative z-50 w-80 rounded-lg border border-[#2a2a2a] 
+            bg-gradient-to-b from-[#3a3a3a] to-[#353535] p-4 
+            shadow-xl transition-all duration-300 ease-out
+            ${inspectorVisible 
+              ? "pointer-events-auto opacity-100 translate-x-0" 
+              : "pointer-events-none opacity-30 translate-x-2"
+            }
+          `}
         >
+          <div className="flex items-center gap-2 mb-4">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#4772b3]">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span className="text-[12px] font-semibold text-[#e0e0e0] tracking-tight">Inspector</span>
+            <kbd className="ml-auto px-1.5 py-0.5 rounded bg-[#2a2a2a] text-[9px] text-[#666666]">I to hide</kbd>
+          </div>
+          <div className="h-px bg-gradient-to-r from-transparent via-[#4a4a4a] to-transparent mb-4" />
           <PropertiesPanel
             selection={props.selection}
             positionState={props.positionState}
