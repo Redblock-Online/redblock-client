@@ -1,7 +1,7 @@
 import { FaGoogle } from "react-icons/fa";
-import Button from "@/ui/react/components/Button";
+import Button from "@/features/shared/ui/components/Button";
 import { post, ensureCsrfCookie } from "@/ui/react/api/http";
-import { useMeStore } from "../state/me";
+import { useMeStore } from "@/features/game/ui/state";
 
 export default function LoginGoogleButton() {
   const { user, hydrated, setUser } = useMeStore();

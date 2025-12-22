@@ -1,4 +1,4 @@
-import type { UIController } from "@/ui/react/mountUI";
+import type { UIController } from "@/features/menu";
 import type AppClass from "./core/App";
 
 export let app: AppClass | undefined;
@@ -14,14 +14,14 @@ const isEditorRoute =
   logCredits();
 
   if (isEditorRoute) {
-    const { initEditor } = await import("./editor/initEditor");
+    const { initEditor } = await import("@/features/editor");
     await initEditor();
     return;
   }
 
   const [{ default: App }, { mountUI }, { ensureCsrfCookie }] = await Promise.all([
     import("./core/App"),
-    import("@/ui/react/mountUI"),
+    import("@/features/menu"),
     import("@/ui/react/api/http"),
   ]);
 
