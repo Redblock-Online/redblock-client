@@ -18,6 +18,17 @@ export default {
           text: '#111827',
           muted: '#6b7280',
         },
+        // Modern editor theme colors
+        editor: {
+          bg: '#1e1e1e',
+          surface: '#252526',
+          panel: '#2d2d30',
+          border: '#3c3c3c',
+          text: '#e4e4e4',
+          muted: '#858585',
+          accent: '#0078d4',
+          accentHover: '#1a8cff',
+        },
       },
       keyframes: {
         float: {
@@ -33,6 +44,13 @@ export default {
       },
       fontFamily: {
         mono: ['"Courier New"', 'ui-monospace', 'monospace'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+      },
+      fontSize: {
+        'editor-xs': ['12px', { lineHeight: '16px' }],
+        'editor-sm': ['13px', { lineHeight: '18px' }],
+        'editor-base': ['14px', { lineHeight: '20px' }],
+        'editor-lg': ['15px', { lineHeight: '22px' }],
       },
     },
   },

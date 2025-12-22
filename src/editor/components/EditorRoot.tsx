@@ -1207,21 +1207,21 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
 
   return (
     <>
-      <div className="absolute inset-0 flex flex-col text-[#cccccc]">
+      <div className="absolute inset-0 flex flex-col font-sans text-editor-text">
         {/* Header - Hidden during play mode */}
         {!isGameActive && (
-          <header className="relative z-50 flex h-12 items-center justify-between border-b border-[#1a1a1a] bg-[#323232] px-4 pointer-events-auto">
-        <div className="flex items-center gap-6">
+          <header className="relative z-50 flex h-14 items-center justify-between border-b border-editor-border bg-editor-surface px-5 pointer-events-auto">
+        <div className="flex items-center gap-8">
           <Link href="/" className="cursor-pointer hover:opacity-80 transition-opacity">
             <Image
               src="/logo.png"
               alt="Redblock logo"
               width={498}
               height={410}
-              className="h-8 w-auto"
+              className="h-9 w-auto"
             />
           </Link>
-          <nav className="flex items-center gap-0.5 text-[11px] text-[#cccccc]">
+          <nav className="flex items-center gap-1 text-editor-sm text-editor-text">
             {menuGroups.map((menu) => (
               <div key={menu.id} className="relative">
                 <button
@@ -1229,10 +1229,10 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
                     menuAnchors.current[menu.id] = node;
                   }}
                   type="button"
-                  className={`rounded px-3 py-1.5 text-[11px] transition ${
+                  className={`rounded-md px-4 py-2 text-editor-sm font-medium transition-all duration-150 ${
                     openMenuId === menu.id
-                      ? "bg-[#4772b3] text-white"
-                      : "text-[#cccccc] hover:bg-[#404040]"
+                      ? "bg-editor-accent text-white"
+                      : "text-editor-text hover:bg-editor-panel"
                   }`}
                   onMouseEnter={() => handleMenuHover(menu.id)}
                   onMouseLeave={() => handleMenuLeave()}
@@ -1243,16 +1243,16 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             ))}
           </nav>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-5">
           <AlertIcon alerts={alerts} />
           {!isGameActive ? (
             <button
               onClick={handleStartGame}
               disabled={!hasSpawnPoint || isTransitioning}
-              className={`flex h-8 items-center gap-2 rounded border border-[#1a1a1a] px-4 text-[11px] transition ${
+              className={`flex h-9 items-center gap-2.5 rounded-md px-5 text-editor-sm font-medium transition-all duration-150 ${
                 hasSpawnPoint && !isTransitioning
-                  ? "bg-[#4772b3] text-white hover:bg-[#5a8fd6]"
-                  : "bg-[#2b2b2b] text-[#666666] cursor-not-allowed"
+                  ? "bg-editor-accent text-white hover:bg-editor-accentHover"
+                  : "bg-editor-panel text-editor-muted cursor-not-allowed"
               }`}
               title={!hasSpawnPoint ? "Add a Spawn Point to start the game" : isTransitioning ? "Loading..." : "Start the game"}
             >
@@ -1263,10 +1263,10 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             <button
               onClick={handleStopGame}
               disabled={isTransitioning}
-              className={`flex h-8 items-center gap-2 rounded border border-[#1a1a1a] px-4 text-[11px] text-white transition ${
+              className={`flex h-9 items-center gap-2.5 rounded-md px-5 text-editor-sm font-medium text-white transition-all duration-150 ${
                 isTransitioning
-                  ? "bg-[#2b2b2b] cursor-not-allowed"
-                  : "bg-[#ef4444] hover:bg-[#dc2626]"
+                  ? "bg-editor-panel cursor-not-allowed"
+                  : "bg-red-500 hover:bg-red-600"
               }`}
               title={isTransitioning ? "Loading..." : "Stop the game"}
             >
@@ -1275,14 +1275,14 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             </button>
           )}
           <div className="flex flex-col items-end text-right">
-            <div className="text-[11px] text-[#999999]">
+            <div className="text-editor-xs text-editor-muted">
               Scenario:{" "}
-              <span className="text-[11px] text-[#cccccc]">
+              <span className="text-editor-xs text-editor-text">
                 {activeScenarioName}
               </span>
-              {hasUnsavedChanges ? <span className="ml-1 text-[#cccccc]">*</span> : null}
+              {hasUnsavedChanges ? <span className="ml-1 text-editor-text">*</span> : null}
             </div>
-            <div className="text-[12px] font-medium text-[#cccccc]">{title}</div>
+            <div className="text-editor-sm font-medium text-editor-text">{title}</div>
           </div>
         </div>
         </header>
@@ -1290,11 +1290,11 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         
         {openMenuId && activeMenu && menuPosition ? (
           <Portal>
-            <div className="fixed inset-0 z-[900] pointer-events-none">
+            <div className="fixed inset-0 z-[900] pointer-events-none font-sans">
               <div
                 ref={menuContainerRef}
-                className="absolute min-w-[180px] overflow-hidden rounded border border-[#1a1a1a] bg-[#323232] shadow-lg pointer-events-auto"
-                style={{ left: menuPosition.left, top: menuPosition.top, minWidth: Math.max(menuPosition.width, 160) }}
+                className="absolute min-w-[200px] overflow-hidden rounded-lg border border-editor-border bg-editor-surface shadow-xl pointer-events-auto"
+                style={{ left: menuPosition.left, top: menuPosition.top, minWidth: Math.max(menuPosition.width, 180) }}
                 onMouseDown={(event) => event.stopPropagation()}
                 onMouseEnter={() => {
                   // Cancel any pending close timeout when mouse enters the menu
@@ -1311,10 +1311,10 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
                     <button
                       key={item.id}
                       type="button"
-                      className={`block w-full px-3 py-1.5 text-left text-[11px] transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      className={`block w-full px-4 py-2.5 text-left text-editor-sm transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50 ${
                         disabled
-                          ? "text-[#666666]"
-                          : "text-[#cccccc] hover:bg-[#4772b3] hover:text-white"
+                          ? "text-editor-muted"
+                          : "text-editor-text hover:bg-editor-accent hover:text-white"
                       }`}
                       onClick={() => {
                         if (disabled) {
@@ -1335,17 +1335,17 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         ) : null}
         
         {/* Editor Content */}
-        <div className="relative flex flex-1 gap-2 overflow-hidden px-2 pb-2 pt-2">
+        <div className="relative flex flex-1 gap-3 overflow-hidden px-3 pb-3 pt-3">
               {showSidebar && (
-                <aside className="relative z-10 flex w-64 flex-col rounded border border-[#1a1a1a] bg-[#383838] pointer-events-auto overflow-auto">
-          <div className="flex items-center justify-between gap-2 px-3 pt-3 pb-2 border-b border-[#1a1a1a]">
-            <div className="text-[11px] text-[#999999] font-medium">Components</div>
+                <aside className="relative z-10 flex w-72 flex-col rounded-lg border border-editor-border bg-editor-panel pointer-events-auto overflow-auto">
+          <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-3 border-b border-editor-border">
+            <div className="text-editor-sm text-editor-muted font-medium">Components</div>
             <CategoryFilter
               selectedCategories={selectedCategories}
               onToggleCategory={handleToggleCategory}
             />
           </div>
-          <div className="flex-1 overflow-auto px-3 pb-3 pt-2">
+          <div className="flex-1 overflow-auto px-4 pb-4 pt-3">
             <ItemMenu
               items={filteredItems}
               activeItem={activeItem}
@@ -1358,9 +1358,9 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             />
           </div>
           {activeItem && activeItem.id.startsWith("component:") ? (
-            <div className="border-t border-[#1a1a1a] px-3 py-2">
+            <div className="border-t border-editor-border px-4 py-3">
               <button
-                className="w-full h-7 rounded border border-[#1a1a1a] bg-[#ef4444] text-[11px] text-white transition hover:bg-[#dc2626]"
+                className="w-full h-9 rounded-md bg-red-500 text-editor-sm font-medium text-white transition-all duration-150 hover:bg-red-600"
                 onClick={() => {
                   const id = activeItem.id.slice("component:".length);
                   const def = components.find((entry) => entry.id === id);
@@ -1376,42 +1376,42 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         <main className="pointer-events-none relative flex-1">
           <div className="pointer-events-none absolute inset-0">
             {showControls && (
-              <div className="absolute left-4 top-4 flex max-w-md flex-col gap-1.5 rounded border border-[#1a1a1a] bg-[#323232]/95 px-3 py-2.5 text-[11px] text-[#cccccc]">
+              <div className="absolute left-4 top-4 flex max-w-md flex-col gap-2 rounded-lg border border-editor-border bg-editor-surface/95 backdrop-blur-sm px-4 py-3 text-editor-sm text-editor-text">
                 {/* Cruz blanca en la esquina superior */}
                 <button 
-                  className="absolute top-1 right-1 w-6 h-6 flex items-center justify-center hover:bg-[#404040] rounded transition-colors pointer-events-auto"
+                  className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center hover:bg-editor-panel rounded-md transition-all duration-150 pointer-events-auto"
                   onClick={() => setShowControls(false)}
                   title="Cerrar controles"
                 >
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-white">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-editor-text">
                     <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
                 </button>
-                <span className="text-[10px] text-[#999999] mb-0.5">
+                <span className="text-editor-xs text-editor-muted font-medium mb-0.5">
                   Controls
                 </span>
-                <span className="leading-relaxed text-[10px]">
+                <span className="leading-relaxed text-editor-xs">
                   Orbit with right click · Pan with Shift + right click · Zoom with scroll
                 </span>
-                <span className="leading-relaxed text-[10px]">
+                <span className="leading-relaxed text-editor-xs">
                   Select with left click · Move (G) · Rotate (R) · Scale (F) · constrain with X / Y / Z
                 </span>
-                <span className="leading-relaxed text-[10px]">Move camera with WASD</span>
-                <span className="leading-relaxed text-[10px]">Toggle Components (B) · Toggle Inspector (I) · Toggle Controls (C)</span>
+                <span className="leading-relaxed text-editor-xs">Move camera with WASD</span>
+                <span className="leading-relaxed text-editor-xs">Toggle Components (B) · Toggle Inspector (I) · Toggle Controls (C)</span>
                 {transformLabel ? (
-                  <span className="mt-1 w-fit rounded border border-[#1a1a1a] bg-[#4772b3] px-2.5 py-1 text-[10px] text-white">
+                  <span className="mt-1 w-fit rounded-md bg-editor-accent px-3 py-1.5 text-editor-xs font-medium text-white">
                     {transformLabel}
                   </span>
                 ) : null}
               </div>
             )}
             {activeItem ? (
-              <div className="absolute bottom-4 left-1/2 w-max -translate-x-1/2 rounded border border-[#1a1a1a] bg-[#323232]/95 px-4 py-2 text-[11px] text-[#cccccc]">
+              <div className="absolute bottom-4 left-1/2 w-max -translate-x-1/2 rounded-lg border border-editor-border bg-editor-surface/95 backdrop-blur-sm px-5 py-2.5 text-editor-sm text-editor-text">
                 Drag the {activeItem.label.toLowerCase()} from the components panel onto the canvas to place it
               </div>
             ) : null}
             {editingActive ? (
-              <div className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 rounded border border-[#1a1a1a] bg-[#4772b3] px-4 py-2 text-[11px] text-white">
+              <div className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2 rounded-lg bg-editor-accent px-5 py-2.5 text-editor-sm font-medium text-white">
                 Press Enter to finish editing the component
               </div>
             ) : null}
@@ -1419,7 +1419,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         </main>
         {showInspector && (
           <aside
-            className={`relative z-10 w-72 rounded border border-[#1a1a1a] bg-[#383838] p-3 transition-opacity overflow-auto ${
+            className={`relative z-10 w-80 rounded-lg border border-editor-border bg-editor-panel p-4 transition-opacity overflow-auto ${
               inspectorVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-40"
             }`}
           >

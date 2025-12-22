@@ -53,15 +53,15 @@ export function PropertiesPanel({
   // Display name is the custom name if set, otherwise the ID
   const displayName = selection && !Array.isArray(selection) ? (selection.name || selection.id) : "";
   const actionButtonClass =
-    "h-7 rounded border border-[#1a1a1a] bg-[#4772b3] text-[11px] text-white transition hover:bg-[#5a8fd6]";
+    "h-9 rounded-md bg-editor-accent text-editor-sm font-medium text-white transition-all duration-150 hover:bg-editor-accentHover";
   const subtleButtonClass =
-    "h-7 rounded border border-[#1a1a1a] bg-[#2b2b2b] text-[11px] text-[#cccccc] transition hover:bg-[#404040]";
+    "h-9 rounded-md border border-editor-border bg-editor-bg text-editor-sm font-medium text-editor-text transition-all duration-150 hover:bg-editor-surface";
 
   if (!selection) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 rounded border border-dashed border-[#1a1a1a] bg-[#2b2b2b] p-4 text-center text-[11px] text-[#666666]">
-        <span className="text-[12px] text-[#999999]">Inspector</span>
-        <p className="max-w-[220px] text-[11px] leading-relaxed">
+      <div className="flex h-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-editor-border bg-editor-bg p-5 text-center text-editor-sm text-editor-muted">
+        <span className="text-editor-base font-medium text-editor-text">Inspector</span>
+        <p className="max-w-[240px] text-editor-sm leading-relaxed">
           Select an existing block or place a new one to adjust its properties.
         </p>
       </div>
@@ -71,14 +71,14 @@ export function PropertiesPanel({
   // Multi selection UI
   if (Array.isArray(selection)) {
     return (
-      <div className="flex h-full flex-col gap-3 text-[11px] text-[#cccccc]">
+      <div className="flex h-full flex-col gap-4 text-editor-sm text-editor-text">
         <div>
-          <div className="text-[10px] text-[#999999]">Selection</div>
-          <div className="mt-0.5 text-[13px] font-medium text-[#cccccc]">
+          <div className="text-editor-xs text-editor-muted font-medium">Selection</div>
+          <div className="mt-1 text-editor-base font-semibold text-editor-text">
             Multiple Objects
           </div>
         </div>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           <button
             className={actionButtonClass}
             onClick={onGroupSelection}
@@ -114,20 +114,20 @@ export function PropertiesPanel({
   const generatorConfig = selection.generatorConfig;
 
   return (
-    <div className="flex h-full flex-col gap-3 text-[11px] text-[#cccccc]">
+    <div className="flex h-full flex-col gap-4 text-editor-sm text-editor-text">
       <div>
-        <div className="text-[10px] text-[#999999]">Selection</div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-[13px] font-medium text-[#cccccc]">
+        <div className="text-editor-xs text-editor-muted font-medium">Selection</div>
+        <div className="mt-1 flex items-center gap-2 text-editor-base font-semibold text-editor-text">
           {/* Icon for component or group */}
           {isComponent && (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff4dff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ff4dff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0">
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
               <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
               <line x1="12" y1="22.08" x2="12" y2="12"/>
             </svg>
           )}
           {isGroup && (
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#999999] flex-shrink-0">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-editor-muted flex-shrink-0">
               <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
             </svg>
           )}
@@ -160,10 +160,10 @@ export function PropertiesPanel({
                 }
               }}
               autoFocus
-              className="flex-1 rounded border border-[#4772b3] bg-[#2b2b2b] px-1.5 py-0.5 text-[11px] text-white outline-none"
+              className="flex-1 rounded-md border border-editor-accent bg-editor-bg px-2.5 py-1.5 text-editor-sm text-white outline-none"
             />
           ) : (
-            <div className="group flex flex-1 items-center gap-1 cursor-pointer hover:text-white transition" onClick={() => {
+            <div className="group flex flex-1 items-center gap-1.5 cursor-pointer hover:text-white transition-all duration-150" onClick={() => {
               if (onRenameSelection) {
                 setEditedName(displayName);
                 setIsEditingName(true);
@@ -171,7 +171,7 @@ export function PropertiesPanel({
             }}>
               <span className="flex-1 truncate">{displayName}</span>
               {onRenameSelection && (
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition text-[#999999]">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-all duration-150 text-editor-muted">
                   <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
                 </svg>
               )}
@@ -180,7 +180,7 @@ export function PropertiesPanel({
         </div>
       </div>
       {selection.mesh instanceof Group ? (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           {/* Check if this is a component instance */}
           {selection.mesh.userData?.componentId ? (
             // Component instance - show only component-specific actions
@@ -229,7 +229,7 @@ export function PropertiesPanel({
           )}
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           {onDeleteSelection ? (
             <button
               className={subtleButtonClass}
@@ -242,8 +242,8 @@ export function PropertiesPanel({
       )}
 
       <section>
-        <h3 className="text-[11px] text-[#999999] mb-1.5">Position</h3>
-        <div className="grid grid-cols-3 gap-1.5">
+        <h3 className="text-editor-xs text-editor-muted font-medium mb-2">Position</h3>
+        <div className="grid grid-cols-3 gap-2">
           {(["x", "y", "z"] as const).map((axis) => (
             <AxisInput
               key={axis}
@@ -258,8 +258,8 @@ export function PropertiesPanel({
       </section>
 
       <section>
-        <h3 className="text-[11px] text-[#999999] mb-1.5">Scale</h3>
-        <div className="grid grid-cols-3 gap-1.5">
+        <h3 className="text-editor-xs text-editor-muted font-medium mb-2">Scale</h3>
+        <div className="grid grid-cols-3 gap-2">
           {(["x", "y", "z"] as const).map((axis) => (
             <AxisInput
               key={axis}
@@ -275,8 +275,8 @@ export function PropertiesPanel({
       </section>
 
       <section>
-        <h3 className="text-[11px] text-[#999999] mb-1.5">Rotation (°)</h3>
-        <div className="grid grid-cols-3 gap-1.5">
+        <h3 className="text-editor-xs text-editor-muted font-medium mb-2">Rotation (°)</h3>
+        <div className="grid grid-cols-3 gap-2">
           {(["x", "y", "z"] as const).map((axis) => (
             <AxisInput
               key={axis}

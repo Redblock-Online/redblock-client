@@ -67,63 +67,63 @@ export function ScenarioModal({
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-6 py-12" onClick={onClose}>
+      <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 backdrop-blur-sm px-6 py-12 font-sans" onClick={onClose}>
         <div
-          className="w-full max-w-3xl rounded border border-[#1a1a1a] bg-[#383838] shadow-2xl"
+          className="w-full max-w-3xl rounded-xl border border-editor-border bg-editor-panel shadow-2xl"
           onClick={(event) => event.stopPropagation()}
         >
-        <header className="flex items-center justify-between border-b border-[#1a1a1a] px-4 py-3">
-          <h2 className="text-[12px] font-medium text-[#cccccc]">Load Scenario</h2>
+        <header className="flex items-center justify-between border-b border-editor-border px-5 py-4">
+          <h2 className="text-editor-base font-semibold text-editor-text">Load Scenario</h2>
           <button
             type="button"
-            className="h-8 w-8 rounded border border-transparent text-[#999999] transition hover:border-[#1a1a1a] hover:text-[#cccccc]"
+            className="h-9 w-9 rounded-md border border-transparent text-editor-muted transition-all duration-150 hover:border-editor-border hover:text-editor-text hover:bg-editor-surface"
             onClick={onClose}
             aria-label="Close"
           >
             ×
           </button>
         </header>
-        <div className="grid gap-4 px-4 py-4 md:grid-cols-[2fr,1fr]">
-          <section className="min-h-[220px] overflow-hidden rounded border border-[#1a1a1a]">
-            <div className="flex items-center justify-between border-b border-[#1a1a1a] bg-[#2b2b2b] px-3 py-2 text-[11px] text-[#999999]">
-              <span>Saved Scenarios</span>
+        <div className="grid gap-5 px-5 py-5 md:grid-cols-[2fr,1fr]">
+          <section className="min-h-[240px] overflow-hidden rounded-lg border border-editor-border">
+            <div className="flex items-center justify-between border-b border-editor-border bg-editor-bg px-4 py-3 text-editor-sm text-editor-muted">
+              <span className="font-medium">Saved Scenarios</span>
               <span>{scenarios.length}</span>
             </div>
-            <div className="max-h-[320px] overflow-y-auto">
+            <div className="max-h-[340px] overflow-y-auto">
               {scenarios.length === 0 ? (
-                <div className="flex items-center justify-center px-4 py-12 text-[11px] text-[#666666]">
+                <div className="flex items-center justify-center px-5 py-14 text-editor-sm text-editor-muted">
                   No scenarios saved yet.
                 </div>
               ) : (
-                <ul className="divide-y divide-[#1a1a1a]">
+                <ul className="divide-y divide-editor-border">
                   {scenarios.map((scenario) => (
-                    <li key={scenario.id} className="flex items-center justify-between px-3 py-2.5 text-[11px] bg-[#2b2b2b] hover:bg-[#323232] transition">
-                      <div className="flex flex-col">
-                        <span className="font-medium text-[#cccccc]">
+                    <li key={scenario.id} className="flex items-center justify-between px-4 py-3 text-editor-sm bg-editor-bg hover:bg-editor-surface transition-all duration-150">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium text-editor-text">
                           {scenario.name}
                           {scenario.name === AUTO_SAVE_SCENARIO_NAME ? " (auto)" : ""}
                         </span>
-                        <span className="text-[10px] text-[#999999]">
+                        <span className="text-editor-xs text-editor-muted">
                           {new Date(scenario.updatedAt).toLocaleString()}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2.5">
                         <button
                           type="button"
-                          className="rounded border border-[#1a1a1a] bg-[#4772b3] px-3 py-1 text-[11px] text-white transition hover:bg-[#5a8fd6]"
+                          className="rounded-md bg-editor-accent px-4 py-1.5 text-editor-sm font-medium text-white transition-all duration-150 hover:bg-editor-accentHover"
                           onClick={() => onSelectScenario(scenario)}
                         >
                           Load
                         </button>
                         <button
                           type="button"
-                          className="rounded border border-[#1a1a1a] bg-[#2b2b2b] px-2 py-1 text-[11px] text-[#cccccc] transition hover:bg-[#353535] hover:text-white"
+                          className="rounded-md border border-editor-border bg-editor-bg px-2.5 py-1.5 text-editor-sm text-editor-text transition-all duration-150 hover:bg-editor-surface hover:text-white"
                           onClick={() => onDownloadScenario(scenario)}
                           title="Download scenario"
                         >
                           <svg
-                            width="12"
-                            height="12"
+                            width="14"
+                            height="14"
                             viewBox="0 0 24 24"
                             fill="none"
                             stroke="currentColor"
@@ -139,7 +139,7 @@ export function ScenarioModal({
                         {scenario.name === AUTO_SAVE_SCENARIO_NAME ? null : (
                           <button
                             type="button"
-                            className="rounded border border-transparent px-3 py-1 text-[11px] text-[#999999] transition hover:border-[#1a1a1a] hover:text-[#cccccc]"
+                            className="rounded-md border border-transparent px-4 py-1.5 text-editor-sm text-editor-muted transition-all duration-150 hover:border-editor-border hover:text-editor-text"
                             onClick={() => onDeleteScenario(scenario.id)}
                           >
                             Delete
@@ -152,21 +152,21 @@ export function ScenarioModal({
               )}
             </div>
           </section>
-          <section className="flex flex-col items-center justify-center gap-3 rounded border border-dashed border-[#1a1a1a] bg-[#2b2b2b] px-4 py-6 text-center"
+          <section className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-editor-border bg-editor-bg px-5 py-8 text-center"
             onDragOver={handleDragOver}
             onDrop={handleDrop}
           >
-            <p className="text-[11px] text-[#999999]">
+            <p className="text-editor-sm text-editor-muted">
               Drop `.rbonline` files here to import scenarios
             </p>
             <button
               type="button"
-              className="rounded border border-[#1a1a1a] bg-[#4772b3] px-4 py-2 text-[11px] text-white transition hover:bg-[#5a8fd6]"
+              className="rounded-md bg-editor-accent px-5 py-2.5 text-editor-sm font-medium text-white transition-all duration-150 hover:bg-editor-accentHover"
               onClick={handleBrowseClick}
             >
               Browse Files
             </button>
-            <p className="text-[10px] text-[#666666]">Multiple files supported</p>
+            <p className="text-editor-xs text-editor-muted">Multiple files supported</p>
             <input
               ref={fileInputRef}
               type="file"

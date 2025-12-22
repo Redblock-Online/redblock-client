@@ -13,7 +13,7 @@ import type { ReactElement } from "react";
 
 export function ItemMenu({ items, activeItem, onItemSelect, onItemDragStart, disabledItems = [] }: ItemMenuProps): ReactElement {
   return (
-    <div className="flex flex-1 flex-col gap-1.5">
+    <div className="flex flex-1 flex-col gap-2">
       {items.map((item) => {
         const isActive = activeItem?.id === item.id;
         const isDisabled = disabledItems.includes(item.id);
@@ -52,34 +52,34 @@ export function ItemMenu({ items, activeItem, onItemSelect, onItemDragStart, dis
               onItemDragStart(item.id);
             }}
             onClick={() => !isDisabled && onItemSelect(isActive ? null : item)}
-            className={`group flex flex-col items-center gap-1.5 rounded border p-2.5 text-[#cccccc] transition ${
+            className={`group flex flex-col items-center gap-2 rounded-lg border p-3 text-editor-text transition-all duration-150 ${
               isDisabled
-                ? "cursor-not-allowed border-[#1a1a1a] bg-[#2b2b2b] opacity-50"
+                ? "cursor-not-allowed border-editor-border bg-editor-bg opacity-50"
                 : isActive
-                  ? "border-[#4772b3] bg-[#2b2b2b] text-white"
-                  : "border-[#1a1a1a] bg-[#2b2b2b] hover:bg-[#353535]"
+                  ? "border-editor-accent bg-editor-bg text-white"
+                  : "border-editor-border bg-editor-bg hover:bg-editor-surface hover:border-editor-accent/50"
             }`}
           >
             <BlockPreview item={item} />
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               {isComponent && (
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ff4dff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={isActive ? "opacity-100" : "opacity-70"}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff4dff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={isActive ? "opacity-100" : "opacity-70"}>
                   <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
                   <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
                   <line x1="12" y1="22.08" x2="12" y2="12"/>
                 </svg>
               )}
               <span
-                className={`text-[11px] ${
-                  isActive ? "text-white" : "text-[#cccccc] group-hover:text-white"
+                className={`text-editor-sm font-medium ${
+                  isActive ? "text-white" : "text-editor-text group-hover:text-white"
                 }`}
               >
                 {item.label}
               </span>
             </div>
             <span
-              className={`text-[9px] ${
-                isActive ? "text-[#999999]" : "text-[#666666] group-hover:text-[#999999]"
+              className={`text-editor-xs ${
+                isActive ? "text-editor-muted" : "text-editor-muted/70 group-hover:text-editor-muted"
               }`}
             >
               Drag to place

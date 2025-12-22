@@ -23,29 +23,29 @@ export function ComponentDeleteModal({ open, componentName, onCancel, onConfirm 
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/70 px-6 py-12" onClick={handleWrapperClick}>
+      <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/70 backdrop-blur-sm px-6 py-12 font-sans" onClick={handleWrapperClick}>
         <div
-          className="w-full max-w-md rounded border border-[#1a1a1a] bg-[#383838] shadow-2xl"
+          className="w-full max-w-md rounded-xl border border-editor-border bg-editor-panel shadow-2xl"
           onClick={handleDialogClick}
         >
-          <header className="border-b border-[#1a1a1a] px-4 py-3">
-            <h2 className="text-[12px] font-medium text-[#cccccc]">Eliminar componente</h2>
+          <header className="border-b border-editor-border px-5 py-4">
+            <h2 className="text-editor-base font-semibold text-editor-text">Eliminar componente</h2>
           </header>
-          <div className="px-4 py-4 text-[11px] text-[#cccccc]">
-            <p className="mb-4">
+          <div className="px-5 py-5 text-editor-sm text-editor-text">
+            <p className="mb-5 leading-relaxed">
               ¿Seguro que deseas eliminar <span className="font-semibold">{componentName}</span>? Esta acción eliminará todas sus instancias en la escena.
             </p>
-            <div className="flex justify-end gap-2 text-[11px]">
+            <div className="flex justify-end gap-3 text-editor-sm">
               <button
                 type="button"
-                className="rounded border border-[#1a1a1a] bg-[#2b2b2b] px-3 py-1.5 text-[#cccccc] transition hover:bg-[#404040]"
+                className="rounded-md border border-editor-border bg-editor-bg px-4 py-2 font-medium text-editor-text transition-all duration-150 hover:bg-editor-surface"
                 onClick={onCancel}
               >
                 Cancelar
               </button>
               <button
                 type="button"
-                className="rounded border border-transparent bg-[#ef4444] px-3 py-1.5 text-white transition hover:bg-[#dc2626]"
+                className="rounded-md bg-red-500 px-4 py-2 font-medium text-white transition-all duration-150 hover:bg-red-600"
                 onClick={onConfirm}
               >
                 Eliminar

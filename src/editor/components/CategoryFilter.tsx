@@ -68,15 +68,15 @@ export function CategoryFilter({ selectedCategories, onToggleCategory }: Categor
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="
-          flex items-center gap-1.5 px-2 py-1 rounded text-[10px]
-          bg-[#2b2b2b] border border-[#3a3a3a]
-          text-[#cccccc] hover:text-white hover:border-[#4a4a4a]
+          flex items-center gap-2 px-3 py-1.5 rounded-md text-editor-xs
+          bg-editor-bg border border-editor-border
+          text-editor-text hover:text-white hover:border-editor-accent/50
           transition-all duration-150
         "
       >
         <svg
-          width="10"
-          height="10"
+          width="12"
+          height="12"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -93,8 +93,8 @@ export function CategoryFilter({ selectedCategories, onToggleCategory }: Categor
           {allSelected ? "All" : selectedCount === 0 ? "None" : `${selectedCount} selected`}
         </span>
         <svg
-          width="8"
-          height="8"
+          width="10"
+          height="10"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -112,8 +112,8 @@ export function CategoryFilter({ selectedCategories, onToggleCategory }: Categor
           <div
             ref={dropdownRef}
             className="
-              fixed z-[9999]
-              bg-[#2b2b2b] border border-[#3a3a3a] rounded shadow-lg
+              fixed z-[9999] font-sans
+              bg-editor-surface border border-editor-border rounded-lg shadow-xl
               overflow-hidden
             "
             style={{
@@ -132,18 +132,18 @@ export function CategoryFilter({ selectedCategories, onToggleCategory }: Categor
                     onToggleCategory(option.id);
                   }}
                   className="
-                    w-full flex items-center gap-2 px-3 py-2 text-[11px]
-                    text-[#cccccc] hover:bg-[#353535] hover:text-white
-                    transition-colors duration-150
-                    border-b border-[#1a1a1a] last:border-b-0
+                    w-full flex items-center gap-2.5 px-4 py-2.5 text-editor-sm
+                    text-editor-text hover:bg-editor-panel hover:text-white
+                    transition-all duration-150
+                    border-b border-editor-border last:border-b-0
                   "
                 >
                   {/* Checkbox */}
                   <div
                     className={`
-                      w-3.5 h-3.5 rounded-sm border flex items-center justify-center flex-shrink-0
+                      w-4 h-4 rounded border flex items-center justify-center flex-shrink-0
                       transition-all duration-150
-                      ${isSelected ? "border-current" : "border-[#555555]"}
+                      ${isSelected ? "border-current" : "border-editor-muted"}
                     `}
                     style={{
                       backgroundColor: isSelected ? option.color : "transparent",
@@ -152,8 +152,8 @@ export function CategoryFilter({ selectedCategories, onToggleCategory }: Categor
                   >
                     {isSelected && (
                       <svg
-                        width="8"
-                        height="8"
+                        width="10"
+                        height="10"
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="white"
@@ -167,10 +167,10 @@ export function CategoryFilter({ selectedCategories, onToggleCategory }: Categor
                   </div>
                   {/* Color indicator */}
                   <div
-                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                     style={{ backgroundColor: option.color }}
                   />
-                  <span className="flex-1 text-left">{option.label}</span>
+                  <span className="flex-1 text-left font-medium">{option.label}</span>
                 </button>
               );
             })}
