@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
-import type { GeneratorConfig, RandomStaticGeneratorConfig, MovingTargetGeneratorConfig } from "@/features/editor/types";
+import type { GeneratorConfig, RandomStaticGeneratorConfig, MovingTargetGeneratorConfig } from "../../types/generatorConfig";
 import { EventConfigPanel } from "./EventConfigPanel";
-import { createEmptyEventCollection } from "@/features/editor/types";
+import { createEmptyEventCollection } from "../../types/eventConfig";
 
 type GeneratorConfigPanelProps = {
   config: GeneratorConfig;
@@ -11,7 +11,7 @@ type GeneratorConfigPanelProps = {
 };
 
 export function GeneratorConfigPanel({ config, onChange, onRequestGeneratorSelection, setTyping }: GeneratorConfigPanelProps): ReactElement {
-  const inputClass = "w-full rounded-md border border-editor-border bg-editor-bg px-3 py-2 text-editor-sm text-editor-text outline-none transition-all duration-150 focus:border-editor-accent";
+  const inputClass = "w-full rounded-md border border-editor-border bg-white px-3 py-2 text-editor-sm text-editor-text outline-none transition-all duration-150 focus:border-editor-accent";
   const labelClass = "text-editor-xs text-editor-muted font-medium mb-1.5 block";
 
   const handleNumberChange = (field: string, value: string) => {

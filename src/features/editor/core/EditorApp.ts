@@ -5,7 +5,6 @@ import {
   Color,
   DirectionalLight,
   Euler,
-  GridHelper,
   Group,
   LineBasicMaterial,
   LineSegments,
@@ -23,30 +22,30 @@ import {
   WebGLRenderer,
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { ComponentMemberTransform, SavedComponent } from "@/features/editor/components-system";
-import { DEFAULT_RANDOM_STATIC_CONFIG, DEFAULT_MOVING_CONFIG, type GeneratorConfig } from "@/features/editor/types";
-import { loadComponents } from "@/features/editor/components-system";
+import type { ComponentMemberTransform, SavedComponent } from "src/features/editor/components-system/componentsStore";
+import { DEFAULT_RANDOM_STATIC_CONFIG, DEFAULT_MOVING_CONFIG, type GeneratorConfig } from "src/features/editor/types/generatorConfig";
+import { loadComponents } from "src/features/editor/components-system/componentsStore";
 import type {
   EditorBlock,
   SelectionListener,
   SelectionTransform,
   SerializedNode,
   SerializedTransform,
-} from "@/features/editor/types";
-import { BlockStore } from "./BlockStore";
-import { SelectionManager } from "./SelectionManager";
-import { MovementController } from "./MovementController";
-import { GroupManager } from "./GroupManager";
-import { ComponentManager } from "./ComponentManager";
-import type { SerializedScenario } from "@/features/editor/scenarios";
-import { EditorModeManager } from "./EditorModeManager";
-import { InputRouter } from "./InputRouter";
-import { EditorSerializer } from "./EditorSerializer";
-import { AlertManager } from "./AlertManager";
-import { DragHandler } from "./handlers/DragHandler";
-import { TransformHandler } from "./handlers/TransformHandler";
-import { SelectionHandler } from "./handlers/SelectionHandler";
-import { createSpawnPointMesh } from "./blockFactory";
+} from "src/features/editor/types";
+import { BlockStore } from "src/features/editor/core/BlockStore";
+import { SelectionManager } from "src/features/editor/core/SelectionManager";
+import { MovementController } from "src/features/editor/core/MovementController";
+import { GroupManager } from "src/features/editor/core/GroupManager";
+import { ComponentManager } from "src/features/editor/core/ComponentManager";
+import type { SerializedScenario } from "src/features/editor/scenarios/scenarioStore";
+import { EditorModeManager } from "src/features/editor/core/EditorModeManager";
+import { InputRouter } from "src/features/editor/core/InputRouter";
+import { EditorSerializer } from "src/features/editor/core/EditorSerializer";
+import { AlertManager } from "src/features/editor/core/AlertManager";
+import { DragHandler } from "src/features/editor/core/handlers/DragHandler";
+import { TransformHandler } from "src/features/editor/core/handlers/TransformHandler";
+import { SelectionHandler } from "src/features/editor/core/handlers/SelectionHandler";
+import { createSpawnPointMesh } from "src/features/editor/core/blockFactory";
 
 const COMPONENT_MASTER_OUTLINE_COLOR = 0x9b5cff;
 const COMPONENT_INSTANCE_OUTLINE_COLOR = 0xff4dff;
@@ -125,7 +124,7 @@ export default class EditorApp {
     this.renderer.outputColorSpace = SRGBColorSpace;
 
     this.scene = new Scene();
-    this.scene.background = new Color(0x3d3d3d); // Blender-style dark gray background
+    this.scene.background = new Color(0xf5f5f5); // Light gray background for modern look
 
     this.camera = new PerspectiveCamera(60, 1, 0.1, 1000);
     this.camera.position.set(8, 10, 14);
@@ -144,31 +143,8 @@ export default class EditorApp {
 
     this.blocks = new BlockStore(this.scene);
     this.selection = new SelectionManager(this.scene, this.blocks, {
-      getBlockColor: (block, selected) => {
-        // Get the current selection count to determine if we should use pink color
-        const selectionArray = this.selection.getSelectionArray();
-        const selectedCount = selectionArray.length;
-        return this.resolveBlockOutlineColor(block, selected, selectedCount);
-      },
+      getBlockColor: (block, selected) => this.resolveBlockOutlineColor(block, selected),
       setOutlineColor: (block, color) => {
-        // Update block.outline directly if it exists (similar to defaultSetOutlineColor)
-        if (block.outline) {
-          block.outline.visible = true; // Ensure the outline is visible
-          const material = block.outline.material as LineBasicMaterial | LineBasicMaterial[];
-          if (Array.isArray(material)) {
-            material.forEach((entry) => {
-              if (entry instanceof LineBasicMaterial) {
-                entry.color.setHex(color);
-                entry.visible = true;
-              }
-            });
-          } else if (material instanceof LineBasicMaterial) {
-            material.color.setHex(color);
-            material.visible = true;
-          }
-        }
-        // Also traverse the mesh to update all LineSegments within
-        // This ensures ALL outlines in the hierarchy are updated
         this.blocks.setOutlineColor(block.mesh, color);
       },
     });
@@ -443,33 +419,19 @@ export default class EditorApp {
       const spawnPos = new Vector3();
       spawnPoint.mesh.getWorldPosition(spawnPos);
       
-      // Start raycast from the bottom of the spawn point sphere (radius = 0.5)
-      // This ensures we check from where the player would actually stand
-      const rayOrigin = spawnPos.clone();
-      rayOrigin.y -= 0.5; // Subtract sphere radius to get bottom position
-      
       // Raycast downward from spawn point
       const raycaster = new Raycaster();
-      raycaster.set(rayOrigin, new Vector3(0, -1, 0));
+      raycaster.set(spawnPos, new Vector3(0, -1, 0));
       
-      // Get all solid block meshes (exclude spawn point, generators, and other non-solid objects)
+      // Get all meshes except the spawn point itself
       const meshes = this.blocks.getAllBlocks()
-        .filter(b => {
-          // Exclude the spawn point itself
-          if (b.id === spawnPoint.id) return false;
-          // Exclude generators (they generate targets which are non-solid)
-          if (b.mesh.userData.isGenerator === true) return false;
-          // Exclude any other non-solid objects
-          if (b.mesh.userData.isTarget === true) return false;
-          // Include only solid blocks
-          return true;
-        })
+        .filter(b => b.id !== spawnPoint.id)
         .map(b => b.mesh);
       
       const intersects = raycaster.intersectObjects(meshes, true);
       
-      // Check if there's any floor beneath the spawn point
-      const hasFloor = intersects.length > 0;
+      // Check if there's a floor within reasonable distance (10 units)
+      const hasFloor = intersects.length > 0 && intersects[0].distance < 10;
       
       if (!hasFloor) {
         this.alerts.publish(
@@ -553,7 +515,42 @@ export default class EditorApp {
     this.selection.setSelectionSingle(generator);
     return generator;
   }
+  /**
+   * Detects which block is under the cursor without changing the selection.
+   * This is useful for checking if a clicked block is already selected.
+   */
+  public detectBlockUnderCursor(clientX: number, clientY: number): EditorBlock | null {
+    const rect = this.canvas.getBoundingClientRect();
+    this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    this.raycaster.setFromCamera(this.pointer, this.camera);
 
+    const intersects = this.raycaster.intersectObjects(this.blocks.getMeshes(), true);
+    const editingId = this.getEditingComponentId();
+
+    if (intersects.length === 0) {
+      return null;
+    }
+
+    for (const result of intersects) {
+      // Ignore outline helpers and any line-only helpers
+      if (result.object instanceof LineSegments) {
+        continue;
+      }
+      // Only count actual Mesh or Group objects that belong to blocks
+      const mesh = result.object as Object3D;
+      const block = this.blocks.findBlockByMesh(mesh);
+      if (!block) {
+        continue;
+      }
+      if (editingId && !this.components.isBlockWithinActiveEdit(block.id)) {
+        continue;
+      }
+      return block;
+    }
+
+    return null;
+  }
   // COMMENTED OUT: Moving Target Generator - Not implemented yet
   // public placeMovingTargetGeneratorAt(clientX: number, clientY: number): EditorBlock | null {
   //   const point = this.intersectGround(clientX, clientY);
@@ -690,43 +687,6 @@ export default class EditorApp {
       // Clear selection if nothing found and not additive
       this.selection.clearSelection();
     }
-  }
-
-  /**
-   * Detects which block is under the cursor without changing the selection.
-   * This is useful for checking if a clicked block is already selected.
-   */
-  public detectBlockUnderCursor(clientX: number, clientY: number): EditorBlock | null {
-    const rect = this.canvas.getBoundingClientRect();
-    this.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-    this.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-    this.raycaster.setFromCamera(this.pointer, this.camera);
-
-    const intersects = this.raycaster.intersectObjects(this.blocks.getMeshes(), true);
-    const editingId = this.getEditingComponentId();
-
-    if (intersects.length === 0) {
-      return null;
-    }
-
-    for (const result of intersects) {
-      // Ignore outline helpers and any line-only helpers
-      if (result.object instanceof LineSegments) {
-        continue;
-      }
-      // Only count actual Mesh or Group objects that belong to blocks
-      const mesh = result.object as Object3D;
-      const block = this.blocks.findBlockByMesh(mesh);
-      if (!block) {
-        continue;
-      }
-      if (editingId && !this.components.isBlockWithinActiveEdit(block.id)) {
-        continue;
-      }
-      return block;
-    }
-
-    return null;
   }
 
   public pickBlock(clientX: number, clientY: number, additive: boolean = false): EditorBlock | null {
@@ -1316,7 +1276,7 @@ export default class EditorApp {
     };
   }
 
-  private resolveBlockOutlineColor(block: EditorBlock, selected: boolean, selectedCount: number = 1): number {
+  private resolveBlockOutlineColor(block: EditorBlock, selected: boolean): number {
     const role = (block.mesh.userData?.componentRole as string | undefined) ?? null;
     if (role === "master") {
       return COMPONENT_MASTER_OUTLINE_COLOR;
@@ -1324,13 +1284,7 @@ export default class EditorApp {
     if (role === "instance") {
       return COMPONENT_INSTANCE_OUTLINE_COLOR;
     }
-    // When multiple objects are selected (2 or more), use pink color (like when grouping)
-    // This gives visual feedback that multiple objects are selected
-    // Single selection uses red, multiple selection uses pink
-    if (selected) {
-      return selectedCount >= 2 ? 0xff4dff : 0xff0000;
-    }
-    return 0x000000;
+    return selected ? 0xff0000 : 0x000000;
   }
 
   private setupScene(): void {
@@ -1338,20 +1292,12 @@ export default class EditorApp {
     const directional = new DirectionalLight(0xffffff, 0.8);
     directional.position.set(10, 12, 6);
 
-
-    const grid = new GridHelper(200, 40, 0x000000, 0x505050);
-    const gridMaterial = grid.material as LineBasicMaterial;
-    gridMaterial.depthTest = true;
-    gridMaterial.transparent = false;
-    gridMaterial.opacity = 1;
-    grid.renderOrder = 1;
-
     const axes = new AxesHelper(8);
     const axesMaterial = axes.material as LineBasicMaterial;
     axesMaterial.depthTest = false;
     axes.renderOrder = 2;
 
-    this.scene.add(ambient, directional, grid, axes);
+    this.scene.add(ambient, directional, axes);
   }
 
   private handleResize = (): void => {

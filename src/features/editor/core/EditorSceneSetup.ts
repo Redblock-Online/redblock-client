@@ -29,7 +29,7 @@ export function createEditorScene(canvas: HTMLCanvasElement): SceneComponents {
   renderer.outputColorSpace = SRGBColorSpace;
 
   const scene = new Scene();
-  scene.background = new Color(0x3d3d3d); // Blender-style dark gray background
+  scene.background = new Color(0xf5f5f5); // Light gray background for modern look
 
   const camera = new PerspectiveCamera(60, 1, 0.1, 1000);
   camera.position.set(8, 10, 14);
@@ -60,7 +60,7 @@ export function createEditorScene(canvas: HTMLCanvasElement): SceneComponents {
   directionalLight.shadow.camera.bottom = -20;
   scene.add(directionalLight);
 
-  const gridHelper = new GridHelper(200, 200, 0xcccccc, 0xeeeeee);
+  const gridHelper = new GridHelper(200, 200, 0xadb5bd, 0xdee2e6);
   gridHelper.position.y = 0;
   scene.add(gridHelper);
 

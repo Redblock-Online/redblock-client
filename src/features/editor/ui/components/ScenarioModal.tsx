@@ -5,7 +5,7 @@ import {
   type DragEventHandler,
   type ReactElement,
 } from "react";
-import { AUTO_SAVE_SCENARIO_NAME, type StoredScenario } from "@/features/editor/scenarios";
+import { AUTO_SAVE_SCENARIO_NAME, type StoredScenario } from "src/features/editor/scenarios/scenarioStore";
 import { Portal } from "./Portal";
 
 type ScenarioModalProps = {
@@ -67,9 +67,9 @@ export function ScenarioModal({
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 backdrop-blur-sm px-6 py-12 font-sans" onClick={onClose}>
+      <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/30 backdrop-blur-sm px-6 py-12 font-sans" onClick={onClose}>
         <div
-          className="w-full max-w-3xl rounded-xl border border-editor-border bg-editor-panel shadow-2xl"
+          className="w-full max-w-3xl rounded-xl border border-editor-border bg-white shadow-2xl"
           onClick={(event) => event.stopPropagation()}
         >
         <header className="flex items-center justify-between border-b border-editor-border px-5 py-4">
@@ -85,7 +85,7 @@ export function ScenarioModal({
         </header>
         <div className="grid gap-5 px-5 py-5 md:grid-cols-[2fr,1fr]">
           <section className="min-h-[240px] overflow-hidden rounded-lg border border-editor-border">
-            <div className="flex items-center justify-between border-b border-editor-border bg-editor-bg px-4 py-3 text-editor-sm text-editor-muted">
+            <div className="flex items-center justify-between border-b border-editor-border bg-editor-surface px-4 py-3 text-editor-sm text-editor-muted">
               <span className="font-medium">Saved Scenarios</span>
               <span>{scenarios.length}</span>
             </div>
@@ -97,7 +97,7 @@ export function ScenarioModal({
               ) : (
                 <ul className="divide-y divide-editor-border">
                   {scenarios.map((scenario) => (
-                    <li key={scenario.id} className="flex items-center justify-between px-4 py-3 text-editor-sm bg-editor-bg hover:bg-editor-surface transition-all duration-150">
+                    <li key={scenario.id} className="flex items-center justify-between px-4 py-3 text-editor-sm bg-white hover:bg-editor-surface transition-all duration-150">
                       <div className="flex flex-col gap-0.5">
                         <span className="font-medium text-editor-text">
                           {scenario.name}
@@ -110,14 +110,14 @@ export function ScenarioModal({
                       <div className="flex items-center gap-2.5">
                         <button
                           type="button"
-                          className="rounded-md bg-editor-accent px-4 py-1.5 text-editor-sm font-medium text-white transition-all duration-150 hover:bg-editor-accentHover"
+                          className="rounded-md bg-editor-accent px-4 py-1.5 text-editor-sm font-medium text-white transition-all duration-150 hover:bg-editor-accentHover shadow-sm"
                           onClick={() => onSelectScenario(scenario)}
                         >
                           Load
                         </button>
                         <button
                           type="button"
-                          className="rounded-md border border-editor-border bg-editor-bg px-2.5 py-1.5 text-editor-sm text-editor-text transition-all duration-150 hover:bg-editor-surface hover:text-white"
+                          className="rounded-md border border-editor-border bg-white px-2.5 py-1.5 text-editor-sm text-editor-text transition-all duration-150 hover:bg-editor-surface"
                           onClick={() => onDownloadScenario(scenario)}
                           title="Download scenario"
                         >
@@ -152,7 +152,7 @@ export function ScenarioModal({
               )}
             </div>
           </section>
-          <section className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-editor-border bg-editor-bg px-5 py-8 text-center"
+          <section className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-editor-border bg-editor-surface px-5 py-8 text-center"
             onDragOver={handleDragOver}
             onDrop={handleDrop}
           >
@@ -161,7 +161,7 @@ export function ScenarioModal({
             </p>
             <button
               type="button"
-              className="rounded-md bg-editor-accent px-5 py-2.5 text-editor-sm font-medium text-white transition-all duration-150 hover:bg-editor-accentHover"
+              className="rounded-md bg-editor-accent px-5 py-2.5 text-editor-sm font-medium text-white transition-all duration-150 hover:bg-editor-accentHover shadow-sm"
               onClick={handleBrowseClick}
             >
               Browse Files

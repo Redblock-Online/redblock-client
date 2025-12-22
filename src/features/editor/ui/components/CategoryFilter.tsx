@@ -10,10 +10,10 @@ export type CategoryOption = {
 };
 
 export const CATEGORY_OPTIONS: CategoryOption[] = [
-  { id: "primitive", label: "Primitive", color: "#4772b3" },
-  { id: "target", label: "Target", color: "#ff4dff" },
-  { id: "gameLogic", label: "Game Logic", color: "#ffa500" },
-  { id: "myComponents", label: "My Components", color: "#9b5cff" },
+  { id: "primitive", label: "Primitive", color: "#228be6" },
+  { id: "target", label: "Target", color: "#e64980" },
+  { id: "gameLogic", label: "Game Logic", color: "#fd7e14" },
+  { id: "myComponents", label: "My Components", color: "#9333ea" },
 ];
 
 type CategoryFilterProps = {
@@ -69,8 +69,8 @@ export function CategoryFilter({ selectedCategories, onToggleCategory }: Categor
         onClick={() => setIsOpen(!isOpen)}
         className="
           flex items-center gap-2 px-3 py-1.5 rounded-md text-editor-xs
-          bg-editor-bg border border-editor-border
-          text-editor-text hover:text-white hover:border-editor-accent/50
+          bg-white border border-editor-border
+          text-editor-text hover:text-editor-accent hover:border-editor-accent/50
           transition-all duration-150
         "
       >
@@ -113,7 +113,7 @@ export function CategoryFilter({ selectedCategories, onToggleCategory }: Categor
             ref={dropdownRef}
             className="
               fixed z-[9999] font-sans
-              bg-editor-surface border border-editor-border rounded-lg shadow-xl
+              bg-white border border-editor-border rounded-lg shadow-xl
               overflow-hidden
             "
             style={{
@@ -133,7 +133,7 @@ export function CategoryFilter({ selectedCategories, onToggleCategory }: Categor
                   }}
                   className="
                     w-full flex items-center gap-2.5 px-4 py-2.5 text-editor-sm
-                    text-editor-text hover:bg-editor-panel hover:text-white
+                    text-editor-text hover:bg-editor-surface
                     transition-all duration-150
                     border-b border-editor-border last:border-b-0
                   "

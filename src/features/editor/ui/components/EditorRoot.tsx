@@ -3,15 +3,15 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type SetStateAction } from "react";
 import { Euler, Group, Vector3, Object3D, Quaternion as ThreeQuaternion } from "three";
 import { FaPlay, FaStop } from "react-icons/fa";
-import { EditorApp } from "@/features/editor/core";
-import type { EditorBlock, EditorSelection, SelectionTransform, SerializedNode } from "@/features/editor/types";
-import type { EditorItem } from "@/features/editor/types";
-import { addComponent, getComponent } from "@/features/editor/components-system";
-import { useComponentRegistry } from "../hooks/useComponentRegistry";
+import EditorApp from "@/features/editor/core/EditorApp";
+import type { EditorBlock, EditorSelection, SelectionTransform, SerializedNode } from "../../types";
+import type { EditorItem } from "../../types";
+import { addComponent, getComponent } from "src/features/editor/components-system";
+import { useComponentRegistry } from "src/features/editor/ui/hooks/useComponentRegistry";
 import { ItemMenu } from "./ItemMenu";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { useHistoryStack, type GroupMember } from "../hooks/useHistoryStack";
-import type { EditorModeManager, TransformMode, AxisConstraint } from "@/features/editor/core";
+import type { TransformMode, AxisConstraint } from "src/features/editor/core/EditorModeManager";
 import { ScenarioModal } from "./ScenarioModal";
 import { Portal } from "./Portal";
 import { ComponentDeleteModal } from "./ComponentDeleteModal";
@@ -23,9 +23,9 @@ import {
   removeScenario,
   saveScenario,
   type StoredScenario,
-} from "@/features/editor/scenarios";
-import type { SerializedScenario } from "@/features/editor/scenarios";
-import type { Alert } from "@/features/editor/core";
+} from "src/features/editor/scenarios/scenarioStore";
+import type { SerializedScenario } from "src/features/editor/scenarios/scenarioStore";
+import type { Alert } from "src/features/editor/core/AlertManager";
 import { AlertIcon } from "./AlertIcon";
 import { CategoryFilter, type ComponentCategory } from "./CategoryFilter";
 
@@ -132,43 +132,6 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       refreshScenarios();
     }
   }, [editor, refreshScenarios]);
-
-  // Auto-load scenario from sessionStorage if coming from game OR create new if requested
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    
-    // Check if we should create a new scenario
-    const createNew = sessionStorage.getItem("editor-create-new");
-    if (createNew) {
-      sessionStorage.removeItem("editor-create-new");
-      console.log("[EditorRoot] Creating new scenario from menu");
-      editor.resetScene();
-      const emptyScenario = editor.exportScenario(AUTO_SAVE_SCENARIO_NAME);
-      saveScenario(AUTO_SAVE_SCENARIO_NAME, emptyScenario);
-      setActiveScenarioName(AUTO_SAVE_SCENARIO_NAME);
-      refreshScenarios();
-      return;
-    }
-    
-    // Check if we should load a specific scenario
-    const scenarioToLoad = sessionStorage.getItem("editor-load-scenario");
-    if (scenarioToLoad) {
-      // Clear the flag
-      sessionStorage.removeItem("editor-load-scenario");
-      
-      // Find and load the scenario
-      const scenarios = listScenarios();
-      const scenario = scenarios.find(s => s.name === scenarioToLoad);
-      
-      if (scenario) {
-        console.log("[EditorRoot] Auto-loading scenario from game:", scenarioToLoad);
-        editor.importScenario(scenario.data);
-        setActiveScenarioName(scenario.name);
-        saveScenario(AUTO_SAVE_SCENARIO_NAME, scenario.data);
-        refreshComponents();
-      }
-    }
-  }, [editor, refreshComponents, refreshScenarios]);
 
   // Subscribe to alerts
   useEffect(() => {
@@ -403,15 +366,11 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     }
     editor.resetScene();
     setActiveScenarioName(AUTO_SAVE_SCENARIO_NAME);
-    
-    // Save the empty scene to auto-save immediately after reset
-    const emptyScenario = editor.exportScenario(AUTO_SAVE_SCENARIO_NAME);
-    saveScenario(AUTO_SAVE_SCENARIO_NAME, emptyScenario);
-    
     refreshScenarios();
+    flushAutoSave();
     clearUnsaved();
     panelAutoSavePendingRef.current = false;
-  }, [clearUnsaved, closeMenus, editor, refreshScenarios, setActiveScenarioName]);
+  }, [clearUnsaved, closeMenus, editor, refreshScenarios, flushAutoSave, setActiveScenarioName]);
 
   const handleSaveScenarioAs = useCallback(() => {
     closeMenus();
@@ -1417,30 +1376,118 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         <main className="pointer-events-none relative flex-1">
           <div className="pointer-events-none absolute inset-0">
             {showControls && (
-              <div className="absolute left-4 top-4 flex max-w-md flex-col gap-2 rounded-lg border border-editor-border bg-editor-surface/95 backdrop-blur-sm px-4 py-3 text-editor-sm text-editor-text">
-                {/* Cruz blanca en la esquina superior */}
+              <div className="absolute left-4 top-4 flex flex-col gap-3 rounded-xl border border-editor-border bg-white/95 backdrop-blur-sm px-4 py-4 shadow-lg">
+                {/* Close button */}
                 <button 
-                  className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center hover:bg-editor-panel rounded-md transition-all duration-150 pointer-events-auto"
+                  className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center hover:bg-editor-surface rounded-md transition-all duration-150 pointer-events-auto"
                   onClick={() => setShowControls(false)}
-                  title="Cerrar controles"
+                  title="Close controls"
                 >
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-editor-text">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-editor-muted">
                     <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
                 </button>
-                <span className="text-editor-xs text-editor-muted font-medium mb-0.5">
-                  Controls
-                </span>
-                <span className="leading-relaxed text-editor-xs">
-                  Orbit with right click · Pan with Shift + right click · Zoom with scroll
-                </span>
-                <span className="leading-relaxed text-editor-xs">
-                  Select with left click · Move (G) · Rotate (R) · Scale (F) · constrain with X / Y / Z
-                </span>
-                <span className="leading-relaxed text-editor-xs">Move camera with WASD</span>
-                <span className="leading-relaxed text-editor-xs">Toggle Components (B) · Toggle Inspector (I) · Toggle Controls (C)</span>
+                
+                {/* Camera Controls */}
+                <div className="flex flex-col gap-2">
+                  <span className="text-editor-xs text-editor-muted font-semibold uppercase tracking-wide">Camera</span>
+                  <div className="flex gap-2">
+                    <div className="flex items-center gap-2 rounded-lg bg-editor-surface px-3 py-2" title="Orbit: Right click">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-editor-accent">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                      </svg>
+                      <span className="text-editor-xs text-editor-text font-medium">Orbit</span>
+                      <kbd className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-editor-border text-editor-muted">RMB</kbd>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-lg bg-editor-surface px-3 py-2" title="Pan: Shift + Right click">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-editor-accent">
+                        <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/>
+                      </svg>
+                      <span className="text-editor-xs text-editor-text font-medium">Pan</span>
+                      <kbd className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-editor-border text-editor-muted">⇧+RMB</kbd>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-lg bg-editor-surface px-3 py-2" title="Zoom: Scroll wheel">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-editor-accent">
+                        <circle cx="11" cy="11" r="8"/>
+                        <path d="M21 21l-4.35-4.35M11 8v6M8 11h6"/>
+                      </svg>
+                      <span className="text-editor-xs text-editor-text font-medium">Zoom</span>
+                      <kbd className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-editor-border text-editor-muted">Scroll</kbd>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Transform Controls */}
+                <div className="flex flex-col gap-2">
+                  <span className="text-editor-xs text-editor-muted font-semibold uppercase tracking-wide">Transform</span>
+                  <div className="flex gap-2">
+                    <div className="flex items-center gap-2 rounded-lg bg-editor-surface px-3 py-2" title="Select: Left click">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-editor-accent">
+                        <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/>
+                      </svg>
+                      <span className="text-editor-xs text-editor-text font-medium">Select</span>
+                      <kbd className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-editor-border text-editor-muted">LMB</kbd>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-lg bg-editor-surface px-3 py-2" title="Move mode">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-editor-accent">
+                        <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/>
+                      </svg>
+                      <span className="text-editor-xs text-editor-text font-medium">Move</span>
+                      <kbd className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-editor-border text-editor-muted">G</kbd>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-lg bg-editor-surface px-3 py-2" title="Rotate mode">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-editor-accent">
+                        <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+                        <path d="M21 3v5h-5"/>
+                      </svg>
+                      <span className="text-editor-xs text-editor-text font-medium">Rotate</span>
+                      <kbd className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-editor-border text-editor-muted">R</kbd>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-lg bg-editor-surface px-3 py-2" title="Scale mode">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-editor-accent">
+                        <path d="M21 21l-6-6m6 6v-4.8m0 4.8h-4.8"/>
+                        <path d="M3 16.2V21h4.8"/>
+                        <path d="M21 7.8V3h-4.8"/>
+                        <path d="M3 7.8V3h4.8"/>
+                      </svg>
+                      <span className="text-editor-xs text-editor-text font-medium">Scale</span>
+                      <kbd className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-editor-border text-editor-muted">F</kbd>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-editor-xs text-editor-muted">
+                    <span>Constrain axis:</span>
+                    <kbd className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-editor-border">X</kbd>
+                    <kbd className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-editor-border">Y</kbd>
+                    <kbd className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-editor-border">Z</kbd>
+                  </div>
+                </div>
+
+                {/* Shortcuts */}
+                <div className="flex flex-col gap-2">
+                  <span className="text-editor-xs text-editor-muted font-semibold uppercase tracking-wide">Shortcuts</span>
+                  <div className="flex flex-wrap gap-2">
+                    <div className="flex items-center gap-1.5 text-editor-xs text-editor-muted">
+                      <kbd className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-editor-border">WASD</kbd>
+                      <span>Move camera</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-editor-xs text-editor-muted">
+                      <kbd className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-editor-border">B</kbd>
+                      <span>Components</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-editor-xs text-editor-muted">
+                      <kbd className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-editor-border">I</kbd>
+                      <span>Inspector</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-editor-xs text-editor-muted">
+                      <kbd className="text-[10px] bg-white px-1.5 py-0.5 rounded border border-editor-border">C</kbd>
+                      <span>Controls</span>
+                    </div>
+                  </div>
+                </div>
+
                 {transformLabel ? (
-                  <span className="mt-1 w-fit rounded-md bg-editor-accent px-3 py-1.5 text-editor-xs font-medium text-white">
+                  <span className="mt-1 w-fit rounded-lg bg-editor-accent px-3 py-1.5 text-editor-xs font-medium text-white shadow-sm">
                     {transformLabel}
                   </span>
                 ) : null}

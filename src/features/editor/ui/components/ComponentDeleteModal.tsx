@@ -23,9 +23,9 @@ export function ComponentDeleteModal({ open, componentName, onCancel, onConfirm 
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/70 backdrop-blur-sm px-6 py-12 font-sans" onClick={handleWrapperClick}>
+      <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/30 backdrop-blur-sm px-6 py-12 font-sans" onClick={handleWrapperClick}>
         <div
-          className="w-full max-w-md rounded-xl border border-editor-border bg-editor-panel shadow-2xl"
+          className="w-full max-w-md rounded-xl border border-editor-border bg-white shadow-2xl"
           onClick={handleDialogClick}
         >
           <header className="border-b border-editor-border px-5 py-4">
@@ -38,14 +38,14 @@ export function ComponentDeleteModal({ open, componentName, onCancel, onConfirm 
             <div className="flex justify-end gap-3 text-editor-sm">
               <button
                 type="button"
-                className="rounded-md border border-editor-border bg-editor-bg px-4 py-2 font-medium text-editor-text transition-all duration-150 hover:bg-editor-surface"
+                className="rounded-md border border-editor-border bg-white px-4 py-2 font-medium text-editor-text transition-all duration-150 hover:bg-editor-surface"
                 onClick={onCancel}
               >
                 Cancelar
               </button>
               <button
                 type="button"
-                className="rounded-md bg-red-500 px-4 py-2 font-medium text-white transition-all duration-150 hover:bg-red-600"
+                className="rounded-md bg-red-500 px-4 py-2 font-medium text-white transition-all duration-150 hover:bg-red-600 shadow-sm"
                 onClick={onConfirm}
               >
                 Eliminar
