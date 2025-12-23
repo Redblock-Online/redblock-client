@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaInstagram } from "react-icons/fa";
-import Button from "../components/Button";
+import { Button } from "@/features/shared/ui/components";
 
 interface IGBadgeProps {
   started: boolean;

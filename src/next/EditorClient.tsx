@@ -7,7 +7,7 @@ export default function EditorClient() {
     let disposed = false;
 
     const start = async () => {
-      const { initEditor, disposeEditor } = await import("@/editor/initEditor");
+      const { initEditor, disposeEditor } = await import("@/features/editor");
       if (disposed) return;
       initEditor();
       return disposeEditor;

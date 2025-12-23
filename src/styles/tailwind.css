@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes playing-blink {
+  0% { background-color: #ff0000; }
+  50% { background-color: #ffffff; }
+  100% { background-color: #ff0000; }
+}
+
+.playing-blink {
+  animation: playing-blink 1s step-end infinite;
+}
+
 /* Minimal custom styles for range slider to match original design */
 @layer components {
   input[type="range"].sensitivity-slider {

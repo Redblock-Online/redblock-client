@@ -686,3 +686,7 @@ Este sistema de audio fue diseñado específicamente para Redblock Client con en
 **Autor:** Redblock Team  
 **Versión:** 1.0.0  
 **Última actualización:** 2025-01-19
+
+## Music format
+
+Audio format is in Ogg 128 Bitrate (KB/s).

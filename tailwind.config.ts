@@ -18,6 +18,18 @@ export default {
           text: '#111827',
           muted: '#6b7280',
         },
+        // Modern light editor theme colors
+        editor: {
+          bg: '#ffffff',
+          surface: '#f8f9fa',
+          panel: '#f1f3f5',
+          border: '#dee2e6',
+          text: '#212529',
+          muted: '#6c757d',
+          accent: '#228be6',
+          accentHover: '#1c7ed6',
+          hover: '#e7f5ff',
+        },
       },
       keyframes: {
         float: {
@@ -33,6 +45,13 @@ export default {
       },
       fontFamily: {
         mono: ['"Courier New"', 'ui-monospace', 'monospace'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+      },
+      fontSize: {
+        'editor-xs': ['12px', { lineHeight: '16px' }],
+        'editor-sm': ['13px', { lineHeight: '18px' }],
+        'editor-base': ['14px', { lineHeight: '20px' }],
+        'editor-lg': ['15px', { lineHeight: '22px' }],
       },
     },
   },

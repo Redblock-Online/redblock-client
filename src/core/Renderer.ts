@@ -3,7 +3,7 @@ import { EffectComposer, RenderPass, ShaderPass } from "three/examples/jsm/Addon
 import { FXAAShader } from "three/examples/jsm/shaders/FXAAShader.js";
 import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
 import CustomOutlinePass from "./CustomPass/CustomOutlinePass";
-import { RespawnEffect } from "@/systems/RespawnEffect";
+import { RespawnEffect } from "@/features/game/respawn";
 
 const minPixelRatio = 1;
 const maxPixelRatio = 2.0; // Increased for better antialiasing quality
