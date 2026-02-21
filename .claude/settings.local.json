@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(cd /c/Repos/redblock-client && npx fix-react2shell-next 2>&1)",
+      "Bash(cd /c/Repos/redblock-client && npx fix-react2shell-next --fix 2>&1)"
     ]
   }
 }
