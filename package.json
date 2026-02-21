@@ -45,6 +45,7 @@
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.1",
+    "@netlify/plugin-nextjs": "^5.15.8",
     "gsap": "^3.13.0",
     "lil-gui": "^0.20.0",
     "next": "^15.5.6",
