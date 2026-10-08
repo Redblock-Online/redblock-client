@@ -4,10 +4,17 @@
 
 Redblock Online is a fast-paced 3D aim training game featuring a built-in world editor. Create custom training scenarios with blocks and spawn points, then jump straight into the action to improve your shooting accuracy and reaction time.
 
-<h3 align="center">🎮 Game Preview</h3>
+<p align="center">
+  <a href="https://redblock-client.netlify.app/"><img src="https://img.shields.io/badge/▶_Play_in_the_browser-ff0000?style=for-the-badge" alt="Play in the browser"></a>
+</p>
 
 <p align="center">
-  <img src="preview.gif" alt="Preview" width="800">
+  <img src="docs/media/main-menu.jpg" alt="Redblock Online main menu" width="820">
+</p>
+
+<p align="center">
+  <img src="preview.gif" alt="Gameplay preview from an early version" width="800"><br>
+  <sub>Gameplay from an early version (the original <a href="https://github.com/freddysae0/threejs-aim-trainer">Three.js demo</a> Redblock grew from)</sub>
 </p>
 
 ## 📖 About the Project
