@@ -29,11 +29,11 @@ export function ComponentDeleteModal({ open, componentName, onCancel, onConfirm 
           onClick={handleDialogClick}
         >
           <header className="border-b border-editor-border px-5 py-4">
-            <h2 className="text-editor-base font-semibold text-editor-text">Eliminar componente</h2>
+            <h2 className="text-editor-base font-semibold text-editor-text">Delete Component</h2>
           </header>
           <div className="px-5 py-5 text-editor-sm text-editor-text">
             <p className="mb-5 leading-relaxed">
-              ¿Seguro que deseas eliminar <span className="font-semibold">{componentName}</span>? Esta acción eliminará todas sus instancias en la escena.
+              Are you sure you want to delete <span className="font-semibold">{componentName}</span>? This removes all of its instances from the scene and cannot be undone.
             </p>
             <div className="flex justify-end gap-3 text-editor-sm">
               <button
@@ -41,14 +41,14 @@ export function ComponentDeleteModal({ open, componentName, onCancel, onConfirm 
                 className="rounded-md border border-editor-border bg-white px-4 py-2 font-medium text-editor-text transition-all duration-150 hover:bg-editor-surface"
                 onClick={onCancel}
               >
-                Cancelar
+                Cancel
               </button>
               <button
                 type="button"
                 className="rounded-md bg-red-500 px-4 py-2 font-medium text-white transition-all duration-150 hover:bg-red-600 shadow-sm"
                 onClick={onConfirm}
               >
-                Eliminar
+                Delete
               </button>
             </div>
           </div>

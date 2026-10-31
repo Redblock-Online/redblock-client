@@ -10,6 +10,8 @@ export class SelectionHandler {
   private dragStartX = 0;
   private dragStartY = 0;
   private readonly DRAG_THRESHOLD = 5; // pixels
+  // Block clicked inside a multi-selection; becomes the only selection if the click wasn't a drag
+  private pendingSingleSelectId: string | null = null;
 
   constructor(
     private modeManager: EditorModeManager,
@@ -33,19 +35,19 @@ export class SelectionHandler {
     this.dragStartX = event.clientX;
     this.dragStartY = event.clientY;
 
-    // Get current selection before picking
+    const additive = event.shiftKey || event.metaKey || event.ctrlKey;
     const currentSelection = this.editor.getSelectionArray();
-    const hasSelection = currentSelection.length > 0;
-    const hasMultipleSelection = currentSelection.length > 1;
 
     // Detect block under cursor without changing selection
     const detectedBlock = this.editor.detectBlockUnderCursor(event.clientX, event.clientY);
-    const clickedBlockIsSelected = detectedBlock && currentSelection.some(block => block.id === detectedBlock.id);
+    const clickedBlockIsSelected = !!detectedBlock && currentSelection.some((block) => block.id === detectedBlock.id);
 
-    // If we have multiple blocks selected and clicked on one of them, preserve selection and start drag
-    if (hasMultipleSelection && clickedBlockIsSelected && detectedBlock && this.dragHandler) {
+    // Plain click on a block of a multi-selection: keep the selection and drag all of it.
+    // (Shift/Ctrl-click falls through so it can toggle that block out of the selection.)
+    this.pendingSingleSelectId = null;
+    if (!additive && currentSelection.length > 1 && clickedBlockIsSelected && this.dragHandler) {
       if (!this.editor.isSelectingGenerator()) {
-        // Don't call pickBlock - it would change selection. Just start drag with all selected blocks.
+        this.pendingSingleSelectId = detectedBlock.id;
         this.dragHandler.start(event.clientX, event.clientY);
       }
       this.isDraggingBox = false;
@@ -53,13 +55,13 @@ export class SelectionHandler {
     }
 
     // For single selection or new selection, use normal pickBlock behavior
-    const additive = event.shiftKey || event.metaKey || event.ctrlKey;
     const hit = this.editor.pickBlock(event.clientX, event.clientY, additive);
 
-    if (hit && this.dragHandler) {
-      // Don't start drag if we're selecting a generator target
-      if (!this.editor.isSelectingGenerator()) {
-        // Block was clicked, start drag
+    if (hit) {
+      // Only drag when the clicked block ended up selected: a shift-click that toggles a block
+      // off must not start dragging the rest of the selection.
+      const hitIsSelected = this.editor.getSelectionArray().some((block) => block.id === hit.id);
+      if (this.dragHandler && hitIsSelected && !this.editor.isSelectingGenerator()) {
         this.dragHandler.start(event.clientX, event.clientY);
       }
       this.isDraggingBox = false;
@@ -98,6 +100,31 @@ export class SelectionHandler {
       }
     }
 
+    this.isDraggingBox = false;
+  }
+
+  /**
+   * Called when a block drag ends. A click (no movement) on a block of a multi-selection
+   * selects just that block.
+   */
+  public handleDragEnd(event: PointerEvent): void {
+    const pendingId = this.pendingSingleSelectId;
+    this.pendingSingleSelectId = null;
+    if (!pendingId) return;
+    const dx = event.clientX - this.dragStartX;
+    const dy = event.clientY - this.dragStartY;
+    if (Math.sqrt(dx * dx + dy * dy) <= this.DRAG_THRESHOLD) {
+      this.editor.setSelectionByIds([pendingId]);
+    }
+  }
+
+  /**
+   * Abort a box selection without selecting (pointer released outside the canvas, window blur).
+   */
+  public cancelBoxSelection(): void {
+    if (this.selectionBox.isSelecting()) {
+      this.selectionBox.hide();
+    }
     this.isDraggingBox = false;
   }
 

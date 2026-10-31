@@ -602,7 +602,8 @@ function loadCustomScenario(app: App, scenario: SerializedScenario) {
       console.log("[Bootstrap] Target spawn position:", { x: spawnX, y: spawnY, z: spawnZ });
       console.log("[Bootstrap] Ground Y:", groundY, "Player will spawn at Y:", spawnY);
       
-      app.controls.teleportTo(spawnX, spawnY, spawnZ, 0);
+      // Face the direction the spawn point is rotated to in the editor (same as custom maps)
+      app.controls.teleportTo(spawnX, spawnY, spawnZ, spawnBlock.transform.rotation.y);
       console.log("[Bootstrap] After teleport - yawObject:", app.controls.object.position);
       
       // CRITICAL: Push player out of any colliders they might be inside
@@ -797,14 +798,19 @@ export async function bootstrapGameInEditor(
   console.log("[Bootstrap] Scene cleaned, ready for editor scenario");
   
   // Ensure pointer lock works by adding a click listener
-  canvas.addEventListener('click', () => {
-    console.log("[Bootstrap] Canvas clicked, requesting pointer lock");
+  const handleCanvasClick = () => {
     if (document.pointerLockElement !== canvas) {
-      canvas.requestPointerLock().catch((err) => {
-        console.warn("[Bootstrap] Pointer lock failed:", err);
-      });
+      try {
+        const result = canvas.requestPointerLock() as unknown as Promise<void> | undefined;
+        result?.catch?.(() => {
+          // ignore: the next click retries
+        });
+      } catch {
+        // ignore
+      }
     }
-  });
+  };
+  canvas.addEventListener("click", handleCanvasClick);
 
   // Load the scenario directly
   // We need to save it temporarily so the game can load it
@@ -823,11 +829,15 @@ export async function bootstrapGameInEditor(
     dispose: () => {
       console.log("[Bootstrap] Dispose called");
       
+      canvas.removeEventListener("click", handleCanvasClick);
+      if (document.pointerLockElement === canvas) {
+        document.exitPointerLock();
+      }
+
       // Stop the game loop
       appInstance.loop.stop();
-      console.log("[Bootstrap] Game loop stopped");
-      
-      // Pause the game
+
+      // Pause the game (also turns the game's document key/mouse listeners into no-ops)
       appInstance.setPaused(true);
       
       // Clear collision system
@@ -835,28 +845,54 @@ export async function bootstrapGameInEditor(
       console.log("[Bootstrap] Collision system cleared");
       
       // Clear only the custom blocks group (not the entire scene)
-      console.log("[Bootstrap] Clearing custom blocks...");
       const cubeGroup = appInstance.scene.children.find((child) => child.userData.isCubeGroup);
       if (cubeGroup) {
         appInstance.scene.remove(cubeGroup);
-        // Dispose geometries and materials in the group
+        // Targets share pooled materials and geometry: hand them back to the pool instead of
+        // disposing them (disposing leaked pool slots and shared GPU buffers every session)
+        const targets: Target[] = [];
         cubeGroup.traverse((child) => {
-          if (child instanceof THREE.Mesh) {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) {
-              if (Array.isArray(child.material)) {
-                child.material.forEach((m: THREE.Material) => m.dispose());
-              } else {
-                child.material.dispose();
-              }
+          if (child instanceof Target) targets.push(child);
+        });
+        targets.forEach((target) => target.dispose());
+        const insideTarget = (object: THREE.Object3D): boolean => {
+          for (let node: THREE.Object3D | null = object; node; node = node.parent) {
+            if (node instanceof Target) return true;
+          }
+          return false;
+        };
+        cubeGroup.traverse((child) => {
+          if (child instanceof THREE.Mesh && child.geometry && !insideTarget(child)) {
+            child.geometry.dispose();
+            if (Array.isArray(child.material)) {
+              child.material.forEach((m: THREE.Material) => m.dispose());
+            } else if (child.material) {
+              child.material.dispose();
             }
           }
         });
-        console.log("[Bootstrap] Custom blocks cleared");
-      } else {
-        console.log("[Bootstrap] No custom blocks group found");
       }
-      
+      appInstance.targets = [];
+      // The whole game scene is discarded: return every remaining target (e.g. the scene's
+      // TargetManager pool) to the shared material pool, or each Play session leaks ~20 slots
+      const leftoverTargets: Target[] = [];
+      appInstance.scene.traverse((child) => {
+        if (child instanceof Target) leftoverTargets.push(child);
+      });
+      leftoverTargets.forEach((target) => {
+        if (target.cubeMesh.material) target.dispose();
+      });
+
+      // Release the game's WebGL context. Without this every Play session leaks a context and
+      // after ~16 sessions the browser starts dropping the oldest one (possibly the editor's).
+      try {
+        appInstance.renderer.composer.dispose();
+        appInstance.renderer.renderer.dispose();
+        appInstance.renderer.renderer.forceContextLoss();
+      } catch (error) {
+        console.warn("[Bootstrap] Failed to release game renderer:", error);
+      }
+
       // Clean up UI root
       if (uiRoot.parentElement) {
         uiRoot.parentElement.removeChild(uiRoot);

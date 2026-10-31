@@ -293,7 +293,7 @@ export function PropertiesPanel({
       {/* Generator Configuration Panel */}
       {isGenerator && generatorConfig && onGeneratorConfigChange && (
         <GeneratorConfigPanel
-          key={`${selection.id}-${generatorConfig.targetCount}-${generatorConfig.targetScale}-${generatorConfig.enabled}-${generatorConfig.visible}`}
+          key={selection.id}
           config={generatorConfig}
           onChange={(newConfig) => onGeneratorConfigChange(selection.id, newConfig)}
           onRequestGeneratorSelection={onRequestGeneratorSelection}
