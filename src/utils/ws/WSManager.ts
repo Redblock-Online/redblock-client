@@ -1,4 +1,9 @@
 import type { TargetInfo } from "@/features/game/scenes";
+import {
+  isPlayerShotMessage,
+  type PlayerShotMessage,
+  type ShotPayload,
+} from "@/features/game/multiplayer/shotProtocol";
 
 export type PlayerCore = {
   id: string;
@@ -17,7 +22,14 @@ type PlayerUpdateMessage = PlayerCore & { type: "playerUpdate" };
 type AssignedMessage = PlayerCore & { type: "assigned" };
 type PlayerLeftMessage = { type: "playerLeft"; id: string };
 type ErrorMessage = { type: "error"; message?: string; error?: unknown };
-type InboundMessage = AssignedMessage | PlayerLeftMessage | ErrorMessage | PlayerUpdateMessage;
+type InboundMessage =
+  | AssignedMessage
+  | PlayerLeftMessage
+  | ErrorMessage
+  | PlayerUpdateMessage
+  | PlayerShotMessage;
+
+export type { PlayerShotMessage, ShotPayload };
 
 export default class WSManager {
   private ws: WebSocket | null = null;
@@ -30,6 +42,7 @@ export default class WSManager {
   private lastMessageTimeById = new Map<string, number>();
   private meReadyCallbacks: ((me: PlayerCore) => void)[] = [];
   public neighbors = new Map<string, PlayerCore>();
+  private playerShotListeners = new Set<(shot: PlayerShotMessage) => void>();
   
   // Reconnection properties
   private reconnectAttempts = 0;
@@ -101,8 +114,17 @@ export default class WSManager {
 
     this.ws.onmessage = (event) => {
       const raw = typeof event.data === "string" ? event.data : String(event.data);
-      const message = JSON.parse(raw) as InboundMessage;
-      if (message.type === "playerUpdate") {
+      let message: InboundMessage;
+      try {
+        message = JSON.parse(raw) as InboundMessage;
+      } catch {
+        console.warn("[WSManager] Ignoring malformed message");
+        return;
+      }
+      if (message.type === "playerShot") {
+        // Shots are events, not state: dispatch immediately instead of the 20 Hz queue
+        this.dispatchPlayerShot(message);
+      } else if (message.type === "playerUpdate") {
         const update = message as PlayerUpdateMessage;
         this.messageQueue.set(update.id, update);
       } else {
@@ -182,6 +204,9 @@ export default class WSManager {
     }
     if (message.type === "playerLeft") {
       this.neighbors.delete(message.id);
+      // Drop pending state too, otherwise a queued update re-adds the player as a ghost
+      this.messageQueue.delete(message.id);
+      this.lastMessageTimeById.delete(message.id);
     }
     if (message.type === "error") {
       console.log("Error", message);
@@ -229,6 +254,47 @@ export default class WSManager {
     }
   }
   
+  /**
+   * Sends a shot immediately (shots bypass the 20 Hz update throttle).
+   *
+   * @param shot - Room-local shot payload (see `buildShotPayload`)
+   * @returns true if the message was handed to the socket
+   */
+  public sendShot(shot: ShotPayload): boolean {
+    if (!this.ws || this.fallbackToOffline || !this.isConnected) return false;
+    try {
+      this.ws.send(JSON.stringify({ type: "shot", data: shot }));
+      return true;
+    } catch (error) {
+      console.error("[WSManager] Failed to send shot:", error);
+      return false;
+    }
+  }
+
+  /**
+   * Subscribes to neighbours' shots. Listeners run synchronously on receipt.
+   *
+   * @returns Unsubscribe function
+   */
+  public onPlayerShot(listener: (shot: PlayerShotMessage) => void): () => void {
+    this.playerShotListeners.add(listener);
+    return () => {
+      this.playerShotListeners.delete(listener);
+    };
+  }
+
+  private dispatchPlayerShot(message: unknown) {
+    if (!isPlayerShotMessage(message)) return;
+    if (this.me && message.id === this.me.id) return;
+    this.playerShotListeners.forEach((listener) => {
+      try {
+        listener(message);
+      } catch (error) {
+        console.error("[WSManager] playerShot listener threw:", error);
+      }
+    });
+  }
+
   public isOnline(): boolean {
     return this.isConnected && !this.fallbackToOffline;
   }
