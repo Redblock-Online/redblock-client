@@ -19,6 +19,7 @@ export class TransformHandler {
   private targets: Array<{ id: string; origin: SelectionTransform }> = [];
   private delta = { x: 0, y: 0 };
   private pointerLockRequested = false;
+  private removePointerLockListeners?: () => void;
 
   private onCommit?: (changes: Array<{ id: string; before: SelectionTransform; after: SelectionTransform }>) => void;
   private onUpdate?: (transform: SelectionTransform | null) => void;
@@ -312,14 +313,30 @@ export class TransformHandler {
         return;
       }
 
+      // The lock we held was released (e.g. Esc): cancel the transform
+      const hadLock = this.pointerLockRequested;
       this.pointerLockRequested = false;
-      if (this.modeManager.isTransforming()) {
+      if (hadLock && this.modeManager.isTransforming()) {
         this.finish(false);
       }
     };
 
+    // Lock refused (e.g. requested again too soon after the previous release): keep the
+    // transform running with regular pointer events instead of cancelling it.
+    const handlePointerLockError = () => {
+      this.pointerLockRequested = false;
+    };
+
     document.addEventListener("pointerlockchange", handlePointerLockChange);
-    document.addEventListener("pointerlockerror", handlePointerLockChange);
+    document.addEventListener("pointerlockerror", handlePointerLockError);
+    this.removePointerLockListeners = () => {
+      document.removeEventListener("pointerlockchange", handlePointerLockChange);
+      document.removeEventListener("pointerlockerror", handlePointerLockError);
+    };
   }
 
+  public dispose(): void {
+    this.removePointerLockListeners?.();
+    this.removePointerLockListeners = undefined;
+  }
 }

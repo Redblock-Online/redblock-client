@@ -21,6 +21,8 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
+      // tsconfig baseUrl "." also lets code import with a bare "src/..." prefix
+      src: path.resolve(__dirname, "src"),
     },
   },
 });

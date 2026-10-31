@@ -7,13 +7,16 @@ export type AxisInputProps = {
   onChange: (next: number) => void;
   step?: number;
   min?: number;
+  max?: number;
   precision?: number; // for display rounding only
 };
 
-export function AxisInput({ label, value, onChange, step = 0.1, min, precision }: AxisInputProps): ReactElement {
+export function AxisInput({ label, value, onChange, step = 0.1, min, max, precision }: AxisInputProps): ReactElement {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<string>("");
+  // Set when Enter/Escape already handled the edit, so the blur that follows does not commit again
+  const skipBlurCommitRef = useRef(false);
 
   const format = useCallback(
     (v: number): string => {
@@ -30,12 +33,31 @@ export function AxisInput({ label, value, onChange, step = 0.1, min, precision }
 
   const applyBounds = useCallback(
     (n: number): number => {
+      let bounded = n;
       if (typeof min === "number") {
-        return Math.max(min, n);
+        bounded = Math.max(min, bounded);
       }
-      return n;
+      if (typeof max === "number") {
+        bounded = Math.min(max, bounded);
+      }
+      return bounded;
     },
-    [min],
+    [min, max],
+  );
+
+  // Commit only real edits: re-submitting the rounded display text would silently round the
+  // underlying value (e.g. 3.14159 -> 3.14) just by focusing and leaving the field.
+  const commitDraft = useCallback(
+    (text: string) => {
+      if (text.trim() === format(value)) {
+        return;
+      }
+      const parsed = parse(text);
+      if (parsed !== null) {
+        onChange(applyBounds(parsed));
+      }
+    },
+    [applyBounds, format, onChange, parse, value],
   );
 
   return (
@@ -49,6 +71,7 @@ export function AxisInput({ label, value, onChange, step = 0.1, min, precision }
         className="h-8 w-full rounded-md border border-editor-border bg-white pl-6 pr-2 text-right text-editor-sm text-editor-text outline-none transition-all duration-150 focus:border-editor-accent focus:bg-editor-surface"
         value={isEditing ? draft : format(value)}
         onFocus={(e) => {
+          skipBlurCommitRef.current = false;
           setIsEditing(true);
           setDraft(e.currentTarget.value);
         }}
@@ -57,10 +80,10 @@ export function AxisInput({ label, value, onChange, step = 0.1, min, precision }
           setDraft(e.target.value);
         }}
         onBlur={() => {
-          const parsed = parse(draft);
-          if (parsed !== null) {
-            onChange(applyBounds(parsed));
+          if (!skipBlurCommitRef.current) {
+            commitDraft(draft);
           }
+          skipBlurCommitRef.current = false;
           // reset editing state and reflect the latest external value
           setIsEditing(false);
         }}
@@ -70,15 +93,18 @@ export function AxisInput({ label, value, onChange, step = 0.1, min, precision }
             e.preventDefault();
             const dir = e.key === "ArrowUp" ? 1 : -1;
             const factor = e.shiftKey ? 10 : e.altKey || e.metaKey ? 0.1 : 1;
-            onChange(applyBounds(value + dir * step * factor));
+            const base = isEditing ? parse(draft) ?? value : value;
+            const next = applyBounds(base + dir * step * factor);
+            onChange(next);
+            if (isEditing) {
+              setDraft(format(next));
+            }
             return;
           }
           if (e.key === "Enter") {
             e.preventDefault();
-            const parsed = parse(isEditing ? draft : format(value));
-            if (parsed !== null) {
-              onChange(applyBounds(parsed));
-            }
+            commitDraft(isEditing ? draft : format(value));
+            skipBlurCommitRef.current = true;
             // Commit and exit edit mode
             setIsEditing(false);
             // blur to trigger consistent formatting
@@ -87,7 +113,8 @@ export function AxisInput({ label, value, onChange, step = 0.1, min, precision }
           }
           if (e.key === "Escape") {
             e.preventDefault();
-            // Cancel edits and revert display
+            // Cancel edits and revert display (the blur below must not commit the draft)
+            skipBlurCommitRef.current = true;
             setIsEditing(false);
             setDraft("");
             inputRef.current?.blur();

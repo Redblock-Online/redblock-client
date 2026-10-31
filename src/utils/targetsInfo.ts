@@ -16,3 +16,16 @@ export function buildTargetsInfo(
     disabled: !t.visible || t.animating === true,
   }));
 }
+
+/**
+ * Index of `target` inside the array produced by {@link buildTargetsInfo} for the same
+ * inputs, or -1 if it is not part of it. Used to tell neighbours which of the targets
+ * they render was broken by a shot.
+ */
+export function targetsInfoIndexOf(
+  targets: Target[],
+  ammountOfTargetsSelected: number,
+  target: Target
+): number {
+  return targets.slice(-ammountOfTargetsSelected).indexOf(target);
+}

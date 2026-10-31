@@ -5,7 +5,7 @@ import {
   type DragEventHandler,
   type ReactElement,
 } from "react";
-import { AUTO_SAVE_SCENARIO_NAME, type StoredScenario } from "src/features/editor/scenarios/scenarioStore";
+import { AUTO_SAVE_SCENARIO_NAME, type StoredScenario } from "@/features/editor/scenarios/scenarioStore";
 import { Portal } from "./Portal";
 
 type ScenarioModalProps = {

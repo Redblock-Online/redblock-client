@@ -9,7 +9,8 @@ export class SelectionBox {
 
   constructor(private container: HTMLElement) {
     this.element = document.createElement("div");
-    this.element.style.position = "absolute";
+    // Coordinates are viewport (client) coordinates, so position relative to the viewport
+    this.element.style.position = "fixed";
     this.element.style.border = "2px solid #4772b3";
     this.element.style.backgroundColor = "rgba(71, 114, 179, 0.1)";
     this.element.style.pointerEvents = "none";
@@ -68,6 +69,6 @@ export class SelectionBox {
   }
 
   public dispose(): void {
-    this.container.removeChild(this.element);
+    this.element.remove();
   }
 }

@@ -1,17 +1,18 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type SetStateAction } from "react";
-import { Euler, Group, Vector3, Object3D, Quaternion as ThreeQuaternion } from "three";
+import { Euler, Vector3 } from "three";
 import { FaPlay, FaStop } from "react-icons/fa";
 import EditorApp from "@/features/editor/core/EditorApp";
 import type { EditorBlock, EditorSelection, SelectionTransform, SerializedNode } from "../../types";
 import type { EditorItem } from "../../types";
-import { addComponent, getComponent } from "src/features/editor/components-system";
-import { useComponentRegistry } from "src/features/editor/ui/hooks/useComponentRegistry";
+import { addComponent, getComponent } from "@/features/editor/components-system";
+import { hasTransformChanged } from "@/features/editor/core/EditorTransformUtils";
+import { useComponentRegistry } from "@/features/editor/ui/hooks/useComponentRegistry";
 import { ItemMenu } from "./ItemMenu";
 import { PropertiesPanel } from "./PropertiesPanel";
-import { useHistoryStack, type GroupMember } from "../hooks/useHistoryStack";
-import type { TransformMode, AxisConstraint } from "src/features/editor/core/EditorModeManager";
+import { useHistoryStack } from "../hooks/useHistoryStack";
+import type { TransformMode, AxisConstraint } from "@/features/editor/core/EditorModeManager";
 import { ScenarioModal } from "./ScenarioModal";
 import { Portal } from "./Portal";
 import { ComponentDeleteModal } from "./ComponentDeleteModal";
@@ -23,9 +24,9 @@ import {
   removeScenario,
   saveScenario,
   type StoredScenario,
-} from "src/features/editor/scenarios/scenarioStore";
-import type { SerializedScenario } from "src/features/editor/scenarios/scenarioStore";
-import type { Alert } from "src/features/editor/core/AlertManager";
+} from "@/features/editor/scenarios/scenarioStore";
+import type { SerializedScenario } from "@/features/editor/scenarios/scenarioStore";
+import type { Alert } from "@/features/editor/core/AlertManager";
 import { AlertIcon } from "./AlertIcon";
 import { CategoryFilter, type ComponentCategory } from "./CategoryFilter";
 
@@ -90,11 +91,12 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   const hoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
   const autoSaveTimeoutRef = useRef<number | null>(null);
-  const panelAutoSavePendingRef = useRef(false);
   const isMountedRef = useRef(true);
   const clipboardRef = useRef<ClipboardPayload | null>(null);
   const pasteOffsetRef = useRef(0);
   const unsavedChangesRef = useRef(false);
+  // Assigned once useHistoryStack runs (declared below); loading a scenario invalidates history
+  const clearHistoryRef = useRef<() => void>(() => {});
   const [componentPendingDelete, setComponentPendingDelete] = useState<{ id: string; label: string } | null>(null);
   const [hasSpawnPoint, setHasSpawnPoint] = useState(false);
   const [isGameActive, setIsGameActive] = useState(false);
@@ -148,9 +150,9 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   // Keyboard shortcuts for toggling panels
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Ignore if user is typing in an input
-      if (editor.isUserTyping()) return;
-      
+      // Ignore while typing in a form field or while the game preview runs
+      if (editor.shouldIgnoreKeyEvent(event) || event.repeat) return;
+
       // Ignore if any modifier keys are pressed
       if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
       
@@ -365,11 +367,13 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       return;
     }
     editor.resetScene();
+    clearHistoryRef.current();
+    clipboardRef.current = null;
+    setHasSpawnPoint(editor.hasSpawnPoint());
     setActiveScenarioName(AUTO_SAVE_SCENARIO_NAME);
     refreshScenarios();
     flushAutoSave();
     clearUnsaved();
-    panelAutoSavePendingRef.current = false;
   }, [clearUnsaved, closeMenus, editor, refreshScenarios, flushAutoSave, setActiveScenarioName]);
 
   const handleSaveScenarioAs = useCallback(() => {
@@ -405,7 +409,6 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     URL.revokeObjectURL(url);
     flushAutoSave();
     clearUnsaved();
-    panelAutoSavePendingRef.current = false;
   }, [clearUnsaved, closeMenus, editor, flushAutoSave, refreshScenarios, scenarioRecords, setActiveScenarioName]);
 
   const handleLoadScenario = useCallback(() => {
@@ -426,12 +429,13 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     }
     flushAutoSave();
     clearUnsaved();
-    panelAutoSavePendingRef.current = false;
   }, [activeScenarioName, clearUnsaved, editor, flushAutoSave]);
 
   const handleSelectScenario = useCallback(
     (record: StoredScenario) => {
       editor.importScenario(record.data);
+      clearHistoryRef.current();
+      setHasSpawnPoint(editor.hasSpawnPoint());
       setActiveScenarioName(record.name);
       saveScenario(AUTO_SAVE_SCENARIO_NAME, record.data);
       setIsScenarioModalOpen(false);
@@ -439,7 +443,6 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       refreshComponents();
       flushAutoSave();
       clearUnsaved();
-      panelAutoSavePendingRef.current = false;
     },
     [clearUnsaved, editor, flushAutoSave, refreshComponents, refreshScenarios, setActiveScenarioName],
   );
@@ -489,6 +492,8 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       return;
     }
     editor.removeComponentDefinition(componentPendingDelete.id);
+    // History entries may reference instances of the deleted definition
+    clearHistoryRef.current();
     removeComponentFromLibrary(componentPendingDelete.id);
     refreshComponents();
     setComponentPendingDelete(null);
@@ -592,22 +597,6 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   }, [menuGroups, openMenuId]);
 
 
-  const snapshotFromBlock = (b: EditorBlock): SelectionTransform => ({
-    position: b.mesh.position.clone(),
-    rotation: b.mesh.rotation.clone(),
-    scale: b.mesh.scale.clone(),
-  });
-
-  const snapshotFromWorldObject = (obj: Object3D): SelectionTransform => {
-    const p = new Vector3();
-    const q = new ThreeQuaternion();
-    const s = new Vector3();
-    obj.updateWorldMatrix(true, false);
-    obj.matrixWorld.decompose(p, q, s);
-    const e = new Euler().setFromQuaternion(q);
-    return { position: p, rotation: e, scale: s };
-  };
-
   useEffect(() => {
     selectedItemRef.current = activeItem;
   }, [activeItem]);
@@ -668,7 +657,29 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     [editor, applyTransformToState],
   );
 
-  const { pushHistory, undo, redo } = useHistoryStack(editor, applyTransformSnapshot, autoSaveScenario);
+  // Re-read the live editor selection into React state (after undo/redo or config edits)
+  const refreshSelectionView = useCallback(() => {
+    const blocks = editor.getSelectionArray();
+    if (blocks.length === 0) {
+      setSelection(null);
+    } else if (blocks.length === 1) {
+      setSelection({ ...blocks[0] });
+    } else {
+      setSelection(blocks);
+    }
+    applyTransformToState(editor.getSelectionTransform());
+    setHasSpawnPoint(editor.hasSpawnPoint());
+  }, [applyTransformToState, editor]);
+
+  const handleHistoryChange = useCallback(() => {
+    autoSaveScenario();
+    refreshSelectionView();
+  }, [autoSaveScenario, refreshSelectionView]);
+
+  const { pushHistory, undo, redo, clearHistory } = useHistoryStack(editor, applyTransformSnapshot, handleHistoryChange);
+  useEffect(() => {
+    clearHistoryRef.current = clearHistory;
+  }, [clearHistory]);
 
   // NEW: Use mode system instead of useTransformSession
   const [transformMode, setTransformMode] = useState<TransformMode | null>(null);
@@ -691,35 +702,34 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   useEffect(() => {
     return editor.addSelectionListener((block) => {
       const currentMode = generatorSelectionModeRef.current;
-      console.log('[EditorRoot] Selection listener triggered, block:', Array.isArray(block) ? 'multiple' : block?.id);
-      console.log('[EditorRoot] Generator selection mode active:', !!currentMode);
       
       // Handle generator selection mode
       if (currentMode) {
-        console.log('[EditorRoot] In generator selection mode, source:', currentMode.sourceGeneratorId);
         // In selection mode, ignore all selection changes except valid generator clicks
         if (block && !Array.isArray(block)) {
           const isGenerator = block.mesh.userData?.isGenerator === true;
-          console.log('[EditorRoot] Clicked block is generator:', isGenerator);
-          console.log('[EditorRoot] Clicked block ID:', block.id);
           if (isGenerator && block.id !== currentMode.sourceGeneratorId) {
-            console.log('[EditorRoot] Valid generator selected! Linking...');
             // User selected a valid generator - link it to the event
             const sourceBlock = editor.getBlock(currentMode.sourceGeneratorId);
             if (sourceBlock && sourceBlock.generatorConfig) {
-              const updatedConfig = { ...sourceBlock.generatorConfig };
+              const before = sourceBlock.generatorConfig;
+              const updatedConfig = { ...before };
               if (updatedConfig.events) {
                 updatedConfig.events = {
                   ...updatedConfig.events,
-                  onComplete: updatedConfig.events.onComplete.map(event => 
+                  onComplete: updatedConfig.events.onComplete.map(event =>
                     event.id === currentMode.eventId && event.type === "startGenerator"
                       ? { ...event, targetGeneratorId: block.id }
                       : event
                   ),
                 };
                 editor.updateGeneratorConfig(currentMode.sourceGeneratorId, updatedConfig);
-                markUnsaved();
-                console.log('[EditorRoot] Config updated, re-selecting source block');
+                pushHistory({
+                  type: "generator-config",
+                  id: currentMode.sourceGeneratorId,
+                  before,
+                  after: updatedConfig,
+                });
               }
             }
             
@@ -731,7 +741,6 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             setTimeout(() => {
               const freshSourceBlock = editor.getBlock(currentMode.sourceGeneratorId);
               if (freshSourceBlock) {
-                console.log('[EditorRoot] Re-selecting source block:', freshSourceBlock.id);
                 editor.setSelectionByIds([currentMode.sourceGeneratorId]);
               }
               // Exit selection mode AFTER re-selecting to prevent accidental deletion
@@ -777,7 +786,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       // Check if there's a spawn point
       setHasSpawnPoint(editor.hasSpawnPoint());
     });
-  }, [editor, applyTransformToState, editingActive, markUnsaved]);
+  }, [editor, applyTransformToState, editingActive, pushHistory]);
 
   // NOTE: Event handling (pointer, keyboard) is now done by InputRouter in EditorApp
   // We only need to handle drag/drop from the palette
@@ -809,10 +818,6 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         placed = editor.placeBlockAt(event.clientX, event.clientY);
       } else if (data === "randomTargetGen") {
         placed = editor.placeRandomTargetGeneratorAt(event.clientX, event.clientY);
-      } else if (data === "movingTargetGen") {
-        // COMMENTED OUT: Moving Target Generator - Not implemented yet
-        // placed = editor.placeMovingTargetGeneratorAt(event.clientX, event.clientY);
-        console.warn('[EditorRoot] Moving Target Generator not implemented yet');
       } else if (data === "spawn") {
         placed = editor.placeSpawnAt(event.clientX, event.clientY);
       } else if (data.startsWith("component:")) {
@@ -823,15 +828,11 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
         }
       }
       if (placed) {
-        const t = editor.getSelectionTransform();
-        if (t) {
-          pushHistory({ type: "add", id: placed.id, transform: t });
-        }
-        autoSaveScenario();
-        // Update spawn point status
+        // Store the serialized block so redo restores it exactly (generator config, spawn, component)
+        pushHistory({ type: "create", ids: [placed.id], payload: editor.serializeBlocksByIds([placed.id]) });
         setHasSpawnPoint(editor.hasSpawnPoint());
       }
-      setActiveItem(builtinItems[0]);
+      setActiveItem(null);
       editor.clearMovementState?.();
     };
 
@@ -884,38 +885,24 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     pasteOffsetRef.current += 1;
     const offsetMagnitude = pasteOffsetRef.current * 1.5;
     const offset = new Vector3(offsetMagnitude, 0, offsetMagnitude);
-    const created = editor.instantiateSerializedNodes(payload.nodes, payload.componentIds, offset);
+    const created = editor.instantiateSerializedNodes(payload.nodes, payload.componentIds, { offset });
     if (created.length > 0) {
-      editor.setSelectionByIds(created.map((block) => block.id));
-      // Add each pasted block to history so undo works
-      // Serialize the created blocks to preserve all their data (including generator config)
       const createdIds = created.map((block) => block.id);
-      const serializedPayload = editor.serializeBlocksByIds(createdIds);
-      serializedPayload.nodes.forEach((node, index) => {
-        const block = created[index];
-        const transform = editor.getTransformsForIds([block.id])[0]?.transform;
-        if (transform) {
-          pushHistory({ type: "add", id: block.id, transform, node });
-        }
-      });
-      panelAutoSavePendingRef.current = false;
-      autoSaveScenario();
+      editor.setSelectionByIds(createdIds);
+      // One history step for the whole paste; the payload restores the same ids on redo
+      pushHistory({ type: "create", ids: createdIds, payload: editor.serializeBlocksByIds(createdIds) });
     }
-  }, [autoSaveScenario, editor, pushHistory]);
+  }, [editor, pushHistory]);
 
   const renameSelection = useCallback((id: string, newName: string) => {
     if (!editor) return;
     
-    const success = editor.renameBlock(id, newName);
-    if (success) {
-      // Force re-render to show new name
-      const block = editor.getBlock(id);
-      if (block) {
-        setSelection({ ...block });
-      }
-      markUnsaved();
+    const before = editor.getBlock(id)?.name ?? "";
+    if (before === newName) return;
+    if (editor.renameBlock(id, newName)) {
+      pushHistory({ type: "rename", id, before, after: newName });
     }
-  }, [editor, markUnsaved]);
+  }, [editor, pushHistory]);
   
   const setTyping = useCallback((typing: boolean) => {
     if (editor) {
@@ -924,11 +911,8 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
   }, [editor]);
 
   const deleteSelection = useCallback(() => {
-    const currentSelection = selection
-      ? Array.isArray(selection)
-        ? selection
-        : [selection]
-      : editor.getSelectionArray();
+    // Use the live editor selection: React state can lag behind (e.g. generator link mode)
+    const currentSelection = editor.getSelectionArray();
     if (currentSelection.length === 0) {
       return;
     }
@@ -952,24 +936,16 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
 
     editor.clearSelection();
     setSelection(null);
-    clipboardRef.current = null;
-    pasteOffsetRef.current = 0;
-    panelAutoSavePendingRef.current = false;
-    autoSaveScenario();
-    // Update spawn point status
     setHasSpawnPoint(editor.hasSpawnPoint());
-  }, [autoSaveScenario, editor, pushHistory, selection]);
+  }, [editor, pushHistory]);
 
   // NOTE: Keyboard handling is now done by InputRouter in EditorApp
   // We only keep UI-specific shortcuts here (copy/paste/save/undo/redo/delete)
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.repeat) return;
-
-      const target = event.target as HTMLElement | null;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
-        return;
-      }
+      // Ignore while typing in a form field or while the game preview runs
+      if (editor.shouldIgnoreKeyEvent(event)) return;
 
       const key = event.key.toLowerCase();
       const meta = event.metaKey;
@@ -1007,7 +983,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
       }
 
       // Delete (but not when in generator selection mode)
-      if ((event.key === "Delete" || event.key === "Backspace") && (selection || editor.getSelectionArray().length > 0)) {
+      if ((event.key === "Delete" || event.key === "Backspace") && editor.getSelectionArray().length > 0) {
         // Don't delete when in generator selection mode
         if (generatorSelectionModeRef.current) {
           return;
@@ -1049,79 +1025,61 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [autoSaveScenario, copySelection, deleteSelection, editor, handleSaveCurrentScenario, pasteClipboard, selection, transformMode, undo, redo]);
-
-  useEffect(() => {
-    if (!selection || Array.isArray(selection)) {
-      return;
-    }
-    if (transformMode) {
-      return;
-    }
-    editor.updateSelectedBlockPosition(new Vector3(positionState.x, positionState.y, positionState.z));
-    if (panelAutoSavePendingRef.current) {
-      panelAutoSavePendingRef.current = false;
-      autoSaveScenario();
-    }
-  }, [autoSaveScenario, editor, positionState, selection, transformMode]);
-
-  useEffect(() => {
-    if (!selection || Array.isArray(selection)) {
-      return;
-    }
-    if (transformMode) {
-      return;
-    }
-    editor.updateSelectedBlockScale(new Vector3(scaleState.x, scaleState.y, scaleState.z));
-    if (panelAutoSavePendingRef.current) {
-      panelAutoSavePendingRef.current = false;
-      autoSaveScenario();
-    }
-  }, [autoSaveScenario, editor, scaleState, selection, transformMode]);
-
-  useEffect(() => {
-    if (!selection || Array.isArray(selection)) {
-      return;
-    }
-    if (transformMode) {
-      return;
-    }
-    editor.updateSelectedBlockRotation(
-      new Euler(
-        (rotationState.x * Math.PI) / 180,
-        (rotationState.y * Math.PI) / 180,
-        (rotationState.z * Math.PI) / 180,
-      ),
-    );
-    if (panelAutoSavePendingRef.current) {
-      panelAutoSavePendingRef.current = false;
-      autoSaveScenario();
-    }
-  }, [autoSaveScenario, editor, rotationState, selection, transformMode]);
+  }, [autoSaveScenario, copySelection, deleteSelection, editor, handleSaveCurrentScenario, pasteClipboard, transformMode, undo, redo]);
 
   const inspectorVisible = selection !== null;
 
-  
+  // Numeric edits from the inspector: applied straight to the editor and recorded in history.
+  // `prev` is read from the live block so a stale React state can never be written back.
+  const commitInspectorTransform = useCallback(
+    (build: (current: SelectionTransform) => SelectionTransform) => {
+      const block = editor.getSelection();
+      const before = editor.getSelectionTransform();
+      if (!block || !before) return;
+      editor.applyTransform(block.id, build(before));
+      const after = editor.getSelectionTransform();
+      if (!after) return;
+      applyTransformToState(after);
+      if (hasTransformChanged(before, after)) {
+        pushHistory({ type: "transform", id: block.id, before, after });
+      }
+    },
+    [applyTransformToState, editor, pushHistory],
+  );
+
+  const resolveVector = (updater: SetStateAction<VectorState>, prev: VectorState): VectorState =>
+    typeof updater === "function" ? updater(prev) : updater;
 
   const handlePositionChange = useCallback((updater: SetStateAction<VectorState>) => {
-    panelAutoSavePendingRef.current = true;
-    setPositionState(updater);
-  }, []);
+    commitInspectorTransform((current) => {
+      const next = resolveVector(updater, { x: current.position.x, y: current.position.y, z: current.position.z });
+      return { ...current, position: new Vector3(next.x, next.y, next.z) };
+    });
+  }, [commitInspectorTransform]);
 
   const handleScaleChange = useCallback((updater: SetStateAction<VectorState>) => {
-    panelAutoSavePendingRef.current = true;
-    setScaleState(updater);
-  }, []);
+    commitInspectorTransform((current) => {
+      const next = resolveVector(updater, { x: current.scale.x, y: current.scale.y, z: current.scale.z });
+      return { ...current, scale: new Vector3(next.x, next.y, next.z) };
+    });
+  }, [commitInspectorTransform]);
 
   const handleRotationChange = useCallback((updater: SetStateAction<VectorState>) => {
-    panelAutoSavePendingRef.current = true;
-    setRotationState(updater);
-  }, []);
+    commitInspectorTransform((current) => {
+      const toDeg = (rad: number) => (rad * 180) / Math.PI;
+      const prev = { x: toDeg(current.rotation.x), y: toDeg(current.rotation.y), z: toDeg(current.rotation.z) };
+      const next = resolveVector(updater, prev);
+      return {
+        ...current,
+        rotation: new Euler((next.x * Math.PI) / 180, (next.y * Math.PI) / 180, (next.z * Math.PI) / 180),
+      };
+    });
+  }, [commitInspectorTransform]);
 
   const title = useMemo(() => {
     if (selection) {
       if (Array.isArray(selection)) return "Multiple Objects";
-      return selection.id;
+      return selection.name || selection.id;
     }
     if (activeItem) {
       return `${activeItem.label} ready to place`;
@@ -1157,12 +1115,9 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     
     setIsTransitioning(true);
     
-    // Save current scenario
+    // Keep the work safe in the autosave slot; the named scenario is only written by Save
+    flushAutoSave();
     const scenario = editor.exportScenario(activeScenarioName);
-    console.log("[EditorRoot] Exported scenario:", scenario);
-    console.log("[EditorRoot] Scenario blocks:", scenario.blocks);
-    console.log("[EditorRoot] Number of blocks:", scenario.blocks.length);
-    saveScenario(activeScenarioName, scenario);
     
     // Switch to game and load the scenario
     setGameScenario(scenario);
@@ -1170,7 +1125,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
     
     // Allow transitions after a delay
     setTimeout(() => setIsTransitioning(false), 1000);
-  }, [activeScenarioName, editor, hasSpawnPoint, isTransitioning]);
+  }, [activeScenarioName, editor, flushAutoSave, hasSpawnPoint, isTransitioning]);
 
   const handleStopGame = useCallback(() => {
     if (isTransitioning) return;
@@ -1364,7 +1319,7 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
                 onClick={() => {
                   const id = activeItem.id.slice("component:".length);
                   const def = components.find((entry) => entry.id === id);
-                  setComponentPendingDelete({ id, label: def?.label ?? "Componente" });
+                  setComponentPendingDelete({ id, label: def?.label ?? "Component" });
                 }}
               >
                 Remove Component
@@ -1528,25 +1483,18 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
                 return;
               }
               if (!selection || !Array.isArray(selection)) return;
-              const members: GroupMember[] = selection.map((b) => ({ id: b.id, transform: snapshotFromBlock(b) }));
+              const memberIds = editor.getSelectionArray().map((b) => b.id);
               const res = editor.groupSelection();
               if (res) {
-                pushHistory({ type: "group", groupId: res.id, members });
-                autoSaveScenario();
+                pushHistory({ type: "group", groupId: res.id, memberIds });
               }
             }}
             onUngroupSelection={() => {
               if (!selection || Array.isArray(selection)) return;
               const groupId = selection.id;
-              const children = (selection.mesh as Group).children as Object3D[];
-              const members: GroupMember[] = children.map((child) => {
-                const id = (child as Object3D & { userData: { editorId?: string } }).userData?.editorId as string;
-                return { id, transform: snapshotFromWorldObject(child) };
-              });
               const res = editor.ungroupSelected();
-              if (res && members.length > 0) {
-                pushHistory({ type: "ungroup", groupId, members });
-                autoSaveScenario();
+              if (res && res.length > 0) {
+                pushHistory({ type: "ungroup", groupId, memberIds: res.map((block) => block.id) });
               }
             }}
             // Create a component using the currently selected group as the master
@@ -1555,11 +1503,11 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
               // Persist definition from current group children
               const members = editor.getSelectedGroupMembersLocalTransforms();
               if (!members) return;
-              const nextIndex = components.length + 1;
-              const nextId = `comp-${nextIndex}`;
-              const label = `Component ${nextIndex}`;
-              addComponent({ id: nextId, label, members });
-              editor.createComponentFromSelectedGroup(label, nextId);
+              // Let the store pick a free id: `components.length + 1` collides after a deletion
+              const created = addComponent({ label: "Component", members });
+              const label = `Component ${created.id.replace(/^comp-/, "")}`;
+              addComponent({ id: created.id, label, members });
+              editor.createComponentFromSelectedGroup(label, created.id);
               refreshComponents();
               autoSaveScenario();
             }}
@@ -1575,21 +1523,13 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
             onDeleteSelection={deleteSelection}
             onRenameSelection={renameSelection}
             onGeneratorConfigChange={(blockId, config) => {
-              editor.updateGeneratorConfig(blockId, config);
-              markUnsaved();
-              // Force re-render by creating new selection object reference
-              const currentSelection = editor.getSelection();
-              if (currentSelection) {
-                // Create a shallow copy to force React to detect the change
-                setSelection({ ...currentSelection });
-              }
+              const before = editor.getBlock(blockId)?.generatorConfig;
+              if (!before || !editor.updateGeneratorConfig(blockId, config)) return;
+              pushHistory({ type: "generator-config", id: blockId, before, after: config });
             }}
             onRequestGeneratorSelection={(eventId) => {
-              console.log('[EditorRoot] onRequestGeneratorSelection called with eventId:', eventId);
-              console.log('[EditorRoot] Current selection:', selection);
               // Enter generator selection mode
               if (selection && !Array.isArray(selection)) {
-                console.log('[EditorRoot] Entering generator selection mode');
                 setGeneratorSelectionMode({
                   active: true,
                   eventId,
@@ -1601,13 +1541,10 @@ export function EditorRoot({ editor }: { editor: EditorApp }): ReactElement {
                   "info",
                   "Click on a Target Generator to link it"
                 );
-                console.log('[EditorRoot] Alert published');
                 // Auto-clear after 5 seconds
                 setTimeout(() => {
                   editor.alerts.clearAll();
                 }, 5000);
-              } else {
-                console.warn('[EditorRoot] Cannot enter selection mode - no valid selection');
               }
             }}
             setTyping={setTyping}

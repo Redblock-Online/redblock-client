@@ -15,23 +15,46 @@ export function GameTab({ scenario, isActive, onStop }: GameTabProps): ReactElem
   const gameInstanceRef = useRef<{ dispose: () => void; setPaused?: (paused: boolean) => void } | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const isInitializingRef = useRef(false);
+  // Incremented whenever the preview stops, so a bootstrap still in flight knows it is stale
+  const sessionRef = useRef(0);
+  const isActiveRef = useRef(isActive);
+  // Bumped to re-run initialization when a stale bootstrap finishes after a quick stop/start
+  const [initRetry, setInitRetry] = useState(0);
+
+  useEffect(() => {
+    isActiveRef.current = isActive;
+  }, [isActive]);
   const [showExitHint, setShowExitHint] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Separate effect for cleanup when isActive becomes false
   useEffect(() => {
-    if (!isActive && gameInstanceRef.current) {
-      console.log("[GameTab] isActive is false, disposing game instance");
+    if (isActive) return;
+    sessionRef.current += 1;
+    if (document.pointerLockElement === canvasRef.current && canvasRef.current) {
+      document.exitPointerLock();
+    }
+    if (gameInstanceRef.current) {
       gameInstanceRef.current.dispose();
       gameInstanceRef.current = null;
-      
-      // Remove canvas from container
-      if (canvasRef.current && canvasRef.current.parentElement) {
-        canvasRef.current.parentElement.removeChild(canvasRef.current);
-        console.log("[GameTab] Canvas removed from container");
-      }
     }
+    // Remove canvas from container; a fresh one is created for the next session
+    if (canvasRef.current && canvasRef.current.parentElement) {
+      canvasRef.current.parentElement.removeChild(canvasRef.current);
+    }
+    canvasRef.current = null;
+    setShowExitHint(false);
+    setSettingsOpen(false);
   }, [isActive]);
+
+  // Dispose the preview if the editor unmounts while it runs
+  useEffect(() => {
+    return () => {
+      sessionRef.current += 1;
+      gameInstanceRef.current?.dispose();
+      gameInstanceRef.current = null;
+    };
+  }, []);
 
   // Listen to pointer lock changes to show exit hint
   useEffect(() => {
@@ -40,7 +63,6 @@ export function GameTab({ scenario, isActive, onStop }: GameTabProps): ReactElem
     const handlePointerLockChange = () => {
       if (!document.pointerLockElement) {
         // Pointer lock was released, show hint
-        console.log("[GameTab] Pointer lock released - showing exit hint");
         setShowExitHint(true);
       } else {
         // Pointer lock is active, hide hint
@@ -80,22 +102,26 @@ export function GameTab({ scenario, isActive, onStop }: GameTabProps): ReactElem
 
   useEffect(() => {
     if (!isActive || !scenario || !containerRef.current) {
-      console.log("[GameTab] Effect triggered", { isActive, hasScenario: !!scenario, hasContainer: !!containerRef.current });
       return;
     }
 
     if (isInitializingRef.current) {
-      console.log("[GameTab] Already initializing, skipping...");
       return;
     }
 
     isInitializingRef.current = true;
+    const session = sessionRef.current;
 
     (async () => {
       try {
-        console.log("[GameTab] Starting game initialization...");
         const { bootstrapGameInEditor } = await import("@/features/editor/core/gameBootstrap");
-        
+        if (session !== sessionRef.current || !containerRef.current) {
+          if (isActiveRef.current) {
+            setTimeout(() => setInitRetry((n) => n + 1), 0);
+          }
+          return;
+        }
+
         // Reuse existing canvas or create a new one
         let canvas = canvasRef.current;
         if (!canvas) {
@@ -104,30 +130,38 @@ export function GameTab({ scenario, isActive, onStop }: GameTabProps): ReactElem
           canvas.className = "absolute inset-0 w-full h-full";
           canvas.style.pointerEvents = "auto";
           canvasRef.current = canvas;
-          console.log("[GameTab] Canvas created");
         } else {
-          console.log("[GameTab] Reusing existing canvas");
           canvas.style.pointerEvents = "auto";
         }
         
         if (containerRef.current && !canvas.parentElement) {
           containerRef.current.appendChild(canvas);
-          console.log("[GameTab] Canvas appended to container");
         }
           
         // Initialize the game with the scenario
-        console.log("[GameTab] Bootstrapping game with scenario:", scenario.name);
         const gameInstance = await bootstrapGameInEditor(canvas, scenario);
+        if (session !== sessionRef.current) {
+          // Stopped while loading: don't leave a hidden game running
+          gameInstance.dispose();
+          if (isActiveRef.current) {
+            // Play was pressed again meanwhile; that start was skipped while we were busy
+            setTimeout(() => setInitRetry((n) => n + 1), 0);
+          }
+          return;
+        }
         gameInstanceRef.current = gameInstance;
-        console.log("[GameTab] Game initialized successfully");
-        
+
         // Request pointer lock after a short delay to ensure canvas is ready
         setTimeout(() => {
-          if (canvas && document.body.contains(canvas)) {
-            console.log("[GameTab] Requesting pointer lock");
-            canvas.requestPointerLock().catch((err) => {
-              console.warn("[GameTab] Pointer lock request failed:", err);
-            });
+          if (session === sessionRef.current && canvas && document.body.contains(canvas)) {
+            try {
+              const result = canvas.requestPointerLock() as unknown as Promise<void> | undefined;
+              result?.catch?.(() => {
+                // Not fatal: the player can click the canvas to lock the pointer
+              });
+            } catch {
+              // ignore
+            }
           }
         }, 200);
       } catch (error) {
@@ -136,7 +170,7 @@ export function GameTab({ scenario, isActive, onStop }: GameTabProps): ReactElem
         isInitializingRef.current = false;
       }
     })();
-  }, [isActive, scenario]);
+  }, [isActive, scenario, initRetry]);
   
   if (!isActive) {
     return <div className="hidden" />;

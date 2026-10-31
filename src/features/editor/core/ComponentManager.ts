@@ -342,6 +342,24 @@ export class ComponentManager {
     }
   }
 
+  /**
+   * Describe the component edit session in progress, if any. While editing, the component's
+   * members live in the scene as loose blocks; serializers use this to write them back as a
+   * single component instance instead of N loose blocks.
+   */
+  public getActiveEdit(): { componentId: string; instanceId?: string; basis: Matrix4; childIds: string[] } | null {
+    const runtime = Array.from(this.components.values()).find((entry) => entry.editing);
+    if (!runtime || !runtime.editingBasis) {
+      return null;
+    }
+    return {
+      componentId: runtime.id,
+      instanceId: runtime.editingSourceId ?? runtime.groupId,
+      basis: runtime.editingBasis.clone(),
+      childIds: [...runtime.masterChildIds],
+    };
+  }
+
   public isBlockWithinActiveEdit(blockId: string): boolean {
     const runtime = Array.from(this.components.values()).find((entry) => entry.editing);
     if (!runtime) {

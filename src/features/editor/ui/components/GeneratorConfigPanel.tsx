@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import type { GeneratorConfig, RandomStaticGeneratorConfig, MovingTargetGeneratorConfig } from "../../types/generatorConfig";
 import { EventConfigPanel } from "./EventConfigPanel";
+import { AxisInput } from "./AxisInput";
 import { createEmptyEventCollection } from "../../types/eventConfig";
 
 type GeneratorConfigPanelProps = {
@@ -13,6 +14,23 @@ type GeneratorConfigPanelProps = {
 export function GeneratorConfigPanel({ config, onChange, onRequestGeneratorSelection, setTyping }: GeneratorConfigPanelProps): ReactElement {
   const inputClass = "w-full rounded-md border border-editor-border bg-white px-3 py-2 text-editor-sm text-editor-text outline-none transition-all duration-150 focus:border-editor-accent";
   const labelClass = "text-editor-xs text-editor-muted font-medium mb-1.5 block";
+
+  type BoundsKey = keyof RandomStaticGeneratorConfig["spawnBounds"];
+  const BOUND_PAIRS: Record<BoundsKey, BoundsKey> = {
+    minX: "maxX", maxX: "minX", minY: "maxY", maxY: "minY", minZ: "maxZ", maxZ: "minZ",
+  };
+
+  // Keep min <= max: moving one edge past the other drags the other edge along
+  const handleBoundChange = (key: BoundsKey, value: number) => {
+    if (config.type !== "randomStatic" || !Number.isFinite(value)) return;
+    const bounds = { ...config.spawnBounds, [key]: value };
+    const other = BOUND_PAIRS[key];
+    const isMin = key.startsWith("min");
+    if (isMin ? bounds[key] > bounds[other] : bounds[key] < bounds[other]) {
+      bounds[other] = value;
+    }
+    onChange({ ...config, spawnBounds: bounds });
+  };
 
   const handleNumberChange = (field: string, value: string) => {
     const numValue = parseFloat(value);
@@ -36,10 +54,7 @@ export function GeneratorConfigPanel({ config, onChange, onRequestGeneratorSelec
           <input
             type="checkbox"
             checked={config.enabled}
-            onChange={(e) => {
-              console.log(`[GeneratorConfigPanel] Enabled checkbox changed to: ${e.target.checked}`);
-              onChange({ ...config, enabled: e.target.checked });
-            }}
+            onChange={(e) => onChange({ ...config, enabled: e.target.checked })}
             className="w-4 h-4 rounded border-editor-border bg-editor-bg text-editor-accent focus:ring-editor-accent focus:ring-offset-0 cursor-pointer"
           />
           <span className="text-editor-sm text-editor-text">Enabled</span>
@@ -80,31 +95,22 @@ export function GeneratorConfigPanel({ config, onChange, onRequestGeneratorSelec
           >
             −
           </button>
-          <input
-            type="number"
-            min="1"
-            max="50"
-            step="1"
-            value={config.targetCount}
-            onChange={(e) => {
-              const val = parseInt(e.target.value);
-              if (!isNaN(val) && val >= 1 && val <= 50) {
-                onChange({ ...config, targetCount: val });
-              }
-            }}
-            onFocus={() => setTyping?.(true)}
-            onBlur={(e) => {
-              setTyping?.(false);
-              // Ensure valid value on blur
-              const val = parseInt(e.target.value);
-              if (isNaN(val) || val < 1) {
-                onChange({ ...config, targetCount: 1 });
-              } else if (val > 50) {
-                onChange({ ...config, targetCount: 50 });
-              }
-            }}
-            className={`flex-1 ${inputClass}`}
-          />
+          <div className="flex-1">
+            <AxisInput
+              label=""
+              value={config.targetCount}
+              step={1}
+              min={1}
+              max={50}
+              precision={0}
+              onChange={(next) => {
+                const count = Math.round(next);
+                if (count !== config.targetCount) {
+                  onChange({ ...config, targetCount: count });
+                }
+              }}
+            />
+          </div>
           <button
             type="button"
             onClick={(e) => {
@@ -149,114 +155,22 @@ export function GeneratorConfigPanel({ config, onChange, onRequestGeneratorSelec
           </div>
           
           <div className="grid grid-cols-2 gap-2.5">
-            <div>
-              <label className={labelClass}>Min X</label>
-              <input
-                type="number"
-                step="0.5"
-                value={(config as RandomStaticGeneratorConfig).spawnBounds.minX}
-                onChange={(e) => onChange({ 
-                  ...config, 
-                  spawnBounds: { 
-                    ...(config as RandomStaticGeneratorConfig).spawnBounds, 
-                    minX: parseFloat(e.target.value) 
-                  } 
-                })}
-                onFocus={() => setTyping?.(true)}
-                onBlur={() => setTyping?.(false)}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Max X</label>
-              <input
-                type="number"
-                step="0.5"
-                value={(config as RandomStaticGeneratorConfig).spawnBounds.maxX}
-                onChange={(e) => onChange({ 
-                  ...config, 
-                  spawnBounds: { 
-                    ...(config as RandomStaticGeneratorConfig).spawnBounds, 
-                    maxX: parseFloat(e.target.value) 
-                  } 
-                })}
-                onFocus={() => setTyping?.(true)}
-                onBlur={() => setTyping?.(false)}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Min Y</label>
-              <input
-                type="number"
-                step="0.5"
-                value={(config as RandomStaticGeneratorConfig).spawnBounds.minY}
-                onChange={(e) => onChange({ 
-                  ...config, 
-                  spawnBounds: { 
-                    ...(config as RandomStaticGeneratorConfig).spawnBounds, 
-                    minY: parseFloat(e.target.value) 
-                  } 
-                })}
-                onFocus={() => setTyping?.(true)}
-                onBlur={() => setTyping?.(false)}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Max Y</label>
-              <input
-                type="number"
-                step="0.5"
-                value={(config as RandomStaticGeneratorConfig).spawnBounds.maxY}
-                onChange={(e) => onChange({ 
-                  ...config, 
-                  spawnBounds: { 
-                    ...(config as RandomStaticGeneratorConfig).spawnBounds, 
-                    maxY: parseFloat(e.target.value) 
-                  } 
-                })}
-                onFocus={() => setTyping?.(true)}
-                onBlur={() => setTyping?.(false)}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Min Z</label>
-              <input
-                type="number"
-                step="0.5"
-                value={(config as RandomStaticGeneratorConfig).spawnBounds.minZ}
-                onChange={(e) => onChange({ 
-                  ...config, 
-                  spawnBounds: { 
-                    ...(config as RandomStaticGeneratorConfig).spawnBounds, 
-                    minZ: parseFloat(e.target.value) 
-                  } 
-                })}
-                onFocus={() => setTyping?.(true)}
-                onBlur={() => setTyping?.(false)}
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Max Z</label>
-              <input
-                type="number"
-                step="0.5"
-                value={(config as RandomStaticGeneratorConfig).spawnBounds.maxZ}
-                onChange={(e) => onChange({ 
-                  ...config, 
-                  spawnBounds: { 
-                    ...(config as RandomStaticGeneratorConfig).spawnBounds, 
-                    maxZ: parseFloat(e.target.value) 
-                  } 
-                })}
-                onFocus={() => setTyping?.(true)}
-                onBlur={() => setTyping?.(false)}
-                className={inputClass}
-              />
-            </div>
+            {([
+              ["minX", "Min X"], ["maxX", "Max X"],
+              ["minY", "Min Y"], ["maxY", "Max Y"],
+              ["minZ", "Min Z"], ["maxZ", "Max Z"],
+            ] as const).map(([key, label]) => (
+              <div key={key}>
+                <label className={labelClass}>{label}</label>
+                <AxisInput
+                  label=""
+                  value={(config as RandomStaticGeneratorConfig).spawnBounds[key]}
+                  step={0.5}
+                  precision={2}
+                  onChange={(next) => handleBoundChange(key, next)}
+                />
+              </div>
+            ))}
           </div>
         </>
       )}

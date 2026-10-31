@@ -1,15 +1,12 @@
 import {
   AmbientLight,
   AxesHelper,
-  BoxGeometry,
   Color,
   DirectionalLight,
   Euler,
-  Group,
   LineBasicMaterial,
   LineSegments,
   Mesh,
-  MeshStandardMaterial,
   MOUSE,
   Object3D,
   PerspectiveCamera,
@@ -22,51 +19,40 @@ import {
   WebGLRenderer,
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { ComponentMemberTransform, SavedComponent } from "src/features/editor/components-system/componentsStore";
-import { DEFAULT_RANDOM_STATIC_CONFIG, DEFAULT_MOVING_CONFIG, type GeneratorConfig } from "src/features/editor/types/generatorConfig";
-import { loadComponents } from "src/features/editor/components-system/componentsStore";
+import type { ComponentMemberTransform, SavedComponent } from "@/features/editor/components-system/componentsStore";
+import { DEFAULT_RANDOM_STATIC_CONFIG, type GeneratorConfig } from "@/features/editor/types/generatorConfig";
+import { loadComponents } from "@/features/editor/components-system/componentsStore";
 import type {
   EditorBlock,
   SelectionListener,
   SelectionTransform,
   SerializedNode,
-  SerializedTransform,
-} from "src/features/editor/types";
-import { BlockStore } from "src/features/editor/core/BlockStore";
-import { SelectionManager } from "src/features/editor/core/SelectionManager";
-import { MovementController } from "src/features/editor/core/MovementController";
-import { GroupManager } from "src/features/editor/core/GroupManager";
-import { ComponentManager } from "src/features/editor/core/ComponentManager";
-import type { SerializedScenario } from "src/features/editor/scenarios/scenarioStore";
-import { EditorModeManager } from "src/features/editor/core/EditorModeManager";
-import { InputRouter } from "src/features/editor/core/InputRouter";
-import { EditorSerializer } from "src/features/editor/core/EditorSerializer";
-import { AlertManager } from "src/features/editor/core/AlertManager";
-import { DragHandler } from "src/features/editor/core/handlers/DragHandler";
-import { TransformHandler } from "src/features/editor/core/handlers/TransformHandler";
-import { SelectionHandler } from "src/features/editor/core/handlers/SelectionHandler";
-import { createSpawnPointMesh } from "src/features/editor/core/blockFactory";
+} from "@/features/editor/types";
+import { BlockStore } from "@/features/editor/core/BlockStore";
+import { SelectionManager } from "@/features/editor/core/SelectionManager";
+import { MovementController } from "@/features/editor/core/MovementController";
+import { GroupManager } from "@/features/editor/core/GroupManager";
+import { ComponentManager } from "@/features/editor/core/ComponentManager";
+import type { SerializedScenario } from "@/features/editor/scenarios/scenarioStore";
+import { EditorModeManager } from "@/features/editor/core/EditorModeManager";
+import { InputRouter } from "@/features/editor/core/InputRouter";
+import { EditorSerializer } from "@/features/editor/core/EditorSerializer";
+import { AlertManager } from "@/features/editor/core/AlertManager";
+import { DragHandler } from "@/features/editor/core/handlers/DragHandler";
+import { TransformHandler } from "@/features/editor/core/handlers/TransformHandler";
+import { SelectionHandler } from "@/features/editor/core/handlers/SelectionHandler";
+import { markMeshAsGenerator } from "@/features/editor/core/blockFactory";
+import { cloneTransform } from "@/features/editor/core/EditorTransformUtils";
+import { isEditableTarget } from "@/features/editor/core/inputUtils";
 
 const COMPONENT_MASTER_OUTLINE_COLOR = 0x9b5cff;
 const COMPONENT_INSTANCE_OUTLINE_COLOR = 0xff4dff;
-
-type DragAxisConstraint = "x" | "y" | "z" | null;
-
-type PointerUpListener = (event: PointerEvent, context: { dragged: boolean }) => void;
 
 type DragCommitEntry = {
   id: string;
   before: SelectionTransform;
   after: SelectionTransform;
 };
-
-const DRAG_AXIS_VECTORS = {
-  x: new Vector3(1, 0, 0),
-  y: new Vector3(0, 1, 0),
-  z: new Vector3(0, 0, 1),
-} as const;
-
-const DRAG_VERTICAL_SENSITIVITY = 0.02;
 
 export default class EditorApp {
   private readonly canvas: HTMLCanvasElement;
@@ -88,25 +74,14 @@ export default class EditorApp {
   private readonly movement: MovementController;
   private readonly components: ComponentManager;
   public readonly alerts: AlertManager;
-  private readonly pointerUpListeners = new Set<PointerUpListener>();
+  private readonly serializer: EditorSerializer;
   private readonly dragCommitListeners = new Set<(changes: DragCommitEntry[]) => void>();
 
-  private leftButtonActive = false;
-  private isDragging = false;
   private draggingCursorApplied = false;
-  private dragStartPoint: Vector3 | null = null;
-  private dragTargets: Array<{ id: string; origin: SelectionTransform }> = [];
-  private dragAxisConstraint: DragAxisConstraint = null;
-  private dragPointerAccumulator = { x: 0, y: 0 };
-  private lastPointerEvent: { clientX: number; clientY: number } | null = null;
   private animationFrame?: number;
   private lastFrameTime = 0;
-  private readonly dragWorkingDelta = new Vector3();
-  private readonly dragTranslationDelta = new Vector3();
-  private readonly dragCameraRight = new Vector3();
-  private readonly dragCameraUp = new Vector3();
-  private readonly dragPointerWorld = new Vector3();
-  private readonly dragCameraQuaternion = new Quaternion();
+  // True while the game preview runs: editor shortcuts, camera movement and rendering pause
+  private inputSuspended = false;
   public readonly dragCameraQuaternionPublic = new Quaternion(); // For handlers
 
   // New mode system
@@ -151,6 +126,7 @@ export default class EditorApp {
     this.groups = new GroupManager(this.scene, this.blocks, this.selection);
     this.movement = new MovementController(this.camera, this.controls);
     this.components = new ComponentManager(this.blocks, this.selection, this.groups);
+    this.serializer = new EditorSerializer(this.blocks, this.components);
     this.alerts = new AlertManager();
 
     // Initialize new mode system
@@ -181,31 +157,47 @@ export default class EditorApp {
 
     // Note: Transform update callback will be set by EditorRoot via modeManager listener
 
-    canvas.addEventListener("contextmenu", (event) => event.preventDefault());
-    
-    // NEW: Single event listeners using InputRouter
-    canvas.addEventListener("pointerdown", (e) => this.inputRouter.handlePointerDown(e));
-    canvas.addEventListener("pointermove", (e) => this.inputRouter.handlePointerMove(e));
-    canvas.addEventListener("pointerup", (e) => this.inputRouter.handlePointerUp(e));
+    canvas.addEventListener("contextmenu", this.handleContextMenu);
+
+    // Single set of pointer listeners routed by the current editor mode
+    canvas.addEventListener("pointerdown", this.handleCanvasPointerDown);
+    canvas.addEventListener("pointermove", this.handleCanvasPointerMove);
+    canvas.addEventListener("pointerup", this.handleCanvasPointerUp);
     // Ensure we clean up even if the pointer is released/canceled outside the canvas
     window.addEventListener("pointerup", this.handleGlobalPointerUp, { capture: true });
     window.addEventListener("pointercancel", this.handleGlobalPointerCancel, { capture: true });
     window.addEventListener("blur", this.handleWindowBlur);
-    
-    window.addEventListener("keydown", (e) => this.inputRouter.handleKeyDown(e));
 
-    // Keep movement keys
+    window.addEventListener("keydown", this.handleKeyDown);
+
+    // Camera movement keys (window capture sees every key event once)
     window.addEventListener("keydown", this.handleMovementKeyChange, true);
     window.addEventListener("keyup", this.handleMovementKeyChange, true);
-    document.addEventListener("keydown", this.handleMovementKeyChange, true);
-    document.addEventListener("keyup", this.handleMovementKeyChange, true);
-    this.canvas.addEventListener("keydown", this.handleMovementKeyChange, true);
-    this.canvas.addEventListener("keyup", this.handleMovementKeyChange, true);
 
     this.setupScene();
     this.handleResize();
     window.addEventListener("resize", this.handleResize);
   }
+
+  private handleContextMenu = (event: Event): void => {
+    event.preventDefault();
+  };
+
+  private handleCanvasPointerDown = (event: PointerEvent): void => {
+    this.inputRouter.handlePointerDown(event);
+  };
+
+  private handleCanvasPointerMove = (event: PointerEvent): void => {
+    this.inputRouter.handlePointerMove(event);
+  };
+
+  private handleCanvasPointerUp = (event: PointerEvent): void => {
+    this.inputRouter.handlePointerUp(event);
+  };
+
+  private handleKeyDown = (event: KeyboardEvent): void => {
+    this.inputRouter.handleKeyDown(event);
+  };
 
   // Ensure cleanup when pointer released outside the canvas
   private handleGlobalPointerUp = (event: PointerEvent): void => {
@@ -213,6 +205,11 @@ export default class EditorApp {
     if (mode.type === "dragging") {
       event.preventDefault?.();
       this.dragHandler.finish(true);
+      this.selectionHandler.handleDragEnd(event);
+    }
+    // A box selection released outside the canvas must still end
+    if (event.target !== this.canvas) {
+      this.selectionHandler.cancelBoxSelection();
     }
     // Transforming is committed via click/Enter by design; do not auto-commit here
   };
@@ -229,6 +226,8 @@ export default class EditorApp {
 
   // Also cancel interactions if the window loses focus
   private handleWindowBlur = (): void => {
+    this.movement.clearState();
+    this.selectionHandler.cancelBoxSelection();
     const mode = this.modeManager.getMode();
     if (mode.type === "dragging") {
       this.dragHandler.finish(false);
@@ -245,30 +244,6 @@ export default class EditorApp {
     this.canvas.style.cursor = active ? "pointer" : "default";
   }
 
-  private resetDragPointerAccumulator(): void {
-    this.dragPointerAccumulator.x = 0;
-    this.dragPointerAccumulator.y = 0;
-  }
-
-  private resetDragStartFromPointer(): void {
-    if (!this.lastPointerEvent) {
-      return;
-    }
-    const nextStart = this.intersectGround(this.lastPointerEvent.clientX, this.lastPointerEvent.clientY);
-    if (nextStart) {
-      this.dragStartPoint = nextStart;
-    }
-  }
-
-  private refreshDragOrigins(): void {
-    if (this.dragTargets.length === 0) {
-      return;
-    }
-    const ids = this.dragTargets.map((target) => target.id);
-    const current = this.getTransformsForIds(ids);
-    this.dragTargets = current.map((entry) => ({ id: entry.id, origin: entry.transform }));
-  }
-
   public getCanvas(): HTMLCanvasElement {
     return this.canvas;
   }
@@ -281,37 +256,8 @@ export default class EditorApp {
     return this.controls;
   }
 
-  public isDraggingBlock(): boolean {
-    return this.isDragging;
-  }
-
-  public toggleDragAxis(axis: "x" | "y" | "z"): void {
-    if (!this.isDragging) {
-      return;
-    }
-    const next: DragAxisConstraint = this.dragAxisConstraint === axis ? null : axis;
-    if (next === this.dragAxisConstraint) {
-      return;
-    }
-    this.dragAxisConstraint = next;
-    this.resetDragPointerAccumulator();
-    this.refreshDragOrigins();
-    if (next === "y") {
-      this.dragStartPoint = null;
-    } else {
-      this.resetDragStartFromPointer();
-    }
-  }
-
   public addSelectionListener(listener: SelectionListener): () => void {
     return this.selection.addListener(listener);
-  }
-
-  public addPointerUpListener(listener: PointerUpListener): () => void {
-    this.pointerUpListeners.add(listener);
-    return () => {
-      this.pointerUpListeners.delete(listener);
-    };
   }
 
   public addDragCommitListener(listener: (changes: DragCommitEntry[]) => void): () => void {
@@ -329,9 +275,12 @@ export default class EditorApp {
       const deltaSeconds = (time - this.lastFrameTime) / 1000;
       this.lastFrameTime = time;
 
-      this.updateCameraMovement(deltaSeconds);
-      this.controls.update();
-      this.renderer.render(this.scene, this.camera);
+      // The editor canvas is hidden while the game preview runs: skip the work
+      if (!this.inputSuspended) {
+        this.updateCameraMovement(deltaSeconds);
+        this.controls.update();
+        this.renderer.render(this.scene, this.camera);
+      }
       this.animationFrame = requestAnimationFrame(renderLoop);
     };
 
@@ -343,14 +292,28 @@ export default class EditorApp {
       cancelAnimationFrame(this.animationFrame);
     }
 
+    // Leave any in-progress interaction (releases pointer lock and re-enables controls)
+    if (this.modeManager.isTransforming()) {
+      this.transformHandler.finish(false);
+    } else if (this.modeManager.isDragging()) {
+      this.dragHandler.finish(false);
+    }
+
     window.removeEventListener("resize", this.handleResize);
-    // Note: InputRouter listeners are removed automatically when the canvas is removed
+    this.canvas.removeEventListener("contextmenu", this.handleContextMenu);
+    this.canvas.removeEventListener("pointerdown", this.handleCanvasPointerDown);
+    this.canvas.removeEventListener("pointermove", this.handleCanvasPointerMove);
+    this.canvas.removeEventListener("pointerup", this.handleCanvasPointerUp);
+    window.removeEventListener("pointerup", this.handleGlobalPointerUp, { capture: true });
+    window.removeEventListener("pointercancel", this.handleGlobalPointerCancel, { capture: true });
+    window.removeEventListener("blur", this.handleWindowBlur);
+    window.removeEventListener("keydown", this.handleKeyDown);
     window.removeEventListener("keydown", this.handleMovementKeyChange, true);
     window.removeEventListener("keyup", this.handleMovementKeyChange, true);
-    document.removeEventListener("keydown", this.handleMovementKeyChange, true);
-    document.removeEventListener("keyup", this.handleMovementKeyChange, true);
-    this.canvas.removeEventListener("keydown", this.handleMovementKeyChange, true);
-    this.canvas.removeEventListener("keyup", this.handleMovementKeyChange, true);
+    this.transformHandler.dispose();
+    this.selectionHandler.dispose();
+    this.selection.clearSelection();
+    this.blocks.clearAll();
     this.controls.dispose();
     this.renderer.dispose();
   }
@@ -363,9 +326,14 @@ export default class EditorApp {
    * Disable editor controls (for when game preview is active)
    */
   public disableControls(): void {
+    if (this.modeManager.isTransforming()) {
+      this.transformHandler.finish(false);
+    } else if (this.modeManager.isDragging()) {
+      this.dragHandler.finish(false);
+    }
     this.controls.enabled = false;
     this.movement.disable();
-    console.log("[EditorApp] Controls and movement disabled");
+    this.inputSuspended = true;
   }
   
   /**
@@ -374,7 +342,37 @@ export default class EditorApp {
   public enableControls(): void {
     this.controls.enabled = true;
     this.movement.enable();
-    console.log("[EditorApp] Controls and movement enabled");
+    this.inputSuspended = false;
+    this.lastFrameTime = 0;
+  }
+
+  /**
+   * Whether the editor is paused (game preview running).
+   */
+  public isInputSuspended(): boolean {
+    return this.inputSuspended;
+  }
+
+  /**
+   * Whether an editor keyboard shortcut should ignore this event: the game preview is running,
+   * or the user is typing in a form field.
+   */
+  public shouldIgnoreKeyEvent(event: KeyboardEvent): boolean {
+    if (this.inputSuspended) {
+      return true;
+    }
+    if (isEditableTarget(event.target)) {
+      return true;
+    }
+    if (this.isTyping) {
+      // Self-heal: an input that unmounts while focused never fires blur
+      if (typeof document !== "undefined" && !isEditableTarget(document.activeElement)) {
+        this.isTyping = false;
+        return false;
+      }
+      return true;
+    }
+    return false;
   }
   
   /**
@@ -496,21 +494,10 @@ export default class EditorApp {
       scale: new Vector3(0.6, 0.6, 0.6),
     });
     
-    // Mark as generator in userData
-    generator.mesh.userData.isGenerator = true;
-    generator.mesh.userData.generatorType = "randomStatic";
-    generator.generatorConfig = { ...DEFAULT_RANDOM_STATIC_CONFIG };
-    generator.mesh.userData.generatorConfig = generator.generatorConfig;
-    
-    // Give it a distinct color (pink/magenta for generators)
-    const mesh = generator.mesh as Mesh;
-    if (mesh.material) {
-      const material = mesh.material as MeshStandardMaterial;
-      material.color.set(0xff4dff); // Pink/magenta color
-      material.emissive = new Color(0xff4dff);
-      material.emissiveIntensity = 0.2;
-    }
-    
+    const config: GeneratorConfig = JSON.parse(JSON.stringify(DEFAULT_RANDOM_STATIC_CONFIG));
+    markMeshAsGenerator(generator.mesh as Mesh, config);
+    generator.generatorConfig = config;
+
     this.clearMovementState();
     this.selection.setSelectionSingle(generator);
     return generator;
@@ -551,49 +538,14 @@ export default class EditorApp {
 
     return null;
   }
-  // COMMENTED OUT: Moving Target Generator - Not implemented yet
-  // public placeMovingTargetGeneratorAt(clientX: number, clientY: number): EditorBlock | null {
-  //   const point = this.intersectGround(clientX, clientY);
-  //   if (!point) {
-  //     return null;
-  //   }
-
-  //   // Create a generator marker (cube with distinct appearance)
-  //   const generator = this.blocks.createBlock({
-  //     position: point.setY(0.5),
-  //     scale: new Vector3(0.6, 0.6, 0.6),
-  //   });
-  //   
-  //   // Mark as generator in userData
-  //   generator.mesh.userData.isGenerator = true;
-  //   generator.mesh.userData.generatorType = "moving";
-  //   generator.generatorConfig = { ...DEFAULT_MOVING_CONFIG };
-  //   generator.mesh.userData.generatorConfig = generator.generatorConfig;
-  //   
-  //   // Give it a distinct color (cyan/blue for moving generators)
-  //   const mesh = generator.mesh as Mesh;
-  //   if (mesh.material) {
-  //     const material = mesh.material as MeshStandardMaterial;
-  //     material.color.set(0x00ddff); // Cyan color for moving targets
-  //     material.emissive = new Color(0x00ddff);
-  //     material.emissiveIntensity = 0.2;
-  //   }
-  //   
-  //   this.clearMovementState();
-  //   this.selection.setSelectionSingle(generator);
-  //   return generator;
-  // }
-
-  public updateGeneratorConfig(blockId: string, config: GeneratorConfig): void {
-    console.log(`[EditorApp] updateGeneratorConfig called for ${blockId}:`, config);
+  public updateGeneratorConfig(blockId: string, config: GeneratorConfig): boolean {
     const block = this.blocks.getBlock(blockId);
-    if (block && block.mesh.userData.isGenerator) {
-      block.generatorConfig = config;
-      block.mesh.userData.generatorConfig = config;
-      console.log(`[EditorApp] Generator config updated successfully. enabled=${config.enabled}, visible=${config.visible}`);
-    } else {
-      console.warn(`[EditorApp] Cannot update generator config - block not found or not a generator:`, blockId);
+    if (!block || !block.mesh.userData.isGenerator) {
+      return false;
     }
+    block.generatorConfig = config;
+    block.mesh.userData.generatorConfig = config;
+    return true;
   }
 
   public createBlock(options: {
@@ -608,8 +560,6 @@ export default class EditorApp {
 
   public removeBlock(id: string): boolean {
     const block = this.blocks.getBlock(id);
-    console.log('[EditorApp] removeBlock called for:', id);
-    console.trace('[EditorApp] removeBlock stack trace');
     if (block) {
       this.components.handleBlockRemoved(block);
     }
@@ -857,61 +807,40 @@ export default class EditorApp {
   }
 
   public serializeBlocksByIds(ids: string[]): { nodes: SerializedNode[]; componentIds: string[] } {
-    const usedComponents = new Set<string>();
-    const nodes: SerializedNode[] = [];
-    for (const id of ids) {
-      const block = this.blocks.getBlock(id);
-      if (!block) {
-        continue;
-      }
-      const node = this.serializeEditorBlock(block, usedComponents);
-      if (node) {
-        nodes.push(node);
-      }
-    }
-    return { nodes, componentIds: Array.from(usedComponents) };
+    return this.serializer.serializeBlocksByIds(ids);
   }
 
+  /**
+   * Recreate blocks from serialized nodes.
+   *
+   * @param options.offset - World offset added to every root node (paste)
+   * @param options.preserveIds - Reuse the stored ids (undo/redo); paste uses fresh ids
+   */
   public instantiateSerializedNodes(
     nodes: SerializedNode[],
     componentIds: string[],
-    offset?: Vector3,
+    options: { offset?: Vector3; preserveIds?: boolean } = {},
   ): EditorBlock[] {
-    const created: EditorBlock[] = [];
     const requiredComponentIds = new Set(componentIds);
     const collectComponentIds = (node: SerializedNode): void => {
       if (node.componentId) {
         requiredComponentIds.add(node.componentId);
       }
-      if (node.children) {
-        node.children.forEach(collectComponentIds);
-      }
+      node.children?.forEach(collectComponentIds);
     };
     nodes.forEach(collectComponentIds);
 
     const componentMap = new Map<string, SavedComponent>();
-    const definitions = loadComponents();
-    for (const definition of definitions) {
+    for (const definition of loadComponents()) {
       if (requiredComponentIds.has(definition.id)) {
         componentMap.set(definition.id, definition);
       }
     }
 
-    for (const node of nodes) {
-      const clone = this.cloneSerializedNode(node);
-      if (offset) {
-        clone.transform = this.addOffsetToSerializedTransform(clone.transform, offset);
-      }
-      const block = this.instantiateRootNode(clone, componentMap);
-      if (block) {
-        created.push(block);
-      }
-    }
-
+    const created = this.serializer.instantiateNodes(nodes, componentMap, options);
     if (created.length > 0) {
       this.components.syncActiveComponentEdits();
     }
-
     return created;
   }
 
@@ -929,22 +858,15 @@ export default class EditorApp {
   }
 
   public exportScenario(name: string): SerializedScenario {
-    const usedComponentIds = new Set<string>();
-    const serializedBlocks: SerializedNode[] = [];
-    for (const block of this.blocks.getAllBlocks()) {
-      const node = this.serializeEditorBlock(block, usedComponentIds);
-      if (node) {
-        serializedBlocks.push(node);
-      }
-    }
-
-    const definitions = loadComponents().filter((component) => usedComponentIds.has(component.id));
+    const { nodes, componentIds } = this.serializer.serializeScene();
+    const used = new Set(componentIds);
+    const definitions = loadComponents().filter((component) => used.has(component.id));
 
     return {
       version: 1,
       name,
       createdAt: new Date().toISOString(),
-      blocks: serializedBlocks,
+      blocks: nodes,
       componentDefinitions: definitions,
     };
   }
@@ -952,328 +874,17 @@ export default class EditorApp {
   public importScenario(scenario: SerializedScenario): void {
     this.resetScene();
 
+    const definitions = scenario.componentDefinitions ?? [];
     const componentMap = new Map<string, SavedComponent>();
-    for (const definition of scenario.componentDefinitions) {
+    for (const definition of definitions) {
       componentMap.set(definition.id, definition);
     }
-    this.components.registerComponentDefinitions(scenario.componentDefinitions);
+    this.components.registerComponentDefinitions(definitions);
 
-    for (const node of scenario.blocks) {
-      this.instantiateRootNode(node, componentMap);
-    }
+    // Keep the stored ids: generator events reference other generators by id
+    this.serializer.instantiateNodes(scenario.blocks ?? [], componentMap, { preserveIds: true });
 
     this.selection.clearSelection();
-  }
-
-  private serializeEditorBlock(block: EditorBlock, usedComponents: Set<string>): SerializedNode | null {
-    const componentId = this.components.getComponentIdForBlock(block);
-    if (componentId) {
-      usedComponents.add(componentId);
-      return {
-        type: "component",
-        componentId,
-        transform: this.toSerializedTransform(block.mesh, "world"),
-        ...(block.name && { name: block.name }),
-      };
-    }
-
-    if (block.mesh instanceof Group) {
-      const children: SerializedNode[] = [];
-      for (const child of block.mesh.children) {
-        const serializedChild = this.serializeObject(child, usedComponents, "local");
-        if (serializedChild) {
-          children.push(serializedChild);
-        }
-      }
-      return {
-        type: "group",
-        transform: this.toSerializedTransform(block.mesh, "world"),
-        children,
-        ...(block.name && { name: block.name }),
-      };
-    }
-
-    if (block.mesh instanceof Mesh) {
-      const isSpawnPoint = block.mesh.userData.isSpawnPoint === true;
-      const isGenerator = block.mesh.userData.isGenerator === true;
-      
-      // Debug log for generators
-      if (isGenerator && block.generatorConfig) {
-        console.log(`[EditorApp] Serializing generator ${block.id}:`, block.generatorConfig);
-      }
-      
-      return {
-        type: "block",
-        transform: this.toSerializedTransform(block.mesh, "world"),
-        id: block.id, // Include ID for generator referencing
-        ...(block.name && { name: block.name }),
-        ...(isSpawnPoint && { isSpawnPoint: true }),
-        ...(isGenerator && { isGenerator: true }),
-        ...(isGenerator && block.generatorConfig && { generatorConfig: block.generatorConfig }),
-      };
-    }
-
-    return null;
-  }
-
-  private serializeObject(object: Object3D, usedComponents: Set<string>, space: "world" | "local"): SerializedNode | null {
-    if (object instanceof LineSegments) {
-      return null;
-    }
-
-    if (object instanceof Group) {
-      const componentId = (object.userData?.componentId as string | undefined) ?? null;
-      if (componentId) {
-        // Always serialize component instances, even when nested (local space)
-        usedComponents.add(componentId);
-        return {
-          type: "component",
-          componentId,
-          transform: this.toSerializedTransform(object, space),
-        };
-      }
-
-      const children: SerializedNode[] = [];
-      for (const child of object.children) {
-        const serializedChild = this.serializeObject(child, usedComponents, "local");
-        if (serializedChild) {
-          children.push(serializedChild);
-        }
-      }
-      return {
-        type: "group",
-        transform: this.toSerializedTransform(object, space),
-        children,
-      };
-    }
-
-    if (object instanceof Mesh) {
-      const isSpawnPoint = object.userData.isSpawnPoint === true;
-      const isGenerator = object.userData.isGenerator === true;
-      const generatorConfig = object.userData.generatorConfig;
-      const preservedId = (object as Object3D & { userData: { editorId?: string } }).userData?.editorId as string | undefined;
-      
-      return {
-        type: "block",
-        transform: this.toSerializedTransform(object, space),
-        ...(preservedId && { id: preservedId }),
-        ...(isSpawnPoint && { isSpawnPoint: true }),
-        ...(isGenerator && { isGenerator: true }),
-        ...(isGenerator && generatorConfig && { generatorConfig }),
-      };
-    }
-
-    return null;
-  }
-
-  private toSerializedTransform(object: Object3D, space: "world" | "local"): SerializedTransform {
-    if (space === "world") {
-      object.updateWorldMatrix(true, false);
-      const position = new Vector3();
-      const quaternion = new Quaternion();
-      const scale = new Vector3();
-      object.matrixWorld.decompose(position, quaternion, scale);
-      const rotation = new Euler().setFromQuaternion(quaternion);
-      return {
-        position: { x: position.x, y: position.y, z: position.z },
-        rotation: { x: rotation.x, y: rotation.y, z: rotation.z },
-        scale: { x: scale.x, y: scale.y, z: scale.z },
-      };
-    }
-
-    return {
-      position: { x: object.position.x, y: object.position.y, z: object.position.z },
-      rotation: { x: object.rotation.x, y: object.rotation.y, z: object.rotation.z },
-      scale: { x: object.scale.x, y: object.scale.y, z: object.scale.z },
-    };
-  }
-
-  private instantiateRootNode(node: SerializedNode, componentMap: Map<string, SavedComponent>): EditorBlock | null {
-    let block: EditorBlock | null = null;
-    
-    switch (node.type) {
-      case "block": {
-        const transform = this.transformFromSerialized(node.transform);
-        if (node.isSpawnPoint) {
-          block = this.blocks.createSpawnPoint({
-            position: transform.position,
-            rotation: transform.rotation,
-            scale: transform.scale,
-          });
-        } else if (node.isGenerator && node.generatorConfig) {
-          // Restore generator by creating a block and marking it as generator
-          block = this.createBlock({
-            position: transform.position,
-            rotation: transform.rotation,
-            scale: transform.scale,
-          });
-          
-          if (block) {
-            // Mark as generator
-            block.mesh.userData.isGenerator = true;
-            block.mesh.userData.generatorType = node.generatorConfig.type;
-            block.generatorConfig = node.generatorConfig;
-            block.mesh.userData.generatorConfig = node.generatorConfig;
-            
-            // Set generator appearance
-            const material = (block.mesh as Mesh).material as MeshStandardMaterial;
-            if (node.generatorConfig.type === "randomStatic") {
-              material.color.set(0xff00ff); // Magenta for random static
-              material.emissive = new Color(0xff00ff);
-              material.emissiveIntensity = 0.2;
-            } else if (node.generatorConfig.type === "moving") {
-              material.color.set(0x00ddff); // Cyan for moving
-              material.emissive = new Color(0x00ddff);
-              material.emissiveIntensity = 0.2;
-            }
-          }
-        } else {
-          block = this.createBlock({
-            position: transform.position,
-            rotation: transform.rotation,
-            scale: transform.scale,
-          });
-        }
-        break;
-      }
-      case "component": {
-        if (!node.componentId) {
-          return null;
-        }
-        const definition = componentMap.get(node.componentId);
-        if (!definition) {
-          // Fallback: create placeholder group so paste does not fail
-          const placeholder = new Group();
-          this.applySerializedTransform(placeholder, node.transform);
-          (placeholder as Object3D & { userData: { componentId?: string; componentRole?: string } }).userData.componentId = node.componentId;
-          (placeholder as Object3D & { userData: { componentId?: string; componentRole?: string } }).userData.componentRole = "instance";
-          block = this.blocks.registerGroup(placeholder);
-        } else {
-          const transform = this.transformFromSerialized(node.transform);
-          block = this.components.instantiateComponent(definition, transform);
-        }
-        break;
-      }
-      case "group": {
-        const group = this.buildGroupFromNode(node, componentMap);
-        if (group) {
-          block = this.blocks.registerGroup(group);
-        }
-        break;
-      }
-    }
-    
-    // Assign custom name if present
-    if (block && node.name) {
-      block.name = node.name;
-    }
-    
-    return block;
-  }
-
-  private buildGroupFromNode(node: SerializedNode, componentMap: Map<string, SavedComponent>): Group | null {
-    const group = new Group();
-    this.applySerializedTransform(group, node.transform);
-
-    if (Array.isArray(node.children)) {
-      for (const child of node.children) {
-        const childObject = this.buildChildObject(child, componentMap);
-        if (childObject) {
-          group.add(childObject);
-        }
-      }
-    }
-
-    return group;
-  }
-
-  private buildChildObject(child: SerializedNode, componentMap: Map<string, SavedComponent>): Object3D | null {
-    switch (child.type) {
-      case "block": {
-        const mesh = child.isSpawnPoint 
-          ? createSpawnPointMesh() 
-          : this.blocks.createPrimitiveBlockMesh();
-        this.applySerializedTransform(mesh, child.transform);
-        // Preserve original block id for stable ungroup/regroup and subsequent copy/paste
-        if (child.id) {
-          (mesh as Object3D & { userData: { editorId?: string } }).userData.editorId = child.id;
-        }
-        return mesh;
-      }
-      case "group": {
-        return this.buildGroupFromNode(child, componentMap);
-      }
-      case "component": {
-        if (!child.componentId) {
-          return null;
-        }
-        const definition = componentMap.get(child.componentId);
-        // Build a component instance as a plain Object3D hierarchy (no block registration)
-        const group = new Group();
-        this.applySerializedTransform(group, child.transform);
-        if (definition) {
-          definition.members.forEach((member) => {
-            const mesh = this.blocks.createPrimitiveBlockMesh();
-            mesh.position.set(member.position.x, member.position.y, member.position.z);
-            mesh.rotation.set(member.rotation.x, member.rotation.y, member.rotation.z);
-            mesh.scale.set(member.scale.x, member.scale.y, member.scale.z);
-            group.add(mesh);
-          });
-          (group as Object3D & { userData: Record<string, unknown> }).userData.componentId = definition.id;
-          (group as Object3D & { userData: Record<string, unknown> }).userData.componentRole = "instance";
-        } else {
-          // Fallback: keep empty group but tag with componentId to preserve identity
-          (group as Object3D & { userData: Record<string, unknown> }).userData.componentId = child.componentId;
-          (group as Object3D & { userData: Record<string, unknown> }).userData.componentRole = "instance";
-        }
-        return group;
-      }
-    }
-  }
-
-  private applySerializedTransform(target: Object3D, transform: SerializedTransform): void {
-    target.position.set(transform.position.x, transform.position.y, transform.position.z);
-    target.rotation.set(transform.rotation.x, transform.rotation.y, transform.rotation.z);
-    target.scale.set(transform.scale.x, transform.scale.y, transform.scale.z);
-  }
-
-  private transformFromSerialized(transform: SerializedTransform): SelectionTransform {
-    return {
-      position: new Vector3(transform.position.x, transform.position.y, transform.position.z),
-      rotation: new Euler(transform.rotation.x, transform.rotation.y, transform.rotation.z),
-      scale: new Vector3(transform.scale.x, transform.scale.y, transform.scale.z),
-    };
-  }
-
-  private cloneSerializedNode(node: SerializedNode): SerializedNode {
-    return {
-      type: node.type,
-      componentId: node.componentId,
-      transform: {
-        position: { ...node.transform.position },
-        rotation: { ...node.transform.rotation },
-        scale: { ...node.transform.scale },
-      },
-      children: node.children ? node.children.map((child) => this.cloneSerializedNode(child)) : undefined,
-      // Preserve all optional properties
-      ...(node.id && { id: node.id }),
-      ...(node.name && { name: node.name }),
-      ...(node.isSpawnPoint && { isSpawnPoint: node.isSpawnPoint }),
-      ...(node.isGenerator && { isGenerator: node.isGenerator }),
-      ...(node.generatorConfig && { generatorConfig: JSON.parse(JSON.stringify(node.generatorConfig)) }),
-    };
-  }
-
-  private addOffsetToSerializedTransform(transform: SerializedTransform, offset: Vector3): SerializedTransform {
-    return {
-      position: {
-        x: transform.position.x + offset.x,
-        y: transform.position.y + offset.y,
-        z: transform.position.z + offset.z,
-      },
-      rotation: { ...transform.rotation },
-      scale: { ...transform.scale },
-    };
   }
 
   private resolveBlockOutlineColor(block: EditorBlock, selected: boolean): number {
@@ -1308,12 +919,6 @@ export default class EditorApp {
     this.camera.updateProjectionMatrix();
   };
 
-  private emitPointerUp(event: PointerEvent, context: { dragged: boolean }): void {
-    for (const listener of this.pointerUpListeners) {
-      listener(event, context);
-    }
-  }
-
   private emitDragCommit(changes: DragCommitEntry[]): void {
     if (changes.length === 0) {
       return;
@@ -1327,178 +932,10 @@ export default class EditorApp {
     }
   }
 
-  private collectDragChanges(targets: Array<{ id: string; origin: SelectionTransform }>): DragCommitEntry[] {
-    if (targets.length === 0) {
-      return [];
-    }
-    const ids = targets.map((target) => target.id);
-    const current = this.getTransformsForIds(ids);
-    const changes: DragCommitEntry[] = [];
-    for (const target of targets) {
-      const currentEntry = current.find((entry) => entry.id === target.id);
-      if (!currentEntry) {
-        continue;
-      }
-      if (hasTransformChanged(target.origin, currentEntry.transform)) {
-        changes.push({
-          id: target.id,
-          before: cloneTransform(target.origin),
-          after: cloneTransform(currentEntry.transform),
-        });
-      }
-    }
-    return changes;
-  }
-
-  private finalizePointerRelease(event: PointerEvent, commit: boolean): void {
-    const wasDragging = this.isDragging;
-    const dragTargets = this.dragTargets;
-    this.isDragging = false;
-    this.dragStartPoint = null;
-    this.dragTargets = [];
-
-    if (commit && wasDragging) {
-      const changes = this.collectDragChanges(dragTargets);
-      this.emitDragCommit(changes);
-    }
-
-    this.emitPointerUp(event, { dragged: wasDragging });
-  }
-
-  private handlePointerDownCapture = (event: PointerEvent): void => {
-    if (event.button === 0) {
-      // If event was already handled (e.g., by transform mode), don't start drag
-      if (event.defaultPrevented) {
-        return;
-      }
-      
-      this.leftButtonActive = true;
-      this.controls.enabled = false;
-      // Prevent OrbitControls from attempting pointer capture
-      event.preventDefault();
-      event.stopImmediatePropagation();
-
-      this.dragAxisConstraint = null;
-      this.resetDragPointerAccumulator();
-      this.lastPointerEvent = { clientX: event.clientX, clientY: event.clientY };
-
-      // Try to pick a block under the cursor; update selection accordingly
-      const additive = event.shiftKey || event.metaKey || event.ctrlKey;
-      const hit = this.pickBlock(event.clientX, event.clientY, additive);
-
-      // Start drag only if we hit something directly
-      const selection = this.getSelectionArray();
-      const shouldDrag = !!hit;
-      if (shouldDrag) {
-        const start = this.intersectGround(event.clientX, event.clientY);
-        if (start) {
-          this.isDragging = true;
-          this.dragStartPoint = start;
-          const ids = selection.map((b) => b.id);
-          this.dragTargets = this.getTransformsForIds(ids).map((entry) => ({ id: entry.id, origin: entry.transform }));
-          this.dragTranslationDelta.set(0, 0, 0);
-          this.setDraggingCursor(true);
-        }
-      }
-      return;
-    }
-
-    if (event.button === 2) {
-      this.controls.enabled = true;
-    }
-  };
-
-  private handlePointerMoveCapture = (event: PointerEvent): void => {
-    if (!this.isDragging || !this.leftButtonActive) {
-      return;
-    }
-    // Prevent OrbitControls gestures while dragging
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    this.lastPointerEvent = { clientX: event.clientX, clientY: event.clientY };
-
-    if (this.dragTargets.length === 0) {
-      return;
-    }
-
-    const axis = this.dragAxisConstraint;
-    if (axis === "y") {
-      this.dragPointerAccumulator.x += event.movementX;
-      this.dragPointerAccumulator.y += event.movementY;
-
-      this.camera.getWorldQuaternion(this.dragCameraQuaternion);
-      this.dragCameraRight.set(1, 0, 0).applyQuaternion(this.dragCameraQuaternion);
-      this.dragCameraUp.set(0, 1, 0).applyQuaternion(this.dragCameraQuaternion);
-      this.dragPointerWorld
-        .copy(this.dragCameraRight)
-        .multiplyScalar(this.dragPointerAccumulator.x)
-        .addScaledVector(this.dragCameraUp, -this.dragPointerAccumulator.y);
-
-      const amount = this.dragPointerWorld.dot(DRAG_AXIS_VECTORS.y) * DRAG_VERTICAL_SENSITIVITY;
-      this.dragTranslationDelta.copy(DRAG_AXIS_VECTORS.y).multiplyScalar(amount);
-    } else {
-      const current = this.intersectGround(event.clientX, event.clientY);
-      if (!current) {
-        return;
-      }
-      if (!this.dragStartPoint) {
-        this.dragStartPoint = current;
-      }
-
-      this.dragWorkingDelta
-        .copy(current)
-        .sub(this.dragStartPoint)
-        .setY(0);
-
-      if (axis === "x") {
-        this.dragWorkingDelta.set(this.dragWorkingDelta.x, 0, 0);
-      } else if (axis === "z") {
-        this.dragWorkingDelta.set(0, 0, this.dragWorkingDelta.z);
-      }
-
-      this.dragTranslationDelta.copy(this.dragWorkingDelta);
-    }
-
-    const updates = this.dragTargets.map(({ id, origin }) => {
-      const position = origin.position.clone().add(this.dragTranslationDelta);
-      return {
-        id,
-        transform: {
-          position,
-          rotation: origin.rotation.clone(),
-          scale: origin.scale.clone(),
-        },
-      };
-    });
-
-    this.applyTransformsForIds(updates);
-  };
-
-  private handlePointerUpCapture = (event: PointerEvent): void => {
-    const isCancel = event.type === "pointercancel";
-    if ((event.button === 0 || isCancel) && this.leftButtonActive) {
-      this.leftButtonActive = false;
-      this.controls.enabled = true;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      // Finish any active drag with commit
-      this.finalizePointerRelease(event, !isCancel);
-      this.setDraggingCursor(false);
-    }
-  };
-
-  private handleWindowPointerUpCapture = (event: PointerEvent): void => {
-    const isCancel = event.type === "pointercancel";
-    if ((event.button === 0 || isCancel) && this.leftButtonActive) {
-      this.leftButtonActive = false;
-      this.controls.enabled = true;
-      // Cancel drag if pointer released outside the canvas (no commit)
-      this.finalizePointerRelease(event, false);
-      this.setDraggingCursor(false);
-    }
-  };
-
   private handleMovementKeyChange = (event: KeyboardEvent): void => {
+    if (event.type === "keydown" && this.shouldIgnoreKeyEvent(event)) {
+      return;
+    }
     if (event.type === "keydown" && (event.key === "Control" || event.key === "Meta")) {
       this.movement.clearState();
     }
@@ -1530,26 +967,4 @@ export default class EditorApp {
     }
     return ray.origin.clone().add(ray.direction.clone().multiplyScalar(t));
   }
-}
-
-function cloneTransform(input: SelectionTransform): SelectionTransform {
-  return {
-    position: input.position.clone(),
-    rotation: input.rotation.clone(),
-    scale: input.scale.clone(),
-  };
-}
-
-function hasTransformChanged(before: SelectionTransform, after: SelectionTransform): boolean {
-  return (
-    Math.abs(after.position.x - before.position.x) > 1e-6 ||
-    Math.abs(after.position.y - before.position.y) > 1e-6 ||
-    Math.abs(after.position.z - before.position.z) > 1e-6 ||
-    Math.abs(after.rotation.x - before.rotation.x) > 1e-6 ||
-    Math.abs(after.rotation.y - before.rotation.y) > 1e-6 ||
-    Math.abs(after.rotation.z - before.rotation.z) > 1e-6 ||
-    Math.abs(after.scale.x - before.scale.x) > 1e-6 ||
-    Math.abs(after.scale.y - before.scale.y) > 1e-6 ||
-    Math.abs(after.scale.z - before.scale.z) > 1e-6
-  );
 }

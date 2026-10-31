@@ -5,536 +5,185 @@ title: Networking System
 
 # Networking System
 
-WebSocket-based multiplayer networking for real-time position synchronization and player interactions.
+Redblock Online's multiplayer is a thin WebSocket layer: every player trains in their own room, and
+neighbours' rooms, avatars, targets and shots are rendered side by side. `WSManager` talks to the
+`redblock-ws` server; `MainScene` and the `features/game/multiplayer` module render what arrives.
 
-## ✨ Features
+## Features
 
-- ✅ **WebSocket Communication** - Real-time bidirectional messaging
-- ✅ **Position Sync** - Smooth player position updates
-- ✅ **Throttled Updates** - 20Hz update rate to save bandwidth
-- ✅ **Quantization** - Reduced precision for smaller packets
-- ✅ **Automatic Reconnection** - Handles connection drops
-- ✅ **Room System** - Multiple game rooms support
+- **Room assignment** - the server gives each player an id, a chunk and a room centre (`room_coord_x/z`)
+- **Pose sync** - position, yaw/pitch and `targetsInfo` sent at most 20 Hz, only on meaningful change
+- **Shot events** - shots are sent the moment the player fires and replayed immediately by neighbours
+- **Remote avatars** - low-poly cel-shaded players with head/gun pitch, recoil, muzzle flash, tracer, impact and positional sound
+- **Prompt target breaks** - a shot that breaks a target carries its index, so neighbours play the break at once
+- **Offline fallback** - after 3 s without a connection the game continues single-player
 
-## 🏗️ Architecture
+## Architecture
 
 ```mermaid
 graph TD
-    A[WSManager] --> B[WebSocket Connection]
-    B --> C[Server]
-    C --> D[Other Clients]
-    A --> E[Position Updates 20Hz]
-    A --> F[Event Messages]
-    E --> B
-    F --> B
-    D --> B
-    B --> G[Message Handler]
-    G --> H[Update Remote Players]
+    C[ControlsWithMovement] -->|update 20 Hz| W[WSManager]
+    A[App.onMouseDown] -->|report| R[LocalShotReporter]
+    R -->|shot, immediately| W
+    W <-->|WebSocket| S[redblock-ws]
+    W -->|playerUpdate queue 20 Hz| M[MainScene]
+    W -->|playerShot, synchronous| M
+    M --> P[RemotePlayers]
+    P --> V[RemotePlayerAvatar]
+    P --> E[RemoteShotEffects]
+    P --> U[RemoteShotAudio -> AudioManager sfx]
 ```
 
-## 📚 WSManager Class
+| File | Role |
+|------|------|
+| `src/utils/ws/WSManager.ts` | Connection, reconnection, offline fallback, `sendPlayerUpdate`, `sendShot`, `onPlayerShot` |
+| `src/features/game/multiplayer/shotProtocol.ts` | Shot message types and frame math (room-local ↔ world, yaw/pitch ↔ direction) |
+| `src/features/game/multiplayer/LocalShotReporter.ts` | Builds and sends the local player's shots (client-side 15/s cap) |
+| `src/features/game/multiplayer/RemotePlayers.ts` | Avatars per neighbour, shot playback, listener-relative audio |
+| `src/features/game/multiplayer/RemotePlayerAvatar.ts` | Low-poly avatar (legs, torso, head + visor, pistol arm) |
+| `src/features/game/multiplayer/RemoteShotEffects.ts` | Pooled tracer / muzzle flash / impact meshes |
+| `src/features/game/multiplayer/remoteShotAudio.ts` | Distance falloff and stereo pan for remote shots |
+| `src/features/game/scenes/MainScene.ts` | Neighbour rooms and targets, wiring of `RemotePlayers` |
 
-### Core Structure
+## Enabling multiplayer
 
-```typescript
-export class WSManager {
-  private ws: WebSocket | null = null;
-  private url: string;
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 1000;
-  
-  // Position sync
-  private lastSentPosition = new Vector3();
-  private lastSentRotation = 0;
-  private updateTimer = 0;
-  private updateInterval = 1 / 20; // 20Hz
-  
-  // Quantization
-  private posQuant = 0.02;  // 2cm precision
-  private rotQuant = 0.026; // ~1.5 degree precision
-}
+Multiplayer is off by default (`MULTIPLAYER_ENABLED` in `src/config/gameConfig.ts`). Turn it on at
+build/dev time and point the client at a server:
+
+```bash
+NEXT_PUBLIC_MULTIPLAYER_ENABLED=true NEXT_PUBLIC_WS_SERVER=ws://localhost:3000 npx next dev -p 3002
 ```
 
-## 🔌 Connection Management
+The editor's play mode always constructs `App` with `disableServer: true`, so it never connects.
 
-### Connecting
+## Coordinate frames
 
-```typescript
-connect(roomId?: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const url = roomId 
-      ? `${this.url}?room=${roomId}`
-      : this.url;
-      
-    this.ws = new WebSocket(url);
-    
-    this.ws.onopen = () => {
-      console.log('[WS] Connected');
-      this.reconnectAttempts = 0;
-      resolve();
-    };
-    
-    this.ws.onerror = (error) => {
-      console.error('[WS] Error:', error);
-      reject(error);
-    };
-    
-    this.ws.onclose = () => {
-      console.log('[WS] Disconnected');
-      this.handleDisconnect();
-    };
-    
-    this.ws.onmessage = (event) => {
-      this.handleMessage(event.data);
-    };
-  });
-}
-```
+- All clients share **one world frame**. The local player spawns at its room centre, so
+  `local_player_position_*` and `targetsInfo` are already world positions; neighbours' avatars and
+  targets are placed with the raw values. (Editor maps such as Quick Warmup load at absolute
+  coordinates and ignore the room offset; avatars and shots still line up because both use the same
+  world frame.)
+- **Shots travel room-local**: `origin`/`hit` are the world position minus the shooter's room centre.
+  The server attaches the shooter's authoritative `room_coord_x/z` to the relayed `playerShot`, and
+  the receiver adds them back (`resolveShotWorld`), landing in the same frame as the shooter's avatar.
+- **View direction** follows `ControlsWithMovement`: yaw rotates the yaw object about +Y, pitch rotates
+  the pitch object about +Z, and yaw = pitch = 0 looks along +X:
+  `forward = (cos p · cos y, sin p, −cos p · sin y)`. On the wire `player_rotation_x` is yaw and
+  `player_rotation_y` is pitch. A unit test rebuilds the real camera rig to pin this down.
 
-### Auto-Reconnection
+## Message protocol
+
+Client → server:
 
 ```typescript
-private handleDisconnect() {
-  if (this.reconnectAttempts < this.maxReconnectAttempts) {
-    this.reconnectAttempts++;
-    
-    console.log(`[WS] Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-    
-    setTimeout(() => {
-      this.connect().catch(err => {
-        console.error('[WS] Reconnect failed:', err);
-      });
-    }, this.reconnectDelay * this.reconnectAttempts);
-  } else {
-    console.error('[WS] Max reconnect attempts reached');
-  }
-}
-```
+{ type: "update", data: { local_player_position_x, local_player_position_y, local_player_position_z,
+                          player_rotation_x /* yaw */, player_rotation_y /* pitch */, targetsInfo } }
+{ type: "shot", data: ShotPayload }
+{ type: "ping" }
 
-### Disconnecting
-
-```typescript
-disconnect() {
-  if (this.ws) {
-    this.ws.close();
-    this.ws = null;
-  }
-}
-```
-
-## 📡 Position Synchronization
-
-### Sending Updates
-
-```typescript
-update(deltaTime: number, position: Vector3, rotation: number) {
-  if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-    return;
-  }
-  
-  this.updateTimer += deltaTime;
-  
-  // Throttle to 20Hz
-  if (this.updateTimer < this.updateInterval) {
-    return;
-  }
-  
-  this.updateTimer = 0;
-  
-  // Check if position/rotation changed significantly
-  const posChanged = position.distanceTo(this.lastSentPosition) > 0.08;
-  const rotChanged = Math.abs(rotation - this.lastSentRotation) > 0.026;
-  
-  if (!posChanged && !rotChanged) {
-    return; // No significant change
-  }
-  
-  // Quantize values
-  const quantPos = {
-    x: Math.round(position.x / this.posQuant) * this.posQuant,
-    y: Math.round(position.y / this.posQuant) * this.posQuant,
-    z: Math.round(position.z / this.posQuant) * this.posQuant
-  };
-  
-  const quantRot = Math.round(rotation / this.rotQuant) * this.rotQuant;
-  
-  // Send update
-  this.send({
-    type: 'position',
-    position: quantPos,
-    rotation: quantRot
-  });
-  
-  // Update last sent values
-  this.lastSentPosition.copy(position);
-  this.lastSentRotation = rotation;
-}
-```
-
-### Receiving Updates
-
-```typescript
-private handleMessage(data: string) {
-  try {
-    const message = JSON.parse(data);
-    
-    switch (message.type) {
-      case 'position':
-        this.handlePositionUpdate(message);
-        break;
-        
-      case 'playerJoined':
-        this.handlePlayerJoined(message);
-        break;
-        
-      case 'playerLeft':
-        this.handlePlayerLeft(message);
-        break;
-        
-      case 'chat':
-        this.handleChatMessage(message);
-        break;
-        
-      default:
-        console.warn('[WS] Unknown message type:', message.type);
-    }
-  } catch (error) {
-    console.error('[WS] Failed to parse message:', error);
-  }
-}
-```
-
-## 🎮 Message Types
-
-### Position Update
-
-```typescript
-type PositionMessage = {
-  type: 'position';
-  playerId: string;
-  position: { x: number; y: number; z: number };
-  rotation: number;
-  timestamp: number;
+type ShotPayload = {
+  origin: [x, y, z];       // camera position, room-local, mm precision
+  direction: [x, y, z];    // unit view direction, 4 decimals
+  hit?: [x, y, z];         // raycast hit point, room-local
+  hitTargetIndex?: number; // index into the shooter's targetsInfo of a target this shot broke
+  t?: number;              // sender clock (ms), relayed untouched
 };
 ```
 
-### Player Joined
+Server → client:
 
 ```typescript
-type PlayerJoinedMessage = {
-  type: 'playerJoined';
-  playerId: string;
-  username: string;
-  position: { x: number; y: number; z: number };
-  rotation: number;
-};
+{ type: "assigned", id, chunk_number, room_coord_x, room_coord_z }
+{ type: "playerUpdate", id, chunk_number, room_coord_x, room_coord_z, local_player_position_*, player_rotation_*, targetsInfo }
+{ type: "playerShot", id, room_coord_x, room_coord_z, origin, direction, hit?, hitTargetIndex?, t? }
+{ type: "playerLeft", id }
+{ type: "pong" }
+{ type: "error", message }
 ```
 
-### Player Left
+Server-side shot rules (see the `redblock-ws` README): finite `[x, y, z]` tuples, `|direction| = 1 ± 0.05`
+(re-normalised), hit within 150 units in front of the origin and ≤ 0.5 from the ray, origin within 8 units of
+the shooter's last reported eye position, `hitTargetIndex` an integer in 0–255, at most 15 shots per second
+per player (excess dropped silently). Shots are relayed only to players in the same and adjacent chunks.
+Clients that never send `shot` keep working, and older clients ignore `playerShot`.
+
+## Sending shots
+
+`App.onMouseDown` makes one call after its raycast:
 
 ```typescript
-type PlayerLeftMessage = {
-  type: 'playerLeft';
-  playerId: string;
-};
-```
-
-### Chat Message
-
-```typescript
-type ChatMessage = {
-  type: 'chat';
-  playerId: string;
-  username: string;
-  message: string;
-  timestamp: number;
-};
-```
-
-## 🎯 Usage Examples
-
-### Basic Setup
-
-```typescript
-import { WSManager } from '@/networking/WSManager';
-
-// Create manager
-const wsManager = new WSManager('ws://localhost:8080');
-
-// Connect
-await wsManager.connect();
-
-// Update in game loop
-update(deltaTime: number) {
-  const position = player.getPosition();
-  const rotation = player.getRotation();
-  
-  wsManager.update(deltaTime, position, rotation);
-}
-
-// Disconnect on cleanup
-dispose() {
-  wsManager.disconnect();
-}
-```
-
-### Room System
-
-```typescript
-// Join specific room
-await wsManager.connect('room-123');
-
-// Create new room
-await wsManager.connect(); // Server assigns room ID
-```
-
-### Handling Remote Players
-
-```typescript
-class RemotePlayerManager {
-  private players = new Map<string, RemotePlayer>();
-  
-  constructor(wsManager: WSManager) {
-    wsManager.on('position', (msg) => {
-      const player = this.players.get(msg.playerId);
-      if (player) {
-        player.updatePosition(msg.position, msg.rotation);
-      }
-    });
-    
-    wsManager.on('playerJoined', (msg) => {
-      const player = new RemotePlayer(msg.playerId, msg.username);
-      player.setPosition(msg.position);
-      player.setRotation(msg.rotation);
-      this.players.set(msg.playerId, player);
-    });
-    
-    wsManager.on('playerLeft', (msg) => {
-      const player = this.players.get(msg.playerId);
-      if (player) {
-        player.dispose();
-        this.players.delete(msg.playerId);
-      }
-    });
-  }
-}
-```
-
-### Chat System
-
-```typescript
-// Send chat message
-wsManager.send({
-  type: 'chat',
-  message: 'Hello world!'
-});
-
-// Receive chat messages
-wsManager.on('chat', (msg) => {
-  console.log(`${msg.username}: ${msg.message}`);
-  addChatMessage(msg.username, msg.message);
+this.shotReporter.report({
+  origin: this._tempCamPos,      // camera world position
+  direction: this._tempCamDir,   // camera world direction
+  hit: intersects[0],            // first intersection or undefined
+  brokeTarget: result === "regular",
+  targets: this.targets,
+  targetCount: this.currentScenarioTargetCount,
 });
 ```
 
-## 🔧 Optimization Techniques
+`LocalShotReporter` does nothing when `wsManager.isOnline()` is false (offline fallback, editor), caps
+sending at 15 shots per second, resolves the hit `Target` to its index in `targetsInfo`
+(`targetsInfoIndexOf`, same slicing as `buildTargetsInfo`) and, after a break, calls
+`controls.requestNetworkSync()` so the new `targetsInfo` goes out on the next 20 Hz tick even if the
+player stands still (otherwise `targetsInfo` only travels with movement).
 
-### Update Throttling
+## Receiving shots
 
-```typescript
-// Only send updates at 20Hz instead of 60Hz
-private updateInterval = 1 / 20;
+`WSManager` dispatches `playerShot` synchronously to `onPlayerShot` listeners (it does not go through the
+20 Hz `playerUpdate` queue). `MainScene` forwards it to `RemotePlayers.handleShot`, which:
 
-update(deltaTime: number) {
-  this.updateTimer += deltaTime;
-  
-  if (this.updateTimer < this.updateInterval) {
-    return; // Skip this frame
-  }
-  
-  this.updateTimer = 0;
-  // Send update...
-}
+1. Resolves origin, direction and end point (hit point, or origin + direction × 60) in world space.
+2. Snaps the avatar's yaw/pitch to the shot (and its position if it is more than 0.75 off), aims the gun
+   pivot exactly at the end point for 0.25 s and starts a 0.14 s recoil.
+3. Spawns a muzzle flash at the avatar's muzzle, a tracer from the muzzle to the end point and, on a hit,
+   an impact puff.
+4. Plays `remote-shot` (the pistol sample under its own name, so its 4-voice cap never cuts local shots) on
+   the `sfx` channel. Volume is `0.18 / (1 + d / 12)` before AudioManager applies master and sfx volume;
+   pan is the source direction projected on the camera's right vector (× 0.8). `AudioOptions.pan` uses a
+   `StereoPannerNode` on the Web Audio path and is ignored by the HTML audio fallback.
+
+If the shot carries `hitTargetIndex`, `MainScene` plays `absorbAndDisappear` on that neighbour target, but
+only if it is visible, not already animating and within 1.5 units of the hit point (guards against stale
+indices). While the animation runs, `targetsInfo` updates leave that target alone; when it finishes the
+latest `targetsInfo` is re-applied, and a target that comes back enabled is reset to full scale/opacity.
+
+## Rendering details
+
+- Avatars share one set of box geometries and three materials (white `MeshToonMaterial`, red accent, dark
+  visor/gun); edges come from the renderer's `CustomOutlinePass`.
+- `RemoteShotEffects` pools up to 16 meshes per effect kind, each with its own material for opacity; when a
+  pool is full the oldest effect is recycled. Animation runs in `update(dt)` without tweens or allocation.
+- Effects live in `RemotePlayers.effectsGroup`, which `MainScene.onBeforeRender` hides whenever the scene is
+  drawn with an override material. Without this the outline pass draws thin tracers as solid black lines.
+- `MainScene.update()` advances avatars and effects every frame (even with no neighbours) and removes a
+  neighbour's avatar, room mesh and targets once it disappears from `WSManager.getNeighbors()`.
+- `WSManager` drops a departed player's queued `playerUpdate` on `playerLeft`, so they are not re-added as a ghost.
+
+## Testing
+
+```bash
+npx vitest run test/utils/WSManager.test.ts test/features/game/multiplayer
 ```
 
-**Impact:** 67% reduction in network traffic
+- `test/utils/WSManager.test.ts` - `sendShot`, synchronous `playerShot` dispatch, malformed/echo filtering, ghost fix
+- `test/features/game/multiplayer/shotProtocol.test.ts` - frame math against the real camera rig, cross-room round trip
+- `test/features/game/multiplayer/LocalShotReporter.test.ts` - offline no-op, target index, 15/s cap
+- `test/features/game/multiplayer/remoteRendering.test.ts` - avatar aim/recoil, pooling, audio falloff/pan, shot playback
 
-### Position Quantization
+For a manual check, run `redblock-ws`, start the client with multiplayer enabled, and drive a second player
+from a Node `ws` script that sends `update` and `shot` messages near the browser player's position.
 
-```typescript
-// Quantize to 2cm precision
-private posQuant = 0.02;
+## Troubleshooting
 
-const quantized = Math.round(position.x / this.posQuant) * this.posQuant;
-```
+- **No neighbours appear** - multiplayer is disabled (`NEXT_PUBLIC_MULTIPLAYER_ENABLED`), the client fell back
+  to offline mode (check the console for `[WSManager]`), or the other player is not in an adjacent chunk.
+- **Server replies `Invalid shot: origin far from player`** - the shot origin is more than 8 units from the
+  last position the client sent; make sure `update` messages are flowing.
+- **Remote tracers are black** - something rendered the scene with an override material without going through
+  `MainScene.onBeforeRender`.
 
-**Impact:** Smaller packets, less bandwidth
+## Related
 
-### Threshold-Based Updates
-
-```typescript
-// Only send if changed significantly
-const posChanged = position.distanceTo(lastPos) > 0.08;
-const rotChanged = Math.abs(rotation - lastRot) > 0.026;
-
-if (posChanged || rotChanged) {
-  sendUpdate();
-}
-```
-
-**Impact:** 50-70% fewer updates when standing still
-
-## 📊 Performance Metrics
-
-### Network Usage
-
-| Scenario | Updates/sec | Bandwidth |
-|----------|-------------|-----------|
-| **Standing Still** | 0 | 0 KB/s |
-| **Walking** | 10-15 | 0.5-1 KB/s |
-| **Running** | 20 | 1-2 KB/s |
-| **10 Players** | 200 | 10-20 KB/s |
-
-### Latency Targets
-
-| Quality | Latency | Notes |
-|---------|---------|-------|
-| **Excellent** | < 50ms | LAN or nearby server |
-| **Good** | 50-100ms | Regional server |
-| **Acceptable** | 100-150ms | Cross-region |
-| **Poor** | > 150ms | Noticeable lag |
-
-## 🐛 Troubleshooting
-
-### Connection fails
-
-**Cause:** Server not running or wrong URL
-
-**Solution:**
-```typescript
-// Check server is running
-// Verify URL is correct
-const wsManager = new WSManager('ws://localhost:8080');
-```
-
-### Players jittering
-
-**Cause:** No interpolation on received positions
-
-**Solution:**
-```typescript
-// Interpolate between positions
-class RemotePlayer {
-  private targetPosition = new Vector3();
-  private currentPosition = new Vector3();
-  
-  updatePosition(newPos: Vector3) {
-    this.targetPosition.copy(newPos);
-  }
-  
-  update(deltaTime: number) {
-    // Smooth interpolation
-    this.currentPosition.lerp(this.targetPosition, deltaTime * 10);
-    this.mesh.position.copy(this.currentPosition);
-  }
-}
-```
-
-### High bandwidth usage
-
-**Cause:** Sending too many updates
-
-**Solution:**
-```typescript
-// Increase update interval
-private updateInterval = 1 / 15; // 15Hz instead of 20Hz
-
-// Increase thresholds
-const posChanged = position.distanceTo(lastPos) > 0.15; // 15cm
-```
-
-### Reconnection not working
-
-**Cause:** Max attempts reached
-
-**Solution:**
-```typescript
-// Increase max attempts
-private maxReconnectAttempts = 10;
-
-// Exponential backoff
-private reconnectDelay = 1000 * Math.pow(2, this.reconnectAttempts);
-```
-
-## 📈 Best Practices
-
-### ✅ Do's
-
-1. **Throttle updates**
-   ```typescript
-   if (timer < updateInterval) return;
-   ```
-
-2. **Quantize values**
-   ```typescript
-   const quantized = Math.round(value / precision) * precision;
-   ```
-
-3. **Only send changes**
-   ```typescript
-   if (!hasChanged) return;
-   ```
-
-4. **Handle disconnections**
-   ```typescript
-   ws.onclose = () => this.reconnect();
-   ```
-
-### ❌ Don'ts
-
-1. **Don't send every frame**
-   ```typescript
-   // ❌ Bad
-   update() {
-     sendPosition();
-   }
-   
-   // ✅ Good
-   update(deltaTime: number) {
-     if (shouldSend(deltaTime)) {
-       sendPosition();
-     }
-   }
-   ```
-
-2. **Don't send full precision**
-   ```typescript
-   // ❌ Bad
-   { x: 1.23456789 }
-   
-   // ✅ Good
-   { x: 1.24 } // Quantized
-   ```
-
-3. **Don't ignore connection state**
-   ```typescript
-   // ❌ Bad
-   ws.send(data);
-   
-   // ✅ Good
-   if (ws.readyState === WebSocket.OPEN) {
-     ws.send(data);
-   }
-   ```
-
-## 🔗 Related
-
-- [App Class](/docs/core-concepts/app) - Integration with game
-- [Performance](/docs/performance/optimization) - Network optimization
-- [Game Loop](/docs/core-concepts/game-loop) - Update timing
-
-## Next Steps
-
-- [Performance Optimization](/docs/performance/optimization) - Reduce bandwidth
-- [App Class](/docs/core-concepts/app) - Integrate networking
-- [Best Practices](/docs/performance/best-practices) - Network patterns
+- [App Class](/docs/core-concepts/app) - Firing and raycasting
+- [Audio System](/docs/systems/audio) - Channels and volume settings

@@ -24,6 +24,8 @@ export class BlockStore {
     if (!block) return false;
     
     block.name = newName;
+    // Mirror on the mesh so the name survives grouping/ungrouping and nested serialization
+    block.mesh.userData.editorName = newName;
     return true;
   }
 
@@ -138,6 +140,17 @@ export class BlockStore {
     });
   }
 
+  /**
+   * Reserve a fresh, unused block id (used for nested meshes that are not registered yet).
+   */
+  public allocateId(prefix: "block" | "group" | "spawn" = "block"): string {
+    let id = this.nextId(prefix);
+    while (this.blocks.has(id)) {
+      id = this.nextId(prefix);
+    }
+    return id;
+  }
+
   private registerMeshAsBlock(
     mesh: Object3D,
     {
@@ -150,11 +163,25 @@ export class BlockStore {
       addToScene: boolean;
     },
   ): EditorBlock {
-    const assignedId = id ?? this.nextId(mesh instanceof Group ? "group" : "block");
+    const prefix = mesh instanceof Group ? "group" : mesh.userData?.isSpawnPoint === true ? "spawn" : "block";
+    // Never overwrite an existing entry: a duplicate id would orphan the other block's mesh
+    // (still rendered, but no longer selectable or serialized).
+    const assignedId = id && !this.blocks.has(id) ? id : this.allocateId(prefix);
     this.syncIdSeed(assignedId);
+    mesh.userData.editorId = assignedId;
 
-    const blockOutline = outline ?? this.findOutline(mesh);
+    // Groups get no outline of their own: findOutline would return a child's outline, which
+    // removeBlock would then dispose while the child is still alive.
+    const blockOutline = outline ?? (mesh instanceof Group ? undefined : this.findOutline(mesh));
     const block: EditorBlock = { id: assignedId, mesh, outline: blockOutline };
+    // Restore per-block data mirrored on the mesh (lost otherwise after group/ungroup)
+    const storedName = mesh.userData?.editorName;
+    if (typeof storedName === "string" && storedName !== "") {
+      block.name = storedName;
+    }
+    if (mesh.userData?.isGenerator === true && mesh.userData.generatorConfig) {
+      block.generatorConfig = mesh.userData.generatorConfig as EditorBlock["generatorConfig"];
+    }
     this.blocks.set(assignedId, block);
 
     if (addToScene) {

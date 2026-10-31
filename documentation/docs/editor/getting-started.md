@@ -401,3 +401,13 @@ Example: Tutorial → Practice → Challenge
 3. Done!
 
 **Congratulations!** You've created your first scenario. 🎉
+
+## Editor behaviour notes
+
+- **Undo/redo** (`Ctrl+Z` / `Ctrl+Y`) covers placing, pasting, deleting, moving/rotating/scaling (keyboard, drag and inspector fields), grouping/ungrouping, renaming and generator/event settings. Rapid edits to the same generator merge into one step. Loading or starting a scenario, and deleting a component definition, clear the history.
+- **Block ids are stable**: saving, reloading, importing and undoing a delete keep each block's id, so generator `startGenerator` events keep pointing at the right generator. Pasted blocks get new ids; events between pasted generators are re-linked to the copies.
+- **Only one spawn point**: pasting a selection that contains the spawn point skips the spawn.
+- **Shortcuts are ignored** while typing in any form field and while the Play preview runs.
+- **Click selection**: Shift/Ctrl-click toggles a block; a plain click on a block of a multi-selection selects only that block (dragging moves the whole selection).
+- **Play** saves the current scene to the "Last save" slot (not to the named scenario); use Save to update the named scenario.
+- While a component is being edited, autosave writes it as one component instance.

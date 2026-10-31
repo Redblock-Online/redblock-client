@@ -14,7 +14,7 @@ export class InputRouter {
   ) {}
 
   public handlePointerDown(event: PointerEvent): void {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || this.editor.isInputSuspended()) return;
 
     const mode = this.modeManager.getMode();
 
@@ -74,6 +74,7 @@ export class InputRouter {
         event.preventDefault();
         event.stopImmediatePropagation();
         this.dragHandler.finish(true);
+        this.selectionHandler.handleDragEnd(event);
         break;
 
       case "transforming":
@@ -89,8 +90,8 @@ export class InputRouter {
   }
 
   public handleKeyDown(event: KeyboardEvent): void {
-    // Ignore all shortcuts when user is typing in an input
-    if (this.editor.isUserTyping()) {
+    // Ignore all shortcuts while typing in a form field or while the game preview runs
+    if (this.editor.shouldIgnoreKeyEvent(event)) {
       return;
     }
     
@@ -140,8 +141,8 @@ export class InputRouter {
       }
     }
 
-    // Start transform (G/R/F)
-    if (mode.type === "idle" || mode.type === "selecting") {
+    // Start transform (G/R/F). Not with modifiers: Ctrl+R / Ctrl+F belong to the browser.
+    if ((mode.type === "idle" || mode.type === "selecting") && !event.ctrlKey && !event.metaKey && !event.altKey) {
       const key = event.key.toLowerCase();
       if (key === "g" || key === "r" || key === "f") {
         event.preventDefault();
