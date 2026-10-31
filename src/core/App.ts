@@ -14,6 +14,7 @@ import { SCENARIOS, type ScenarioConfig, getScenarioById } from "@/config/scenar
 import type { TimerHint, TimerHintTableRow } from "@/features/game/ui";
 import gsap from "gsap";
 import type { GeneratorConfig } from "@/features/editor/types/generatorConfig";
+import { LocalShotReporter } from "@/features/game/multiplayer";
 
 
 type StoredMetricSet = {
@@ -92,6 +93,7 @@ function createEmptyStats(): StoredStats {
   private calmTrackRotationIndex = Math.floor(Math.random() * CALM_TRACK_NAMES.length);
   private practiceMusicTimerId: number | null = null;
   private ambientWindId: string | null = null;
+  private shotReporter: LocalShotReporter;
 
   private getPreferredMusicCategory(): 'none' | 'energy' | 'calm' {
     if (typeof window === 'undefined') return 'calm';
@@ -160,6 +162,9 @@ function createEmptyStats(): StoredStats {
       this.isEditorMode // Pass editor mode flag to disable movement limits
     );
     this.scene.add(this.controls.object);
+    // Multiplayer shots: send ours on fire, hear neighbours' relative to our camera
+    this.shotReporter = new LocalShotReporter(this.wsManager, () => this.controls.requestNetworkSync());
+    this.scene.setAudioListener(this.camera.instance);
     this.camera.instance.rotation.set(0, (Math.PI / 2) * 3, 0);
 
     this.pistol = new Pistol(this.camera.instance, (loadedPistol) => {
@@ -1008,6 +1013,14 @@ function createEmptyStats(): StoredStats {
       if (result === "portal") {
         this.shotsFired = Math.max(0, this.shotsFired - 1);
       }
+      this.shotReporter.report({
+        origin: this._tempCamPos,
+        direction: this._tempCamDir,
+        hit: intersects[0],
+        brokeTarget: result === "regular",
+        targets: this.targets,
+        targetCount: this.currentScenarioTargetCount,
+      });
     }
   };
 
