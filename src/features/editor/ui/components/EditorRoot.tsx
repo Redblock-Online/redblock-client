@@ -6,12 +6,12 @@ import { FaPlay, FaStop } from "react-icons/fa";
 import EditorApp from "@/features/editor/core/EditorApp";
 import type { EditorBlock, EditorSelection, SelectionTransform, SerializedNode } from "../../types";
 import type { EditorItem } from "../../types";
-import { addComponent, getComponent } from "src/features/editor/components-system";
-import { useComponentRegistry } from "src/features/editor/ui/hooks/useComponentRegistry";
+import { addComponent, getComponent } from "@/features/editor/components-system";
+import { useComponentRegistry } from "@/features/editor/ui/hooks/useComponentRegistry";
 import { ItemMenu } from "./ItemMenu";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { useHistoryStack, type GroupMember } from "../hooks/useHistoryStack";
-import type { TransformMode, AxisConstraint } from "src/features/editor/core/EditorModeManager";
+import type { TransformMode, AxisConstraint } from "@/features/editor/core/EditorModeManager";
 import { ScenarioModal } from "./ScenarioModal";
 import { Portal } from "./Portal";
 import { ComponentDeleteModal } from "./ComponentDeleteModal";
@@ -23,9 +23,9 @@ import {
   removeScenario,
   saveScenario,
   type StoredScenario,
-} from "src/features/editor/scenarios/scenarioStore";
-import type { SerializedScenario } from "src/features/editor/scenarios/scenarioStore";
-import type { Alert } from "src/features/editor/core/AlertManager";
+} from "@/features/editor/scenarios/scenarioStore";
+import type { SerializedScenario } from "@/features/editor/scenarios/scenarioStore";
+import type { Alert } from "@/features/editor/core/AlertManager";
 import { AlertIcon } from "./AlertIcon";
 import { CategoryFilter, type ComponentCategory } from "./CategoryFilter";
 

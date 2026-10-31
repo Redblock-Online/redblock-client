@@ -22,30 +22,30 @@ import {
   WebGLRenderer,
 } from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { ComponentMemberTransform, SavedComponent } from "src/features/editor/components-system/componentsStore";
-import { DEFAULT_RANDOM_STATIC_CONFIG, DEFAULT_MOVING_CONFIG, type GeneratorConfig } from "src/features/editor/types/generatorConfig";
-import { loadComponents } from "src/features/editor/components-system/componentsStore";
+import type { ComponentMemberTransform, SavedComponent } from "@/features/editor/components-system/componentsStore";
+import { DEFAULT_RANDOM_STATIC_CONFIG, DEFAULT_MOVING_CONFIG, type GeneratorConfig } from "@/features/editor/types/generatorConfig";
+import { loadComponents } from "@/features/editor/components-system/componentsStore";
 import type {
   EditorBlock,
   SelectionListener,
   SelectionTransform,
   SerializedNode,
   SerializedTransform,
-} from "src/features/editor/types";
-import { BlockStore } from "src/features/editor/core/BlockStore";
-import { SelectionManager } from "src/features/editor/core/SelectionManager";
-import { MovementController } from "src/features/editor/core/MovementController";
-import { GroupManager } from "src/features/editor/core/GroupManager";
-import { ComponentManager } from "src/features/editor/core/ComponentManager";
-import type { SerializedScenario } from "src/features/editor/scenarios/scenarioStore";
-import { EditorModeManager } from "src/features/editor/core/EditorModeManager";
-import { InputRouter } from "src/features/editor/core/InputRouter";
-import { EditorSerializer } from "src/features/editor/core/EditorSerializer";
-import { AlertManager } from "src/features/editor/core/AlertManager";
-import { DragHandler } from "src/features/editor/core/handlers/DragHandler";
-import { TransformHandler } from "src/features/editor/core/handlers/TransformHandler";
-import { SelectionHandler } from "src/features/editor/core/handlers/SelectionHandler";
-import { createSpawnPointMesh } from "src/features/editor/core/blockFactory";
+} from "@/features/editor/types";
+import { BlockStore } from "@/features/editor/core/BlockStore";
+import { SelectionManager } from "@/features/editor/core/SelectionManager";
+import { MovementController } from "@/features/editor/core/MovementController";
+import { GroupManager } from "@/features/editor/core/GroupManager";
+import { ComponentManager } from "@/features/editor/core/ComponentManager";
+import type { SerializedScenario } from "@/features/editor/scenarios/scenarioStore";
+import { EditorModeManager } from "@/features/editor/core/EditorModeManager";
+import { InputRouter } from "@/features/editor/core/InputRouter";
+import { EditorSerializer } from "@/features/editor/core/EditorSerializer";
+import { AlertManager } from "@/features/editor/core/AlertManager";
+import { DragHandler } from "@/features/editor/core/handlers/DragHandler";
+import { TransformHandler } from "@/features/editor/core/handlers/TransformHandler";
+import { SelectionHandler } from "@/features/editor/core/handlers/SelectionHandler";
+import { createSpawnPointMesh } from "@/features/editor/core/blockFactory";
 
 const COMPONENT_MASTER_OUTLINE_COLOR = 0x9b5cff;
 const COMPONENT_INSTANCE_OUTLINE_COLOR = 0xff4dff;
