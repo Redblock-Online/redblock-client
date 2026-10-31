@@ -6,6 +6,9 @@ import type { PlayerCore } from "@/utils/ws/WSManager";
 import WSManager from "@/utils/ws/WSManager";
 import type { PhysicsSystem } from "@/features/game/physics";
 import { TargetManager } from "@/features/game/targets";
+import RemotePlayers from "@/features/game/multiplayer/RemotePlayers";
+import type { PlayerShotMessage } from "@/features/game/multiplayer/shotProtocol";
+import { AudioManager } from "@/utils/AudioManager";
 export type TargetInfo = {
   x: number;
   y: number;
@@ -14,37 +17,8 @@ export type TargetInfo = {
   disabled: boolean;
 };
 
-type NeighborState = {
-  target: THREE.Vector3;
-  targetQuat: THREE.Quaternion;
-  lastPacketTs: number;
-};
-// Helpers fuera de la clase
-// Reusable objects for quatFromPitchYaw to avoid allocations
-const _helperEuler = new THREE.Euler();
-const _helperQuat = new THREE.Quaternion();
-
-function quatFromPitchYaw(pitchRad: number, yawRad: number): THREE.Quaternion {
-  // YXZ: primero yaw (Y), después pitch (X)
-  _helperEuler.set(0, yawRad, pitchRad, "YXZ");
-  _helperQuat.setFromEuler(_helperEuler);
-  return _helperQuat.normalize();
-}
-
-type NetRotationPayload = Pick<Partial<PlayerCore>, "player_rotation_x" | "player_rotation_y">;
-
-function getTargetQuatFromNet(n: NetRotationPayload): THREE.Quaternion {
-  // Swap: usamos player_rotation_y como pitch y player_rotation_x como yaw
-  const yaw = typeof n.player_rotation_x === "number" ? n.player_rotation_x : 0; // eje Y
-  const pitch =
-    typeof n.player_rotation_y === "number" ? n.player_rotation_y : 0; // eje X
-
-  // Clamp para evitar flips extremos
-  const halfPi = Math.PI / 2;
-  const pitchClamped = Math.max(-halfPi + 1e-3, Math.min(halfPi - 1e-3, pitch));
-
-  return quatFromPitchYaw(pitchClamped, yaw);
-}
+/** Max distance between a remote shot's hit point and the neighbour target it claims to break. */
+const REMOTE_HIT_TARGET_TOLERANCE = 1.5;
 
 /**
  * Compares two arrays of TargetInfo to check if there are any changes.
@@ -76,12 +50,13 @@ export default class MainScene extends THREE.Scene {
   public targetManager: TargetManager; // New optimized target management
   public me: PlayerCore;
   public wsManager: WSManager;
-  private neighborMeshes: Map<string, THREE.Group> = new Map();
+  /** Neighbour avatars, remote shot effects and audio. */
+  public remotePlayers: RemotePlayers;
+  private unsubscribePlayerShot: (() => void) | null = null;
   private neighborRoomMeshes: Map<string, THREE.Group> = new Map();
   public neighborTargetInfos: Map<string, TargetInfo[]> = new Map();
   public neighborTargetsRendered: Map<string, Target[]> = new Map();
   private clock = new THREE.Clock();
-  private neighborStates = new Map<string, NeighborState>();
   private physicsSystem?: PhysicsSystem;
   private isEditorMode: boolean = false;
   private currentGroundCollider: { min: THREE.Vector3; max: THREE.Vector3 } | null = null;
@@ -91,8 +66,6 @@ export default class MainScene extends THREE.Scene {
   
   // Reusable objects for neighbor updates to avoid allocations
   private _tempTargetPos = new THREE.Vector3();
-  private _tempEuler = new THREE.Euler();
-  private _tempQuat = new THREE.Quaternion();
 
   private static edgeMaterial = new THREE.MeshBasicMaterial({ 
     color: 0xd0d0d0,
@@ -136,9 +109,57 @@ export default class MainScene extends THREE.Scene {
     
     // Initialize target manager for optimized target generation
     this.targetManager = new TargetManager(this);
-    
+
     const light = new Light();
     this.add(light);
+
+    this.remotePlayers = new RemotePlayers(this, typeof window !== "undefined" ? AudioManager.getInstance() : null);
+    // Shots are applied on receipt (not on the 20 Hz neighbour poll) so they feel immediate
+    this.unsubscribePlayerShot = wsManager.onPlayerShot((shot) => this.onPlayerShot(shot));
+    // The outline pass re-renders this scene with a normals override material; keep shot effects
+    // out of that pass so tracers stay coloured instead of turning into black edge lines.
+    this.onBeforeRender = () => this.remotePlayers.syncEffectsVisibility(this);
+  }
+
+  /** Sets the object used as audio listener for positional remote sounds (the camera). */
+  public setAudioListener(listener: THREE.Object3D | null) {
+    this.remotePlayers.setListener(listener);
+  }
+
+  private onPlayerShot(shot: PlayerShotMessage) {
+    if (this.isEditorMode) return;
+    const resolved = this.remotePlayers.handleShot(shot);
+    if (resolved.hit && typeof shot.hitTargetIndex === "number") {
+      this.breakNeighborTarget(shot.id, shot.hitTargetIndex, resolved.end);
+    }
+  }
+
+  /**
+   * Plays the break animation on a neighbour's target right away instead of waiting for
+   * their next `targetsInfo` (which only travels with movement updates).
+   */
+  private breakNeighborTarget(neighborId: string, index: number, hitPoint: THREE.Vector3) {
+    const target = this.neighborTargetsRendered.get(neighborId)?.[index];
+    if (!target || !target.visible || target.animating) return;
+    // Guard against stale indices (e.g. the neighbour changed scenario meanwhile)
+    if (target.position.distanceTo(hitPoint) > REMOTE_HIT_TARGET_TOLERANCE) return;
+    target.absorbAndDisappear(() => {
+      // Re-apply the latest known state once the animation ends
+      const latest = this.neighborTargetInfos.get(neighborId);
+      if (latest) this.updateNeighborTargets(neighborId, latest, true);
+    });
+  }
+
+  /** Restores a neighbour target after a locally played break animation. */
+  private resetNeighborTarget(t: Target) {
+    t.activeTweens.forEach((tween) => tween.kill());
+    t.activeTweens = [];
+    t.scale.setScalar(t.baseScale);
+    t.rotation.set(0, 0, 0);
+    t.setOpacity(1);
+    t.edgesGroup.children.forEach((edge) => {
+      ((edge as THREE.Mesh).material as THREE.Material).opacity = 1;
+    });
   }
 
   public initPlayerRoom(playerCore: PlayerCore) {
@@ -248,9 +269,10 @@ export default class MainScene extends THREE.Scene {
     this.loadScenario(amount, halfSize);
   }
 
-  private updateNeighborTargets(neighborId: string, targetsInfo: TargetInfo[]) {
+  private updateNeighborTargets(neighborId: string, targetsInfo: TargetInfo[], force = false) {
+    if (!Array.isArray(targetsInfo)) return;
     const prev = this.neighborTargetInfos.get(neighborId) ?? [];
-    if (!targetsInfoChanged(prev, targetsInfo)) return;
+    if (!force && !targetsInfoChanged(prev, targetsInfo)) return;
 
     console.log(`[MainScene] 🎯 Updating neighbor ${neighborId} targets:`, targetsInfo.length, 'targets');
     this.neighborTargetInfos.set(neighborId, targetsInfo);
@@ -270,10 +292,13 @@ export default class MainScene extends THREE.Scene {
     for (let i = 0; i < targetsInfo.length; i++) {
       const info = targetsInfo[i];
       const t = rendered[i];
+      // A break triggered by a remote shot is playing: let it finish (re-applied on completion)
+      if (t.animating) continue;
       if (!info || info.disabled) {
         t.visible = false;
         continue;
       }
+      if (t.scale.x !== t.baseScale) this.resetNeighborTarget(t);
       t.visible = true;
       t.position.set(info.x, info.y, info.z);
 
@@ -319,126 +344,84 @@ export default class MainScene extends THREE.Scene {
     return roomChanged;
   }
 
-  private getOrCreateNeighborMesh(neighborId: string): THREE.Group {
-    let mesh = this.neighborMeshes.get(neighborId);
-    
-    if (!mesh) {
-      mesh = new Target(0xcccccc); // Light gray for neighbor avatar (visible on white background)
-      this.neighborMeshes.set(neighborId, mesh);
-      this.add(mesh);
-    }
-    
-    return mesh;
-  }
-
-  private updateNeighborState(
-    neighborId: string,
-    targetPos: THREE.Vector3,
-    targetQuat: THREE.Quaternion
-  ): NeighborState {
-    let state = this.neighborStates.get(neighborId);
-    
-    if (!state) {
-      state = {
-        target: new THREE.Vector3(),
-        targetQuat: new THREE.Quaternion(),
-        lastPacketTs: performance.now(),
-      };
-      this.neighborStates.set(neighborId, state);
-    }
-
-    state.target.copy(targetPos);
-    state.targetQuat.copy(targetQuat);
-    state.lastPacketTs = performance.now();
-    
-    return state;
-  }
-
-  private interpolateNeighborMeshes(dt: number) {
-    const responsiveness = 12;
-    const alpha = 1 - Math.exp(-responsiveness * dt);
-    const alphaRot = alpha;
-
-    this.neighborMeshes.forEach((mesh, id) => {
-      const state = this.neighborStates.get(id);
-      if (!state) return;
-
-      mesh.position.lerp(state.target, alpha);
-      mesh.quaternion.slerp(state.targetQuat, alphaRot);
-    });
-  }
-
   private cleanupDisconnectedNeighbors(currentIds: Set<string>) {
-    Array.from(this.neighborMeshes.keys()).forEach((id) => {
-      if (!currentIds.has(id)) {
-        const m = this.neighborMeshes.get(id)!;
-        this.remove(m);
-        this.neighborMeshes.delete(id);
-        this.neighborStates.delete(id);
-        this.neighborRooms.delete(id);
-        const roomMesh = this.neighborRoomMeshes.get(id);
-        if (roomMesh) {
-          this.remove(roomMesh);
-          this.neighborRoomMeshes.delete(id);
-        }
+    const known = new Set([...this.remotePlayers.ids(), ...this.neighborTargetsRendered.keys()]);
+    known.forEach((id) => {
+      if (currentIds.has(id)) return;
+      this.remotePlayers.remove(id);
+      this.neighborRooms.delete(id);
+      const roomMesh = this.neighborRoomMeshes.get(id);
+      if (roomMesh) {
+        this.remove(roomMesh);
+        this.neighborRoomMeshes.delete(id);
       }
+      const targets = this.neighborTargetsRendered.get(id);
+      if (targets) {
+        targets.forEach((t) => {
+          this.remove(t);
+          t.dispose();
+        });
+        this.neighborTargetsRendered.delete(id);
+      }
+      this.neighborTargetInfos.delete(id);
     });
   }
 
   public update() {
     this.frameCount++;
-    
+    const dt = Math.min(this.clock.getDelta(), 0.1);
+
+    // Avatars interpolate and shot effects animate every frame (effects may outlive a neighbour)
+    this.remotePlayers.update(dt);
+
     const neighbors = this.wsManager.getNeighbors();
-    
+
     // Early exit if no neighbors (common in offline mode)
     if (neighbors.length === 0) {
       // Still cleanup if we had neighbors before (but only occasionally)
-      if (this.neighborMeshes.size > 0 && this.frameCount % 60 === 0) {
+      const hasRemoteState = this.remotePlayers.ids().length + this.neighborTargetsRendered.size > 0;
+      if (hasRemoteState && this.frameCount % 60 === 0) {
         this.cleanupDisconnectedNeighbors(new Set());
       }
       return;
     }
-    
-    const dt = this.clock.getDelta();
-    
-    // Always interpolate for smooth movement
-    this.interpolateNeighborMeshes(dt);
-    
+
     // Update neighbor data less frequently to reduce overhead
     if (this.frameCount % this.neighborUpdateInterval !== 0) {
       return;
     }
-    
+
     const currentIds = new Set<string>();
 
     for (const n of neighbors) {
       currentIds.add(n.id);
 
-      console.log(`[MainScene] 👥 Processing neighbor ${n.id}:`, {
-        room: `(${n.room_coord_x}, ${n.room_coord_z})`,
-        pos: `(${n.local_player_position_x?.toFixed(1)}, ${n.local_player_position_y?.toFixed(1)}, ${n.local_player_position_z?.toFixed(1)})`,
-        targetsCount: n.targetsInfo?.length ?? 0
-      });
       this.updateNeighborTargets(n.id, n.targetsInfo);
       const roomChanged = this.checkNeighborRoomChange(n.id, n.room_coord_x, n.room_coord_z);
-      const mesh = this.getOrCreateNeighborMesh(n.id);
 
-      // Reuse vector instead of creating new one
+      // Positions are world-space already (see multiplayer/shotProtocol.ts for the frame notes)
       this._tempTargetPos.set(
-        n.local_player_position_x,
+        n.local_player_position_x ?? n.room_coord_x,
         n.local_player_position_y ?? 0,
-        n.local_player_position_z
+        n.local_player_position_z ?? n.room_coord_z
       );
-      const targetQuat = getTargetQuatFromNet(n);
-
-      this.updateNeighborState(n.id, this._tempTargetPos, targetQuat);
-
-      if (roomChanged) {
-        mesh.position.copy(this._tempTargetPos);
-        mesh.quaternion.copy(targetQuat);
-      }
+      // Network rotation: player_rotation_x is yaw (about Y), player_rotation_y is pitch (about Z)
+      this.remotePlayers.upsert(
+        n.id,
+        this._tempTargetPos,
+        n.player_rotation_x ?? 0,
+        n.player_rotation_y ?? 0,
+        roomChanged
+      );
     }
 
     this.cleanupDisconnectedNeighbors(currentIds);
+  }
+
+  /** Releases network subscriptions and remote player resources. */
+  public disposeMultiplayer() {
+    this.unsubscribePlayerShot?.();
+    this.unsubscribePlayerShot = null;
+    this.remotePlayers.dispose();
   }
 }

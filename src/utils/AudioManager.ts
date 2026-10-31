@@ -58,6 +58,7 @@ export interface AudioOptions {
   pitchJitter?: number; // Max absolute jitter to apply around base pitch (e.g., 0.04 -> ±0.04)
   variants?: string[]; // Array of alternative sound names to randomly choose from
   maxVoices?: number; // Maximum concurrent instances for this sound (oldest voices are released)
+  pan?: number; // Optional stereo pan, -1 (left) to 1 (right). Web Audio path only; ignored by the HTML fallback
 }
 
 interface LoadedSound {
@@ -84,6 +85,7 @@ interface ActiveWebSound {
   name: string;
   node: AudioBufferSourceNode;
   gain: GainNode;
+  panner?: StereoPannerNode;
   channel: AudioChannel;
   kind: "web";
   startedAt: number;
@@ -806,9 +808,22 @@ export class AudioManager {
       const instanceGain = this.ctx.createGain();
       instanceGain.gain.value = this.calculateVolume(channel, volume);
       source.connect(instanceGain);
+      // Optional stereo panning (used for positional sounds such as remote players' shots)
+      let panner: StereoPannerNode | undefined;
+      let output: AudioNode = instanceGain;
+      if (
+        typeof options.pan === "number" &&
+        Number.isFinite(options.pan) &&
+        typeof this.ctx.createStereoPanner === "function"
+      ) {
+        panner = this.ctx.createStereoPanner();
+        panner.pan.value = Math.max(-1, Math.min(1, options.pan));
+        instanceGain.connect(panner);
+        output = panner;
+      }
       const chGain = this.channelGains.get(channel) ?? null;
-      if (chGain) instanceGain.connect(chGain);
-      else instanceGain.connect(this.masterGain!);
+      if (chGain) output.connect(chGain);
+      else output.connect(this.masterGain!);
 
       const offset = startAtMs / 1000;
       const startDelaySec = latencyMs / 1000;
@@ -822,6 +837,7 @@ export class AudioManager {
         name,
         node: source,
         gain: instanceGain,
+        panner,
         channel,
         kind: "web",
         startedAt,
@@ -975,6 +991,11 @@ export class AudioManager {
       }
       try {
         activeSound.gain.disconnect();
+      } catch {
+        /* ignore */
+      }
+      try {
+        activeSound.panner?.disconnect();
       } catch {
         /* ignore */
       }

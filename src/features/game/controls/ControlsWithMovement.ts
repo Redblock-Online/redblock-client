@@ -679,4 +679,13 @@ export default class Controls {
     this.targets = targets;
     console.log(`[Controls] Targets updated: ${targets.length} targets`);
   }
+
+  /**
+   * Forces the next network check to send position, rotation and targetsInfo even if
+   * the player has not moved (e.g. right after a shot broke a target). Still subject to
+   * the 20 Hz send limit.
+   */
+  public requestNetworkSync() {
+    this.lastSentPos.set(Number.NaN, Number.NaN, Number.NaN);
+  }
 }
